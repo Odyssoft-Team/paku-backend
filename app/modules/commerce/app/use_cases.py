@@ -1,7 +1,10 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
+from uuid import UUID
 
-from app.modules.commerce.domain.service import Service, Species
+from fastapi import HTTPException, status
+
+from app.modules.commerce.domain.service import Service, Species, ServiceType
 from app.modules.commerce.infra.service_repository import list_services
 
 
@@ -26,3 +29,184 @@ class ListServices:
             out.append(s)
 
         return out
+
+
+@dataclass
+class AvailableService:
+    base: Service
+    available_addons: List[Service]
+
+
+def _breed_allowed(allowed_breeds: Optional[List[str]], breed: Optional[str]) -> bool:
+    if not allowed_breeds:
+        return True
+    if breed is None:
+        return False
+    return breed in allowed_breeds
+
+
+@dataclass
+class ListAvailableServices:
+    async def execute(self, *, pet_id: UUID) -> List[AvailableService]:
+        from app.modules.pets.api.router import _repo as pets_repo
+
+        pet = await pets_repo.get_by_id(pet_id)
+        if not pet:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
+
+        raw_species = getattr(pet.species, "value", pet.species)
+        pet_species = Species(str(raw_species))
+        pet_breed = getattr(pet, "breed", None)
+
+        items = [s for s in list_services() if s.is_active and s.species == pet_species]
+        bases = [
+            s
+            for s in items
+            if s.type == ServiceType.base and _breed_allowed(s.allowed_breeds, pet_breed)
+        ]
+        addons = [
+            s
+            for s in items
+            if s.type == ServiceType.addon and _breed_allowed(s.allowed_breeds, pet_breed)
+        ]
+
+        out: List[AvailableService] = []
+        for base in bases:
+            base_addons = [a for a in addons if base.id in (a.requires or [])]
+            out.append(AvailableService(base=base, available_addons=base_addons))
+        return out
+
+
+@dataclass
+class QuoteLine:
+    service_id: UUID
+    name: str
+    price: int
+
+
+@dataclass
+class QuoteResult:
+    pet_id: UUID
+    base: QuoteLine
+    addons: List[QuoteLine]
+    total: int
+    currency: str = "PEN"
+
+
+def _breed_category(breed: Optional[str]) -> str:
+    if not breed:
+        return "mestizo"
+    if breed.lower() in {"husky", "labrador"}:
+        return "official_breed"
+    return "otros"
+
+
+def _weight_range(weight: Optional[float]) -> str:
+    w = float(weight or 0)
+    if w <= 10:
+        return "0-10"
+    if w <= 25:
+        return "10-25"
+    return "25+"
+
+
+def _price_for(
+    table: Dict[Tuple[UUID, Species, str, str], int],
+    *,
+    service_id: UUID,
+    species: Species,
+    breed_category: str,
+    weight_range: str,
+) -> int:
+    key = (service_id, species, breed_category, weight_range)
+    if key in table:
+        return table[key]
+    fallback = (service_id, species, "mestizo", weight_range)
+    if fallback in table:
+        return table[fallback]
+    return 0
+
+
+@dataclass
+class Quote:
+    async def execute(
+        self,
+        *,
+        pet_id: UUID,
+        base_service_id: UUID,
+        addon_ids: Optional[List[UUID]] = None,
+    ) -> QuoteResult:
+        from app.modules.pets.api.router import _repo as pets_repo
+
+        pet = await pets_repo.get_by_id(pet_id)
+        if not pet:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
+
+        raw_species = getattr(pet.species, "value", pet.species)
+        pet_species = Species(str(raw_species))
+        pet_breed = getattr(pet, "breed", None)
+        pet_weight = getattr(pet, "weight", None)
+
+        items = [s for s in list_services() if s.is_active and s.species == pet_species]
+        by_id = {s.id: s for s in items}
+
+        base = by_id.get(base_service_id)
+        if not base or base.type != ServiceType.base:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base_service_id")
+        if not _breed_allowed(base.allowed_breeds, pet_breed):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base service not applicable")
+
+        breed_cat = _breed_category(pet_breed)
+        w_range = _weight_range(pet_weight)
+
+        price_table: Dict[Tuple[UUID, Species, str, str], int] = {
+            (base.id, Species.dog, "mestizo", "0-10"): 50,
+            (base.id, Species.dog, "mestizo", "10-25"): 70,
+            (base.id, Species.dog, "mestizo", "25+"): 90,
+            (base.id, Species.cat, "mestizo", "0-10"): 45,
+        }
+
+        base_price = _price_for(
+            price_table,
+            service_id=base.id,
+            species=pet_species,
+            breed_category=breed_cat,
+            weight_range=w_range,
+        )
+        base_line = QuoteLine(service_id=base.id, name=base.name, price=base_price)
+
+        addons_out: List[QuoteLine] = []
+        for addon_id in addon_ids or []:
+            addon = by_id.get(addon_id)
+            if not addon:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"addon_id": str(addon_id), "reason": "not_found"},
+                )
+            if addon.type != ServiceType.addon:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"addon_id": str(addon_id), "reason": "not_addon"},
+                )
+            if not _breed_allowed(addon.allowed_breeds, pet_breed):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"addon_id": str(addon_id), "reason": "not_applicable"},
+                )
+            if base.id not in (addon.requires or []):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"addon_id": str(addon_id), "reason": "missing_requires"},
+                )
+
+            addon_price = _price_for(
+                price_table,
+                service_id=addon.id,
+                species=pet_species,
+                breed_category=breed_cat,
+                weight_range=w_range,
+            )
+            addons_out.append(QuoteLine(service_id=addon.id, name=addon.name, price=addon_price))
+
+        total = base_line.price + sum(a.price for a in addons_out)
+        return QuoteResult(pet_id=pet_id, base=base_line, addons=addons_out, total=total)

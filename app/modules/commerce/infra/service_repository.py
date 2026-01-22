@@ -36,7 +36,7 @@ _default_repo = InMemoryServiceRepository(
             name="Corte de unas (addon)",
             type=ServiceType.addon,
             species=Species.dog,
-            allowed_breeds=None,
+            allowed_breeds=["husky", "labrador"],
             requires=[_BASE_DOG_BATH],
             is_active=True,
         ),
