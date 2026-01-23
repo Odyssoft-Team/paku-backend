@@ -8,10 +8,14 @@ from app.modules.commerce.api.schemas import QuoteOut, QuoteIn, ServiceAvailable
 from app.modules.commerce.app.use_cases import Quote, ListAvailableServices, ListServices
 from app.modules.commerce.domain.service import Species
 
+# [TECH] Router HTTP de Commerce: expone catálogo, disponibles por mascota y cotización (precios/addons).
+# [NEGOCIO] Permite a la app ver servicios ofrecidos y calcular cuánto se cobrará.
 router = APIRouter(tags=["commerce"])
 
 
 @router.get("/services", response_model=List[ServiceOut])
+# [TECH] Lista servicios del catálogo filtrando por especie/raza. Output: List[ServiceOut]. Flujo: catálogo/reglas.
+# [NEGOCIO] Muestra al cliente los servicios que aplican a su mascota.
 async def get_services(
     species: Species = Query(...),
     breed: Optional[str] = Query(None),
@@ -21,6 +25,8 @@ async def get_services(
 
 
 @router.get("/services/available", response_model=List[ServiceAvailableOut])
+# [TECH] Devuelve bases y addons aplicables para un pet_id. Requiere token. Flujo: catálogo/addons/reglas.
+# [NEGOCIO] Indica qué opciones puede contratar el cliente para esa mascota.
 async def get_available_services(
     pet_id: UUID = Query(...),
     _: CurrentUser = Depends(get_current_user),
@@ -38,6 +44,8 @@ async def get_available_services(
 
 
 @router.post("/quote", response_model=QuoteOut)
+# [TECH] Calcula cotización (base + addons) según especie/raza/peso. Input: QuoteIn. Flujo: precios/reglas/addons.
+# [NEGOCIO] Determina el total a cobrar por el servicio y sus adicionales.
 async def create_quote(payload: QuoteIn, _: CurrentUser = Depends(get_current_user)) -> QuoteOut:
     result = await Quote().execute(
         pet_id=payload.pet_id,

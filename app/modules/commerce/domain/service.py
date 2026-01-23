@@ -6,17 +6,23 @@ from typing import List, Optional
 from uuid import UUID
 
 
+# [TECH] Enum de tipo de servicio (base/addon). Define catálogo y reglas de addons.
+# [NEGOCIO] Distingue entre el servicio principal y los adicionales que se pueden sumar.
 class ServiceType(str, Enum):
     base = "base"
     addon = "addon"
 
 
+# [TECH] Enum de especie (dog/cat). Filtra catálogo y precios por mascota.
+# [NEGOCIO] Permite mostrar/usar servicios correctos según si es perro o gato.
 class Species(str, Enum):
     dog = "dog"
     cat = "cat"
 
 
 @dataclass(frozen=True)
+# [TECH] Entidad Service del catálogo. Incluye visibilidad (is_active), especie, tipo y dependencias (requires).
+# [NEGOCIO] Representa un servicio disponible para ofrecer y cobrar al cliente.
 class Service:
     id: UUID
     name: str

@@ -9,6 +9,8 @@ from app.modules.commerce.infra.service_repository import list_services
 
 
 @dataclass
+# [TECH] Filtra catálogo por especie y reglas de raza. Input: species/breed. Output: List[Service].
+# [NEGOCIO] Devuelve los servicios que realmente se pueden ofrecer a esa mascota.
 class ListServices:
     def execute(self, *, species: Species, breed: Optional[str] = None) -> List[Service]:
         items = list_services()
@@ -32,11 +34,15 @@ class ListServices:
 
 
 @dataclass
+# [TECH] Estructura de salida: servicio base + addons aplicables. Flujo: catálogo/addons.
+# [NEGOCIO] Agrupa el servicio principal con los adicionales que el cliente puede elegir.
 class AvailableService:
     base: Service
     available_addons: List[Service]
 
 
+# [TECH] Regla: valida si una raza está permitida para un servicio. Output: bool. Flujo: reglas/catálogo.
+# [NEGOCIO] Evita ofrecer servicios que no corresponden a la raza del cliente.
 def _breed_allowed(allowed_breeds: Optional[List[str]], breed: Optional[str]) -> bool:
     if not allowed_breeds:
         return True
@@ -46,6 +52,8 @@ def _breed_allowed(allowed_breeds: Optional[List[str]], breed: Optional[str]) ->
 
 
 @dataclass
+# [TECH] Lista servicios base y addons aplicables para una mascota. Input: pet_id. Output: List[AvailableService].
+# [NEGOCIO] Indica qué combinaciones de servicio + adicionales puede contratar el cliente.
 class ListAvailableServices:
     async def execute(self, *, pet_id: UUID) -> List[AvailableService]:
         from app.modules.pets.api.router import _repo as pets_repo
@@ -78,6 +86,8 @@ class ListAvailableServices:
 
 
 @dataclass
+# [TECH] Línea de precio (servicio y monto). Output: desglose. Flujo: precios.
+# [NEGOCIO] Muestra el precio de cada parte del servicio para transparencia.
 class QuoteLine:
     service_id: UUID
     name: str
@@ -85,6 +95,8 @@ class QuoteLine:
 
 
 @dataclass
+# [TECH] Resultado de cotización: base + addons + total + moneda. Output: QuoteResult. Flujo: precios/addons.
+# [NEGOCIO] Resume cuánto pagará el cliente por el servicio y sus adicionales.
 class QuoteResult:
     pet_id: UUID
     base: QuoteLine
@@ -93,6 +105,8 @@ class QuoteResult:
     currency: str = "PEN"
 
 
+# [TECH] Normaliza la raza a una categoría de pricing. Input: breed. Output: str. Flujo: precios/reglas.
+# [NEGOCIO] Simplifica las razas en grupos para aplicar precios consistentes.
 def _breed_category(breed: Optional[str]) -> str:
     if not breed:
         return "mestizo"
@@ -101,6 +115,8 @@ def _breed_category(breed: Optional[str]) -> str:
     return "otros"
 
 
+# [TECH] Normaliza el peso a un rango para pricing. Input: weight. Output: str. Flujo: precios.
+# [NEGOCIO] Clasifica el tamaño de la mascota para ajustar el precio.
 def _weight_range(weight: Optional[float]) -> str:
     w = float(weight or 0)
     if w <= 10:
@@ -110,6 +126,8 @@ def _weight_range(weight: Optional[float]) -> str:
     return "25+"
 
 
+# [TECH] Busca precio en tabla por (servicio, especie, categoría raza, rango peso). Output: int. Flujo: precios.
+# [NEGOCIO] Obtiene el precio correcto según las características de la mascota.
 def _price_for(
     table: Dict[Tuple[UUID, Species, str, str], int],
     *,
@@ -128,6 +146,8 @@ def _price_for(
 
 
 @dataclass
+# [TECH] Calcula cotización del servicio base + addons para una mascota. Output: QuoteResult. Flujo: precios/addons/reglas.
+# [NEGOCIO] Determina el total a cobrar al cliente según su mascota y lo que selecciona.
 class Quote:
     async def execute(
         self,
