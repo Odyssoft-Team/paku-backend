@@ -20,7 +20,20 @@ class CreateNotification:
         body: str,
         data: Optional[dict[str, Any]] = None,
     ) -> Notification:
-        return self.repo.create_notification(user_id=user_id, type=type, title=title, body=body, data=data)
+        n = self.repo.create_notification(user_id=user_id, type=type, title=title, body=body, data=data)
+
+        try:
+            from app.modules.push.api.router import _repo as devices_repo
+            from app.modules.push.domain.push import PushMessage
+            from app.modules.push.infra.provider import MockPushProvider
+
+            tokens = devices_repo.get_active_tokens(user_id)
+            if tokens:
+                MockPushProvider().send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
+        except Exception:
+            pass
+
+        return n
 
 
 @dataclass
