@@ -10,7 +10,15 @@ def test_create_hold_returns_201_and_status_held():
     email = "test_booking_flow_hold@example.com"
     password = "123456"
 
-    client.post("/auth/register", json={"email": email, "password": password})
+    client.post("/auth/register", json={
+        "email": email,
+        "password": password,
+        "phone": "+51999999999",
+        "first_name": "Test",
+        "last_name": "User",
+        "sex": "male",
+        "birth_date": "1990-01-01",
+    })
     login = client.post("/auth/login", json={"email": email, "password": password})
     assert login.status_code == 200
     token = login.json()["access_token"]
@@ -39,7 +47,15 @@ def test_confirm_hold_changes_status():
     email = "test_booking_flow_confirm@example.com"
     password = "123456"
 
-    client.post("/auth/register", json={"email": email, "password": password})
+    client.post("/auth/register", json={
+        "email": email,
+        "password": password,
+        "phone": "+51999999999",
+        "first_name": "Test",
+        "last_name": "User",
+        "sex": "male",
+        "birth_date": "1990-01-01",
+    })
     login = client.post("/auth/login", json={"email": email, "password": password})
     token = login.json()["access_token"]
 
@@ -67,7 +83,15 @@ def test_cancel_hold_is_idempotent():
     email = "test_booking_flow_cancel@example.com"
     password = "123456"
 
-    client.post("/auth/register", json={"email": email, "password": password})
+    client.post("/auth/register", json={
+        "email": email,
+        "password": password,
+        "phone": "+51999999999",
+        "first_name": "Test",
+        "last_name": "User",
+        "sex": "male",
+        "birth_date": "1990-01-01",
+    })
     login = client.post("/auth/login", json={"email": email, "password": password})
     token = login.json()["access_token"]
 

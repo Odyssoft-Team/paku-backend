@@ -1,8 +1,11 @@
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from fastapi.encoders import jsonable_encoder
 
 from app.modules.booking.domain.hold import Hold, HoldStatus
 from app.modules.booking.infra.hold_repository import create_hold, get_hold, update_status
@@ -17,13 +20,44 @@ class CreateHold:
 
 @dataclass
 class ConfirmHold:
+    def _run_quote_sync(self, *, pet_id: UUID, base_service_id: UUID) -> Any:
+        from app.modules.commerce.app.use_cases import Quote
+
+        async def _run() -> Any:
+            return await Quote().execute(pet_id=pet_id, base_service_id=base_service_id, addon_ids=[])
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(_run())
+
+        result: dict[str, Any] = {}
+        error: list[BaseException] = []
+
+        def _worker() -> None:
+            try:
+                result["value"] = asyncio.run(_run())
+            except BaseException as e:  # pragma: no cover
+                error.append(e)
+
+        import threading
+
+        t = threading.Thread(target=_worker)
+        t.start()
+        t.join()
+        if error:
+            raise error[0]
+        return result["value"]
+
     def execute(self, *, hold_id: UUID) -> Hold:
         hold = get_hold(hold_id)
         if not hold:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hold not found")
         if hold.status != HoldStatus.held:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Hold cannot be confirmed")
-        updated = update_status(hold_id, HoldStatus.confirmed)
+        quote = self._run_quote_sync(pet_id=hold.pet_id, base_service_id=hold.service_id)
+        snapshot = jsonable_encoder(quote)
+        updated = update_status(hold_id, HoldStatus.confirmed, quote_snapshot=snapshot)
         return updated or hold
 
 

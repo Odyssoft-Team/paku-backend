@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -19,3 +19,9 @@ class HoldOut(BaseModel):
     status: HoldStatus
     expires_at: datetime
     created_at: datetime
+
+
+class AvailabilityOut(BaseModel):
+    date: date
+    capacity: int
+    available: int

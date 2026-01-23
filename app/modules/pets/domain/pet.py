@@ -28,6 +28,9 @@ class Pet:
     birth_date: Optional[date]
     notes: Optional[str]
     created_at: datetime
+    photo_url: Optional[str] = None
+    weight_kg: Optional[float] = None
+    updated_at: Optional[datetime] = None
 
     @staticmethod
     def new(
@@ -39,7 +42,10 @@ class Pet:
         sex: Optional[Sex] = None,
         birth_date: Optional[date] = None,
         notes: Optional[str] = None,
+        photo_url: Optional[str] = None,
+        weight_kg: Optional[float] = None,
     ) -> "Pet":
+        now = datetime.now(timezone.utc)
         return Pet(
             id=uuid4(),
             owner_id=owner_id,
@@ -49,7 +55,10 @@ class Pet:
             sex=sex,
             birth_date=birth_date,
             notes=notes,
-            created_at=datetime.now(timezone.utc),
+            created_at=now,
+            photo_url=photo_url,
+            weight_kg=weight_kg,
+            updated_at=now,
         )
 
 

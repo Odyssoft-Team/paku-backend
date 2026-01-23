@@ -7,13 +7,23 @@ client = TestClient(app)
 
 
 def test_register_returns_201():
-    payload = {"email": "test_iam_flow_user@example.com", "password": "123456"}
+    payload = {
+        "email": "test_iam_flow_user@example.com",
+        "password": "123456",
+        "phone": "+51999999999",
+        "first_name": "Test",
+        "last_name": "User",
+        "sex": "male",
+        "birth_date": "1990-01-01",
+    }
     r = client.post("/auth/register", json=payload)
     # Este proyecto retorna 201 en register
     assert r.status_code == 201
     data = r.json()
     assert "id" in data
     assert data.get("email") == payload["email"]
+    assert data.get("phone") == payload["phone"]
+    assert data.get("first_name") == payload["first_name"]
 
 
 def test_login_returns_tokens():

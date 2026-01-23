@@ -22,12 +22,13 @@ class InMemoryHoldRepository:
                 status=HoldStatus.expired,
                 expires_at=hold.expires_at,
                 created_at=hold.created_at,
+                quote_snapshot=hold.quote_snapshot,
             )
             self._by_id[hold.id] = expired
             return expired
         return hold
 
-    def create_hold(self, *, user_id: UUID, pet_id: UUID, service_id: UUID, expires_at: datetime) -> Hold:
+    def create_hold(self, *, user_id: UUID, pet_id: UUID, service_id: UUID, expires_at: datetime, quote_snapshot: Optional[dict] = None) -> Hold:
         created_at = datetime.now(timezone.utc)
         hold = Hold.new(
             user_id=user_id,
@@ -35,6 +36,7 @@ class InMemoryHoldRepository:
             service_id=service_id,
             expires_at=expires_at,
             created_at=created_at,
+            quote_snapshot=quote_snapshot,
         )
         self._by_id[hold.id] = hold
         return hold
@@ -45,7 +47,7 @@ class InMemoryHoldRepository:
             return None
         return self._maybe_expire(hold)
 
-    def update_status(self, hold_id: UUID, status: HoldStatus) -> Optional[Hold]:
+    def update_status(self, hold_id: UUID, status: HoldStatus, quote_snapshot: Optional[dict] = None) -> Optional[Hold]:
         hold = self.get_hold(hold_id)
         if not hold:
             return None
@@ -64,6 +66,7 @@ class InMemoryHoldRepository:
             status=status,
             expires_at=hold.expires_at,
             created_at=hold.created_at,
+            quote_snapshot=quote_snapshot if quote_snapshot is not None else hold.quote_snapshot,
         )
         self._by_id[hold.id] = updated
         return updated
@@ -79,16 +82,16 @@ class InMemoryHoldRepository:
 _repo = InMemoryHoldRepository()
 
 
-def create_hold(*, user_id: UUID, pet_id: UUID, service_id: UUID, expires_at: datetime) -> Hold:
-    return _repo.create_hold(user_id=user_id, pet_id=pet_id, service_id=service_id, expires_at=expires_at)
+def create_hold(*, user_id: UUID, pet_id: UUID, service_id: UUID, expires_at: datetime, quote_snapshot: Optional[dict] = None) -> Hold:
+    return _repo.create_hold(user_id=user_id, pet_id=pet_id, service_id=service_id, expires_at=expires_at, quote_snapshot=quote_snapshot)
 
 
 def get_hold(hold_id: UUID) -> Optional[Hold]:
     return _repo.get_hold(hold_id)
 
 
-def update_status(hold_id: UUID, status: HoldStatus) -> Optional[Hold]:
-    return _repo.update_status(hold_id, status)
+def update_status(hold_id: UUID, status: HoldStatus, quote_snapshot: Optional[dict] = None) -> Optional[Hold]:
+    return _repo.update_status(hold_id, status, quote_snapshot=quote_snapshot)
 
 
 def list_by_user(user_id: UUID) -> List[Hold]:

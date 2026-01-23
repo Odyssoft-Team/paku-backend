@@ -24,3 +24,8 @@ class InMemoryUserRepository(UserRepository):
             raise ValueError("email_exists")
         self._by_id[user.id] = user
         self._by_email[email] = user.id
+
+    async def update(self, user: User) -> None:
+        if user.id not in self._by_id:
+            raise ValueError("user_not_found")
+        self._by_id[user.id] = user

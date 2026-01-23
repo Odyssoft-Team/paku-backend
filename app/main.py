@@ -6,6 +6,7 @@ from app.modules.clinical_history.api.router import router as clinical_history_r
 from app.modules.iam.api.router import router as iam_router
 from app.modules.pets.api.router import router as pets_router
 from app.modules.commerce.api.router import router as commerce_router
+from app.modules.wallet.api.router import router as wallet_router
 
 
 app = FastAPI(
@@ -18,6 +19,7 @@ app.include_router(pets_router)
 app.include_router(commerce_router)
 app.include_router(booking_router)
 app.include_router(clinical_history_router)
+app.include_router(wallet_router)
 
 
 @app.get("/health")

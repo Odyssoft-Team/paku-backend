@@ -10,7 +10,15 @@ def test_create_pet_ok():
     email = "test_pets_flow_ok@example.com"
     password = "123456"
 
-    client.post("/auth/register", json={"email": email, "password": password})
+    client.post("/auth/register", json={
+        "email": email,
+        "password": password,
+        "phone": "+51999999999",
+        "first_name": "Test",
+        "last_name": "User",
+        "sex": "male",
+        "birth_date": "1990-01-01",
+    })
     login = client.post("/auth/login", json={"email": email, "password": password})
     assert login.status_code == 200
     token = login.json()["access_token"]
@@ -31,7 +39,15 @@ def test_create_pet_invalid_species():
     email = "test_pets_flow_invalid_species@example.com"
     password = "123456"
 
-    client.post("/auth/register", json={"email": email, "password": password})
+    client.post("/auth/register", json={
+        "email": email,
+        "password": password,
+        "phone": "+51999999999",
+        "first_name": "Test",
+        "last_name": "User",
+        "sex": "male",
+        "birth_date": "1990-01-01",
+    })
     login = client.post("/auth/login", json={"email": email, "password": password})
     assert login.status_code == 200
     token = login.json()["access_token"]
@@ -48,7 +64,15 @@ def test_get_pet_by_id():
     email = "test_pets_flow_get_by_id@example.com"
     password = "123456"
 
-    client.post("/auth/register", json={"email": email, "password": password})
+    client.post("/auth/register", json={
+        "email": email,
+        "password": password,
+        "phone": "+51999999999",
+        "first_name": "Test",
+        "last_name": "User",
+        "sex": "male",
+        "birth_date": "1990-01-01",
+    })
     login = client.post("/auth/login", json={"email": email, "password": password})
     assert login.status_code == 200
     token = login.json()["access_token"]
