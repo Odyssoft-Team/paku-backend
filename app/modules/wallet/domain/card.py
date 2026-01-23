@@ -5,6 +5,11 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 
+# [TECH]
+# Immutable domain entity for payment cards with secure token storage.
+#
+# [NATURAL/BUSINESS]
+# Representa una tarjeta de pago guardada sin datos sensibles.
 @dataclass(frozen=True)
 class Card:
     id: UUID
@@ -18,6 +23,11 @@ class Card:
     is_default: bool
     created_at: datetime
 
+    # [TECH]
+    # Factory method creating Card with UUID and UTC timestamp.
+    #
+    # [NATURAL/BUSINESS]
+    # Crea una nueva tarjeta con ID único y fecha de creación.
     @staticmethod
     def new(
         *,

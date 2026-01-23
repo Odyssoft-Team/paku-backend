@@ -7,12 +7,22 @@ from typing import Any, Optional, Protocol
 from uuid import UUID, uuid4
 
 
+# [TECH]
+# Enum defining supported push notification platforms.
+#
+# [NATURAL/BUSINESS]
+# Tipos de dispositivos que pueden recibir notificaciones.
 class Platform(str, Enum):
     android = "android"
     ios = "ios"
     web = "web"
 
 
+# [TECH]
+# Immutable entity storing device push token per user/platform.
+#
+# [NATURAL/BUSINESS]
+# Token de dispositivo para enviar notificaciones push.
 @dataclass(frozen=True)
 class DeviceToken:
     id: UUID
@@ -22,6 +32,11 @@ class DeviceToken:
     is_active: bool
     created_at: datetime
 
+    # [TECH]
+    # Factory creating active DeviceToken with UUID and timestamp.
+    #
+    # [NATURAL/BUSINESS]
+    # Crea un nuevo token de dispositivo activo.
     @staticmethod
     def new(*, user_id: UUID, platform: Platform, token: str) -> "DeviceToken":
         return DeviceToken(
@@ -34,6 +49,11 @@ class DeviceToken:
         )
 
 
+# [TECH]
+# Value object for push notification payload.
+#
+# [NATURAL/BUSINESS]
+# Mensaje de notificación con título y contenido.
 @dataclass(frozen=True)
 class PushMessage:
     title: str
@@ -41,6 +61,11 @@ class PushMessage:
     data: Optional[dict[str, Any]] = None
 
 
+# [TECH]
+# Repository interface for device token persistence.
+#
+# [NATURAL/BUSINESS]
+# Guarda y gestiona tokens de dispositivos push.
 class DeviceTokenRepository(Protocol):
     def register_device(self, user_id: UUID, platform: Platform, token: str) -> DeviceToken:
         ...

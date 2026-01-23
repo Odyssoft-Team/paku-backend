@@ -7,6 +7,11 @@ from typing import Any, Optional, Protocol, Union
 from uuid import UUID, uuid4
 
 
+# [TECH]
+# Enum defining cart lifecycle states with TTL behavior.
+#
+# [NATURAL/BUSINESS]
+# Estados del carrito: activo, finalizado, expirado o cancelado.
 class CartStatus(str, Enum):
     active = "active"
     checked_out = "checked_out"
@@ -14,12 +19,22 @@ class CartStatus(str, Enum):
     cancelled = "cancelled"
 
 
+# [TECH]
+# Enum for cart item types: services or products.
+#
+# [NATURAL/BUSINESS]
+# Tipos de items: servicios base, adicionales o productos.
 class CartItemKind(str, Enum):
     service_base = "service_base"
     service_addon = "service_addon"
     product = "product"
 
 
+# [TECH]
+# Immutable cart session with TTL and status tracking.
+#
+# [NATURAL/BUSINESS]
+# Carrito de compra con fecha de expiración y estado.
 @dataclass(frozen=True)
 class CartSession:
     id: UUID
@@ -29,6 +44,11 @@ class CartSession:
     created_at: datetime
     updated_at: datetime
 
+    # [TECH]
+    # Factory creating active cart with configurable TTL.
+    #
+    # [NATURAL/BUSINESS]
+    # Crea un carrito nuevo que expira en horas.
     @staticmethod
     def new(*, user_id: UUID, ttl_hours: int = 2) -> "CartSession":
         now = datetime.now(timezone.utc)
@@ -42,6 +62,11 @@ class CartSession:
         )
 
 
+# [TECH]
+# Immutable cart item with typed reference and metadata.
+#
+# [NATURAL/BUSINESS]
+# Producto o servicio agregado al carrito.
 @dataclass(frozen=True)
 class CartItem:
     id: UUID
@@ -53,6 +78,11 @@ class CartItem:
     unit_price: Optional[float]
     meta: Optional[dict[str, Any]]
 
+    # [TECH]
+    # Factory creating cart item with UUID and defaults.
+    #
+    # [NATURAL/BUSINESS]
+    # Crea un nuevo item para el carrito.
     @staticmethod
     def new(
         *,
@@ -76,6 +106,11 @@ class CartItem:
         )
 
 
+# [TECH]
+# Repository interface for cart and item persistence.
+#
+# [NATURAL/BUSINESS]
+# Guarda y gestiona carritos y sus items.
 class CartRepository(Protocol):
     def create_cart(self, user_id: UUID) -> CartSession:
         ...

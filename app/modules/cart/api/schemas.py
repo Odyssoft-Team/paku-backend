@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 from app.modules.cart.domain.cart import CartItemKind, CartStatus
 
 
+# [TECH]
+# Output DTO serializing CartSession for API responses.
+#
+# [NATURAL/BUSINESS]
+# Representación del carrito que devuelve la API.
 class CartOut(BaseModel):
     id: UUID
     user_id: UUID
@@ -16,6 +21,11 @@ class CartOut(BaseModel):
     updated_at: datetime
 
 
+# [TECH]
+# Input DTO for adding items to cart with validation.
+#
+# [NATURAL/BUSINESS]
+# Datos para agregar un producto al carrito.
 class CartItemIn(BaseModel):
     kind: CartItemKind
     ref_id: Union[UUID, str]
@@ -25,6 +35,11 @@ class CartItemIn(BaseModel):
     meta: Optional[dict[str, Any]] = None
 
 
+# [TECH]
+# Output DTO serializing CartItem for API responses.
+#
+# [NATURAL/BUSINESS]
+# Representación de item del carrito que devuelve la API.
 class CartItemOut(BaseModel):
     id: UUID
     cart_id: UUID
@@ -36,11 +51,21 @@ class CartItemOut(BaseModel):
     meta: Optional[dict[str, Any]] = None
 
 
+# [TECH]
+# Composite DTO returning cart with its items.
+#
+# [NATURAL/BUSINESS]
+# Carrito completo con todos sus productos.
 class CartWithItemsOut(BaseModel):
     cart: CartOut
     items: list[CartItemOut]
 
 
+# [TECH]
+# Output DTO for checkout with totals and items.
+#
+# [NATURAL/BUSINESS]
+# Resumen del pedido tras finalizar el carrito.
 class CheckoutOut(BaseModel):
     cart_id: UUID
     status: str

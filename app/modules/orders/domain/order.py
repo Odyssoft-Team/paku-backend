@@ -7,6 +7,11 @@ from typing import Any, Optional
 from uuid import UUID, uuid4
 
 
+# [TECH]
+# Enum defining order lifecycle states with ordinal mapping.
+#
+# [NATURAL/BUSINESS]
+# Estados por los que pasa un pedido hasta entregarse.
 class OrderStatus(str, Enum):
     created = "created"
     in_process = "in_process"
@@ -14,6 +19,11 @@ class OrderStatus(str, Enum):
     delivered = "delivered"
 
 
+# [TECH]
+# Ordinal mapping for status transition validation.
+#
+# [NATURAL/BUSINESS]
+# Define el orden correcto de los estados del pedido.
 _STATUS_ORDER: dict[OrderStatus, int] = {
     OrderStatus.created: 1,
     OrderStatus.in_process: 2,
@@ -22,6 +32,11 @@ _STATUS_ORDER: dict[OrderStatus, int] = {
 }
 
 
+# [TECH]
+# Immutable entity with immutable snapshots and status flow.
+#
+# [NATURAL/BUSINESS]
+# Pedido con productos, total y dirección de entrega.
 @dataclass(frozen=True)
 class Order:
     id: UUID
@@ -34,6 +49,11 @@ class Order:
     created_at: datetime
     updated_at: datetime
 
+    # [TECH]
+    # Factory creating Order with created status and timestamps.
+    #
+    # [NATURAL/BUSINESS]
+    # Crea un pedido nuevo con estado inicial creado.
     @staticmethod
     def new(
         *,
@@ -56,5 +76,10 @@ class Order:
             updated_at=now,
         )
 
+    # [TECH]
+    # Validates forward-only status transitions using ordinals.
+    #
+    # [NATURAL/BUSINESS]
+    # Verifica si el pedido puede pasar al siguiente estado.
     def can_advance_to(self, new_status: OrderStatus) -> bool:
         return _STATUS_ORDER[new_status] >= _STATUS_ORDER[self.status]

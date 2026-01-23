@@ -7,14 +7,29 @@ from pydantic import BaseModel
 from app.modules.orders.domain.order import OrderStatus
 
 
+# [TECH]
+# Input DTO for order creation from existing cart.
+#
+# [NATURAL/BUSINESS]
+# Datos para crear un pedido desde el carrito.
 class CreateOrderIn(BaseModel):
     cart_id: UUID
 
 
+# [TECH]
+# Input DTO for order status updates by admin/ally.
+#
+# [NATURAL/BUSINESS]
+# Nuevo estado para actualizar un pedido existente.
 class UpdateStatusIn(BaseModel):
     status: OrderStatus
 
 
+# [TECH]
+# Output DTO serializing Order entity for API responses.
+#
+# [NATURAL/BUSINESS]
+# Representación completa de pedido que devuelve la API.
 class OrderOut(BaseModel):
     id: UUID
     user_id: UUID
