@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.core.settings import settings
 from app.modules.booking.api.router import router as booking_router
 from app.modules.clinical_history.api.router import router as clinical_history_router
+from app.modules.cart.api.router import router as cart_router
 from app.modules.iam.api.router import router as iam_router
 from app.modules.notifications.api.router import router as notifications_router
 from app.modules.pets.api.router import router as pets_router
@@ -22,6 +23,7 @@ app.include_router(booking_router)
 app.include_router(clinical_history_router)
 app.include_router(wallet_router)
 app.include_router(notifications_router)
+app.include_router(cart_router)
 
 
 @app.get("/health")
