@@ -65,7 +65,7 @@ def test_confirm_hold_changes_status():
         headers={"Authorization": f"Bearer {token}"},
     )
     pet_id = pet_resp.json()["id"]
-    service_id = "11111111-1111-1111-1111-111111111111"
+    service_id = "33333333-3333-3333-3333-333333333333"
 
     hold_resp = client.post(
         "/holds",

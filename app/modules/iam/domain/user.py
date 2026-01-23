@@ -6,15 +6,39 @@ from enum import Enum
 from typing import Literal, Optional, Protocol
 from uuid import UUID, uuid4
 
+# [TECH]
+# Type alias representing the set of roles supported by the IAM domain.
+# This is the authoritative role set used by the User entity and propagated into tokens.
+# It participates in authorization because downstream modules may rely on the role claim.
+#
+# [BUSINESS]
+# Define los perfiles/roles disponibles para usuarios.
+# Esto permite clasificar a los usuarios (por ejemplo usuario final, aliado o administrador)
+# y aplicar reglas de acceso según el rol.
 Role = Literal["admin", "user", "ally"]
 
 
+# [TECH]
+# Enum representing the user's sex in the domain.
+# Used by the User entity and validated/serialized through the API layer.
+#
+# [BUSINESS]
+# Valores permitidos para el sexo del usuario en su perfil.
+# Sirve para mantener información consistente.
 class Sex(str, Enum):
     male = "male"
     female = "female"
 
 
 @dataclass(frozen=True)
+# [TECH]
+# Domain value object representing an address.
+# Used as part of the User entity.
+# Inputs: district_id, address_line, coordinates.
+#
+# [BUSINESS]
+# Dirección del usuario (zona y referencia).
+# Ayuda a ubicar al usuario para operaciones y prestación de servicios.
 class Address:
     district_id: str
     address_line: str
@@ -23,6 +47,15 @@ class Address:
 
 
 @dataclass(frozen=True)
+# [TECH]
+# Core domain entity representing a platform user.
+# Contains identity (id/email), authentication material (password_hash), authorization (role),
+# account state (is_active) and profile information.
+# Flow: used across IAM registration, login, token minting, and profile management.
+#
+# [BUSINESS]
+# Representa a una persona/cliente dentro del sistema.
+# Incluye su correo, estado de cuenta y datos del perfil que la app muestra y actualiza.
 class User:
     id: UUID
     email: str
@@ -40,6 +73,15 @@ class User:
     profile_photo_url: Optional[str] = None
 
     @staticmethod
+    # [TECH]
+    # Factory method to create a new User with normalized email and generated UUID.
+    # Inputs: email, password_hash (already hashed), profile fields, role, and optional extras.
+    # Output: a fully populated User domain object.
+    # Flow: registration. Called by RegisterUser use case before persistence.
+    #
+    # [BUSINESS]
+    # Crea un usuario nuevo con un identificador único y el correo normalizado.
+    # Se usa cuando alguien se registra por primera vez.
     def new(
         email: str,
         password_hash: str,
@@ -71,6 +113,14 @@ class User:
         )
 
 
+# [TECH]
+# Repository interface for persistence of User entities.
+# Defines the required operations for IAM use cases (lookup by email/id, add, update).
+# Implementations can be in-memory or database-backed.
+#
+# [BUSINESS]
+# Contrato de almacenamiento de usuarios.
+# Permite buscar, crear y actualizar usuarios sin depender de una tecnología específica.
 class UserRepository(Protocol):
     async def get_by_email(self, email: str) -> Optional[User]:
         ...

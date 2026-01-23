@@ -6,6 +6,7 @@ from app.modules.clinical_history.api.router import router as clinical_history_r
 from app.modules.cart.api.router import router as cart_router
 from app.modules.iam.api.router import router as iam_router
 from app.modules.notifications.api.router import router as notifications_router
+from app.modules.push.api.router import router as push_router
 from app.modules.pets.api.router import router as pets_router
 from app.modules.commerce.api.router import router as commerce_router
 from app.modules.wallet.api.router import router as wallet_router
@@ -24,6 +25,7 @@ app.include_router(clinical_history_router)
 app.include_router(wallet_router)
 app.include_router(notifications_router)
 app.include_router(cart_router)
+app.include_router(push_router)
 
 
 @app.get("/health")

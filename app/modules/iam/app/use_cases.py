@@ -10,10 +10,31 @@ from app.modules.iam.domain.user import Address, Role, Sex, User, UserRepository
 
 
 @dataclass
+# [TECH]
+# Use case responsible for creating a new user account.
+# Inputs: email/password plus profile fields (phone, names, sex, birth_date, role, optional dni/address/photo).
+# Output: a domain User entity persisted in the repository.
+# Flow: authentication (registration). Validates uniqueness of email, hashes password,
+# and delegates persistence to UserRepository.
+# Depends on: UserRepository (get_by_email/add) + hash_password + User.new.
+#
+# [BUSINESS]
+# Caso de uso que crea una cuenta nueva.
+# Verifica que el correo no esté en uso, guarda la contraseña de forma segura
+# y registra el perfil básico del usuario para que pueda usar la plataforma.
 class RegisterUser:
     repo: UserRepository
 
     async def execute(
+        # [TECH]
+        # Orchestrates the registration flow.
+        # Receives raw inputs from the API handler, validates email uniqueness,
+        # hashes the password, builds the domain User, and stores it.
+        # Returns the created User for serialization.
+        #
+        # [BUSINESS]
+        # Ejecuta el registro: comprueba que el correo sea único y crea el usuario.
+        # Devuelve el usuario creado para mostrarlo en la app.
         self,
         email: str,
         password: str,
@@ -51,10 +72,31 @@ class RegisterUser:
 
 
 @dataclass
+# [TECH]
+# Use case responsible for authenticating a user and issuing JWTs.
+# Inputs: email, password.
+# Output: dict containing access_token, refresh_token, token_type.
+# Flow: authentication (login). Validates credentials, checks active status,
+# and mints tokens using core auth utilities.
+# Depends on: UserRepository.get_by_email + hash_password + create_access_token/create_refresh_token.
+#
+# [BUSINESS]
+# Caso de uso para iniciar sesión.
+# Valida correo y contraseña y, si son correctos, entrega tokens para que
+# la app pueda mantener la sesión del usuario.
 class LoginUser:
     repo: UserRepository
 
     async def execute(self, email: str, password: str) -> dict:
+        # [TECH]
+        # Validates user credentials and returns token payload.
+        # If credentials are invalid returns 401; if user is inactive returns 403.
+        # Part of authentication flow.
+        #
+        # [BUSINESS]
+        # Verifica si el usuario puede ingresar.
+        # Si el correo/contraseña no coinciden, rechaza el acceso.
+        # Si la cuenta está inactiva, impide el inicio de sesión.
         user = await self.repo.get_by_email(email)
         if not user or user.password_hash != hash_password(password):
             raise HTTPException(
@@ -75,10 +117,27 @@ class LoginUser:
 
 
 @dataclass
+# [TECH]
+# Use case responsible for retrieving the current user's profile.
+# Inputs: user_id.
+# Output: domain User.
+# Flow: identity/profile read, typically called after token validation.
+# Depends on: UserRepository.get_by_id.
+#
+# [BUSINESS]
+# Caso de uso que obtiene el perfil del usuario.
+# Se usa para mostrar la información del usuario autenticado.
 class GetMe:
     repo: UserRepository
 
     async def execute(self, user_id: UUID) -> User:
+        # [TECH]
+        # Loads the user by ID or returns 404.
+        # Part of the authenticated profile flow.
+        #
+        # [BUSINESS]
+        # Busca al usuario por su identificador.
+        # Si no existe, indica que el perfil no se encuentra.
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -86,10 +145,28 @@ class GetMe:
 
 
 @dataclass
+# [TECH]
+# Use case responsible for updating the current user's profile.
+# Inputs: user_id and optional profile fields.
+# Output: updated domain User.
+# Flow: identity/profile update. Loads existing user, merges fields, persists.
+# Depends on: UserRepository.get_by_id + UserRepository.update.
+#
+# [BUSINESS]
+# Caso de uso que permite editar el perfil del usuario.
+# Solo cambia los campos enviados y mantiene el resto como estaban.
 class UpdateProfile:
     repo: UserRepository
 
     async def execute(
+        # [TECH]
+        # Applies a partial update over the existing user record.
+        # Receives optional fields; when a field is None it keeps the previous value.
+        # Returns 404 if the user does not exist.
+        #
+        # [BUSINESS]
+        # Actualiza el perfil del usuario con los cambios que llegan.
+        # No borra información: si un campo no viene, se conserva.
         self,
         user_id: UUID,
         phone: Optional[str] = None,
