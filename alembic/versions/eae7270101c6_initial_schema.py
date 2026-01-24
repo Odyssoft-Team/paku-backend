@@ -33,8 +33,7 @@ def upgrade() -> None:
         sa.Column('weight_kg', sa.Float(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-        sa.Index('ix_pets_owner_id', 'owner_id')
+        sa.PrimaryKeyConstraint('id')
     )
 
     # Create pet_weight_entries table
