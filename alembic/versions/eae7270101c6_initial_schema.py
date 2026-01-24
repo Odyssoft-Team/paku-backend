@@ -1,7 +1,7 @@
 """initial schema
 
 Revision ID: eae7270101c6
-Revises: 2d6005ee35d7
+Revises:
 Create Date: 2026-01-24 01:05:54.776190
 
 """
