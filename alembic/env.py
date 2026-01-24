@@ -44,7 +44,9 @@ target_metadata = _get_metadata()
 def get_url() -> str:
     settings = _get_settings()
     if not settings.DATABASE_URL:
-        return "sqlite+aiosqlite:///./app.db"
+        raise RuntimeError(
+            "DATABASE_URL is required for migrations. Refusing to fall back to sqlite."
+        )
     return settings.DATABASE_URL
 
 

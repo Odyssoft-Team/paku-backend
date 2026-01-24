@@ -5,8 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.core.settings import settings
 
 
+if not settings.DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is required. Refusing to fall back to sqlite.")
+
 engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL or "sqlite+aiosqlite:///./app.db",
+    settings.DATABASE_URL,
     echo=settings.DEBUG,
 )
 
