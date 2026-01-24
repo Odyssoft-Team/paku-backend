@@ -4,12 +4,32 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from app.core.settings import settings
-from app.core.base import Base
+
+def _get_settings():
+    load_dotenv()
+    from app.core.settings import settings
+
+    return settings
+
+
+def _get_metadata():
+    load_dotenv()
+    from app.core.base import Base
+    from app.modules.iam.infra.models import UserModel  # noqa: F401
+    from app.modules.pets.infra.models import PetModel, PetWeightEntryModel  # noqa: F401
+    from app.modules.commerce.infra.models import PriceRuleModel, ServiceModel  # noqa: F401
+    from app.modules.booking.infra.models import HoldModel  # noqa: F401
+    from app.modules.orders.infra.models import OrderModel  # noqa: F401
+    from app.modules.notifications.infra.models import NotificationModel  # noqa: F401
+    from app.modules.push.infra.models import DeviceTokenModel  # noqa: F401
+    from app.modules.cart.infra.models import CartSessionModel, CartItemModel  # noqa: F401
+
+    return Base.metadata
 
 
 config = context.config
@@ -18,10 +38,11 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
-target_metadata = Base.metadata
+target_metadata = _get_metadata()
 
 
 def get_url() -> str:
+    settings = _get_settings()
     if not settings.DATABASE_URL:
         return "sqlite+aiosqlite:///./app.db"
     return settings.DATABASE_URL

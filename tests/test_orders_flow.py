@@ -27,7 +27,7 @@ def _auth_headers(client: TestClient, *, email: str, password: str) -> dict:
 
 def test_create_order_from_checked_out_cart_creates_notification():
     client = TestClient(app)
-    headers = _auth_headers(client, email="orders_user@example.com", password="pass1234")
+    headers = _auth_headers(client, email="orders_user_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 
     r = client.post("/cart", headers=headers)
     assert r.status_code in (200, 201)
@@ -54,7 +54,7 @@ def test_create_order_from_checked_out_cart_creates_notification():
 
 def test_list_orders_returns_created_order():
     client = TestClient(app)
-    headers = _auth_headers(client, email="orders_list@example.com", password="pass1234")
+    headers = _auth_headers(client, email="orders_list_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 
     r = client.post("/cart", headers=headers)
     assert r.status_code in (200, 201)
@@ -80,7 +80,7 @@ def test_list_orders_returns_created_order():
 
 def test_get_order_by_id_for_owner_ok():
     client = TestClient(app)
-    headers = _auth_headers(client, email="orders_get@example.com", password="pass1234")
+    headers = _auth_headers(client, email="orders_get_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 
     r = client.post("/cart", headers=headers)
     assert r.status_code in (200, 201)
@@ -105,7 +105,7 @@ def test_get_order_by_id_for_owner_ok():
 
 def test_update_status_requires_admin_or_ally():
     client = TestClient(app)
-    headers = _auth_headers(client, email="orders_status@example.com", password="pass1234")
+    headers = _auth_headers(client, email="orders_status_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 
     r = client.post("/cart", headers=headers)
     assert r.status_code in (200, 201)

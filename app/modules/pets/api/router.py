@@ -1,22 +1,29 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import CurrentUser, get_current_user
+from app.core.db import engine, get_async_session
 from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, WeightEntryIn, WeightEntryOut
 from app.modules.pets.app.use_cases import CreatePet, GetPet, GetWeightHistory, RecordWeight, UpdatePet
-from app.modules.pets.infra.pet_repository import InMemoryPetRepository
+from app.modules.pets.domain.pet import PetRepository
+from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 
 router = APIRouter(tags=["pets"])
-_repo = InMemoryPetRepository()
+
+
+def get_pet_repo(session: AsyncSession = Depends(get_async_session)) -> PetRepository:
+    return PostgresPetRepository(session=session, engine=engine)
 
 
 @router.post("/pets", response_model=PetOut, status_code=status.HTTP_201_CREATED)
 async def create_pet(
     payload: PetCreateIn,
     current: CurrentUser = Depends(get_current_user),
+    repo: PetRepository = Depends(get_pet_repo),
 ) -> PetOut:
-    pet = await CreatePet(repo=_repo).execute(
+    pet = await CreatePet(repo=repo).execute(
         owner_id=current.id,
         name=payload.name,
         species=payload.species,
@@ -29,8 +36,8 @@ async def create_pet(
 
 
 @router.get("/pets/{id}", response_model=PetOut)
-async def get_pet(id: UUID) -> PetOut:
-    pet = await GetPet(repo=_repo).execute(pet_id=id)
+async def get_pet(id: UUID, repo: PetRepository = Depends(get_pet_repo)) -> PetOut:
+    pet = await GetPet(repo=repo).execute(pet_id=id)
     return PetOut(**pet.__dict__)
 
 
@@ -39,8 +46,9 @@ async def update_pet(
     id: UUID,
     payload: UpdatePetIn,
     current: CurrentUser = Depends(get_current_user),
+    repo: PetRepository = Depends(get_pet_repo),
 ) -> PetOut:
-    pet = await UpdatePet(repo=_repo).execute(
+    pet = await UpdatePet(repo=repo).execute(
         pet_id=id,
         owner_id=current.id,
         name=payload.name,
@@ -58,8 +66,9 @@ async def record_weight(
     id: UUID,
     payload: WeightEntryIn,
     current: CurrentUser = Depends(get_current_user),
+    repo: PetRepository = Depends(get_pet_repo),
 ) -> WeightEntryOut:
-    entry = await RecordWeight(repo=_repo).execute(
+    entry = await RecordWeight(repo=repo).execute(
         pet_id=id,
         owner_id=current.id,
         weight_kg=payload.weight_kg,
@@ -68,6 +77,6 @@ async def record_weight(
 
 
 @router.get("/pets/{id}/weight-history", response_model=list[WeightEntryOut])
-async def get_weight_history(id: UUID) -> list[WeightEntryOut]:
-    entries = await GetWeightHistory(repo=_repo).execute(pet_id=id)
+async def get_weight_history(id: UUID, repo: PetRepository = Depends(get_pet_repo)) -> list[WeightEntryOut]:
+    entries = await GetWeightHistory(repo=repo).execute(pet_id=id)
     return [WeightEntryOut(**e.__dict__) for e in entries]

@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.modules.orders.domain.order import Order, OrderStatus
-from app.modules.orders.infra.order_repository import InMemoryOrderRepository
+from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 
 
 def _snapshot_cart_items(items: list[Any]) -> list[dict[str, Any]]:
@@ -38,7 +38,7 @@ def _calc_total(items: list[Any]) -> float:
 
 @dataclass
 class CreateOrderFromCart:
-    orders_repo: InMemoryOrderRepository
+    orders_repo: PostgresOrderRepository
 
     async def execute(self, *, user_id: UUID, cart_id: UUID) -> Order:
         from app.modules.cart.api.router import _repo as cart_repo
@@ -61,7 +61,7 @@ class CreateOrderFromCart:
             currency="PEN",
             delivery_address_snapshot=None,
         )
-        created = self.orders_repo.create_order(order)
+        created = await self.orders_repo.create_order(order)
 
         await CreateNotification(repo=notifications_repo).execute(
             user_id=user_id,
@@ -76,19 +76,19 @@ class CreateOrderFromCart:
 
 @dataclass
 class ListOrders:
-    orders_repo: InMemoryOrderRepository
+    orders_repo: PostgresOrderRepository
 
     async def execute(self, *, user_id: UUID) -> list[Order]:
-        return self.orders_repo.list_orders(user_id=user_id)
+        return await self.orders_repo.list_orders(user_id=user_id)
 
 
 @dataclass
 class GetOrder:
-    orders_repo: InMemoryOrderRepository
+    orders_repo: PostgresOrderRepository
 
     async def execute(self, *, order_id: UUID, user_id: UUID) -> Order:
         try:
-            return self.orders_repo.get_order(id=order_id, user_id=user_id)
+            return await self.orders_repo.get_order(id=order_id, user_id=user_id)
         except ValueError as exc:
             if str(exc) == "order_not_found":
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found") from exc
@@ -107,14 +107,18 @@ def _status_message(status_value: str) -> tuple[str, str]:
 
 @dataclass
 class UpdateOrderStatus:
-    orders_repo: InMemoryOrderRepository
+    orders_repo: PostgresOrderRepository
 
     async def execute(self, *, order_id: UUID, status: OrderStatus) -> Order:
         from app.modules.notifications.api.router import _repo as notifications_repo
         from app.modules.notifications.app.use_cases import CreateNotification
 
         try:
-            updated = self.orders_repo.update_status(id=order_id, status=status)
+            existing = await self.orders_repo.get_order_admin(id=order_id)
+            if existing is None:
+                raise ValueError("order_not_found")
+
+            updated = await self.orders_repo.update_status(id=order_id, status=status)
         except ValueError as exc:
             if str(exc) == "order_not_found":
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found") from exc

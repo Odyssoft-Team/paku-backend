@@ -13,7 +13,7 @@ def test_availability_requires_auth():
 
 
 def test_availability_returns_7_days_by_default():
-    email = "test_booking_availability@example.com"
+    email = "test_booking_availability_" + __import__("uuid").uuid4().hex + "@example.com"
     password = "123456"
 
     client.post("/auth/register", json={

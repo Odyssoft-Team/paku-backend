@@ -45,7 +45,7 @@ def _parse_dt(value: str) -> datetime:
 
 
 def test_update_pet_editable_fields_ok():
-    token = _register_and_login("test_pets_extended_update_ok@example.com")
+    token = _register_and_login("test_pets_extended_update_ok_" + __import__("uuid").uuid4().hex + "@example.com")
     pet = _create_pet(token=token, name="Firulais", species="dog")
 
     payload = {"name": "Firulais 2", "photo_url": "https://example.com/pets/1.jpg"}
@@ -57,7 +57,7 @@ def test_update_pet_editable_fields_ok():
 
 
 def test_update_pet_cannot_change_species():
-    token = _register_and_login("test_pets_extended_update_species@example.com")
+    token = _register_and_login("test_pets_extended_update_species_" + __import__("uuid").uuid4().hex + "@example.com")
     pet = _create_pet(token=token, name="Firulais", species="dog")
 
     r = client.put(
@@ -77,8 +77,8 @@ def test_update_pet_cannot_change_species():
 
 
 def test_update_pet_forbidden_if_not_owner():
-    token_a = _register_and_login("test_pets_extended_owner_a@example.com")
-    token_b = _register_and_login("test_pets_extended_owner_b@example.com")
+    token_a = _register_and_login("test_pets_extended_owner_a_" + __import__("uuid").uuid4().hex + "@example.com")
+    token_b = _register_and_login("test_pets_extended_owner_b_" + __import__("uuid").uuid4().hex + "@example.com")
     pet = _create_pet(token=token_a, name="Firulais", species="dog")
 
     r = client.put(
@@ -90,7 +90,7 @@ def test_update_pet_forbidden_if_not_owner():
 
 
 def test_add_weight_updates_current_weight_and_creates_history_entry():
-    token = _register_and_login("test_pets_extended_weight_add@example.com")
+    token = _register_and_login("test_pets_extended_weight_add_" + __import__("uuid").uuid4().hex + "@example.com")
     pet = _create_pet(token=token, name="Firulais", species="dog")
 
     r = client.post(
@@ -109,7 +109,7 @@ def test_add_weight_updates_current_weight_and_creates_history_entry():
 
 
 def test_weight_history_returns_entries_desc():
-    token = _register_and_login("test_pets_extended_weight_history@example.com")
+    token = _register_and_login("test_pets_extended_weight_history_" + __import__("uuid").uuid4().hex + "@example.com")
     pet = _create_pet(token=token, name="Firulais", species="dog")
 
     r1 = client.post(

@@ -11,6 +11,7 @@ from app.modules.push.api.router import router as push_router
 from app.modules.pets.api.router import router as pets_router
 from app.modules.commerce.api.router import router as commerce_router
 from app.modules.wallet.api.router import router as wallet_router
+from app.core.scheduler import start_scheduler, stop_scheduler
 
 
 app = FastAPI(
@@ -28,6 +29,16 @@ app.include_router(notifications_router)
 app.include_router(cart_router)
 app.include_router(push_router)
 app.include_router(orders_router)
+
+
+@app.on_event("startup")
+async def _startup() -> None:
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+async def _shutdown() -> None:
+    stop_scheduler()
 
 
 @app.get("/health")

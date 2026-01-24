@@ -27,7 +27,7 @@ def _auth_headers(client: TestClient, *, email: str, password: str) -> dict:
 
 def test_create_cart_returns_active_and_expires_at():
     client = TestClient(app)
-    headers = _auth_headers(client, email="cart_a@example.com", password="pass1234")
+    headers = _auth_headers(client, email="cart_a_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 
     r = client.post("/cart", headers=headers)
     assert r.status_code in (200, 201)
@@ -38,7 +38,7 @@ def test_create_cart_returns_active_and_expires_at():
 
 def test_add_item_and_get_cart_returns_items():
     client = TestClient(app)
-    headers = _auth_headers(client, email="cart_b@example.com", password="pass1234")
+    headers = _auth_headers(client, email="cart_b_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 
     r = client.post("/cart", headers=headers)
     assert r.status_code in (200, 201)
@@ -60,7 +60,7 @@ def test_add_item_and_get_cart_returns_items():
 
 def test_checkout_marks_checked_out():
     client = TestClient(app)
-    headers = _auth_headers(client, email="cart_c@example.com", password="pass1234")
+    headers = _auth_headers(client, email="cart_c_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 
     r = client.post("/cart", headers=headers)
     assert r.status_code in (200, 201)
@@ -83,8 +83,8 @@ def test_checkout_marks_checked_out():
 def test_cart_forbidden_if_not_owner():
     client = TestClient(app)
 
-    headers_a = _auth_headers(client, email="cart_owner_a@example.com", password="pass1234")
-    headers_b = _auth_headers(client, email="cart_owner_b@example.com", password="pass1234")
+    headers_a = _auth_headers(client, email="cart_owner_a_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
+    headers_b = _auth_headers(client, email="cart_owner_b_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 
     r = client.post("/cart", headers=headers_a)
     assert r.status_code in (200, 201)

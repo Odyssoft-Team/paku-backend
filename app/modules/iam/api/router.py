@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import CurrentUser, create_access_token, decode_token, get_current_user
+from app.core.auth import CurrentUser, create_access_token, decode_token
+from app.core.db import engine, get_async_session
 from app.modules.iam.api.schemas import AddressOut, LoginIn, RefreshIn, RegisterIn, TokenOut, UpdateProfileIn, UserOut
 from app.modules.iam.app.use_cases import GetMe, LoginUser, RegisterUser, UpdateProfile
 from app.modules.iam.domain.user import Address, Sex
-from app.modules.iam.infra.user_repository import InMemoryUserRepository
+from app.modules.iam.domain.user import UserRepository
+from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
 
 # [TECH]
 # This FastAPI router exposes the IAM (Identity & Access Management) HTTP handlers.
@@ -22,7 +26,36 @@ from app.modules.iam.infra.user_repository import InMemoryUserRepository
 # Permite que un usuario se registre, inicie sesión y renueve su sesión.
 # También permite consultar y actualizar los datos del perfil del usuario autenticado.
 router = APIRouter(tags=["iam"])
-_repo = InMemoryUserRepository()
+security = HTTPBearer()
+
+
+def get_user_repo(session: AsyncSession = Depends(get_async_session)) -> UserRepository:
+    return PostgresUserRepository(session=session, engine=engine)
+
+
+async def get_current_user_db(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    repo: UserRepository = Depends(get_user_repo),
+) -> CurrentUser:
+    token = credentials.credentials
+    data = decode_token(token)
+    if data.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    try:
+        from uuid import UUID
+
+        user_id = UUID(str(data.get("sub")))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+
+    user = await repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
+
+    return CurrentUser(id=user.id, email=user.email, role=str(user.role), is_active=user.is_active)
 
 
 @router.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -38,7 +71,7 @@ _repo = InMemoryUserRepository()
 # Esta ruta crea una cuenta nueva en el sistema.
 # Recibe los datos del usuario (incluyendo contraseña) y devuelve el perfil ya creado.
 # Es el primer paso para que alguien pueda empezar a usar la plataforma.
-async def register(payload: RegisterIn) -> UserOut:
+async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_repo)) -> UserOut:
     address_domain = None
     if payload.address:
         address_domain = Address(
@@ -47,7 +80,7 @@ async def register(payload: RegisterIn) -> UserOut:
             lat=payload.address.lat,
             lng=payload.address.lng,
         )
-    user = await RegisterUser(repo=_repo).execute(
+    user = await RegisterUser(repo=repo).execute(
         email=payload.email,
         password=payload.password,
         phone=payload.phone,
@@ -83,8 +116,8 @@ async def register(payload: RegisterIn) -> UserOut:
 # Esta ruta permite iniciar sesión.
 # Si el usuario y contraseña son correctos, devuelve los tokens necesarios para
 # mantener la sesión activa en la app.
-async def login(payload: LoginIn) -> TokenOut:
-    tokens = await LoginUser(repo=_repo).execute(email=payload.email, password=payload.password)
+async def login(payload: LoginIn, repo: UserRepository = Depends(get_user_repo)) -> TokenOut:
+    tokens = await LoginUser(repo=repo).execute(email=payload.email, password=payload.password)
     return TokenOut(**tokens)
 
 
@@ -123,8 +156,8 @@ async def refresh(payload: RefreshIn) -> TokenOut:
 # [BUSINESS]
 # Esta ruta devuelve "mi perfil": los datos del usuario que está autenticado.
 # Se usa para mostrar la información del usuario en la app (nombre, correo, etc.).
-async def me(current: CurrentUser = Depends(get_current_user)) -> UserOut:
-    user = await GetMe(repo=_repo).execute(user_id=current.id)
+async def me(current: CurrentUser = Depends(get_current_user_db), repo: UserRepository = Depends(get_user_repo)) -> UserOut:
+    user = await GetMe(repo=repo).execute(user_id=current.id)
     result = user.__dict__.copy()
     if user.address:
         result["address"] = AddressOut(
@@ -147,7 +180,11 @@ async def me(current: CurrentUser = Depends(get_current_user)) -> UserOut:
 # [BUSINESS]
 # Esta ruta permite que el usuario actualice su información personal (por ejemplo teléfono,
 # nombre, dirección o foto). Solo modifica el perfil del usuario que está logueado.
-async def update_me(payload: UpdateProfileIn, current: CurrentUser = Depends(get_current_user)) -> UserOut:
+async def update_me(
+    payload: UpdateProfileIn,
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: UserRepository = Depends(get_user_repo),
+) -> UserOut:
     address_domain = None
     if payload.address:
         address_domain = Address(
@@ -156,7 +193,7 @@ async def update_me(payload: UpdateProfileIn, current: CurrentUser = Depends(get
             lat=payload.address.lat,
             lng=payload.address.lng,
         )
-    user = await UpdateProfile(repo=_repo).execute(
+    user = await UpdateProfile(repo=repo).execute(
         user_id=current.id,
         phone=payload.phone,
         first_name=payload.first_name,

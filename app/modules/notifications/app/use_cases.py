@@ -23,13 +23,16 @@ class CreateNotification:
         n = self.repo.create_notification(user_id=user_id, type=type, title=title, body=body, data=data)
 
         try:
-            from app.modules.push.api.router import _repo as devices_repo
+            from app.core.db import engine, get_async_session
             from app.modules.push.domain.push import PushMessage
+            from app.modules.push.infra.postgres_device_repository import PostgresDeviceTokenRepository
             from app.modules.push.infra.provider import MockPushProvider
 
-            tokens = devices_repo.get_active_tokens(user_id)
-            if tokens:
-                MockPushProvider().send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
+            async with get_async_session() as session:
+                devices_repo = PostgresDeviceTokenRepository(session=session, engine=engine)
+                tokens = devices_repo.get_active_tokens(user_id)
+                if tokens:
+                    MockPushProvider().send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
         except Exception:
             pass
 

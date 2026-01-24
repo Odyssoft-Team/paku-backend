@@ -7,7 +7,7 @@ client = TestClient(app)
 
 
 def test_create_pet_ok():
-    email = "test_pets_flow_ok@example.com"
+    email = "test_pets_flow_ok_" + __import__("uuid").uuid4().hex + "@example.com"
     password = "123456"
 
     client.post("/auth/register", json={
@@ -36,7 +36,7 @@ def test_create_pet_ok():
 
 
 def test_create_pet_invalid_species():
-    email = "test_pets_flow_invalid_species@example.com"
+    email = "test_pets_flow_invalid_species_" + __import__("uuid").uuid4().hex + "@example.com"
     password = "123456"
 
     client.post("/auth/register", json={
@@ -61,7 +61,7 @@ def test_create_pet_invalid_species():
 
 
 def test_get_pet_by_id():
-    email = "test_pets_flow_get_by_id@example.com"
+    email = "test_pets_flow_get_by_id_" + __import__("uuid").uuid4().hex + "@example.com"
     password = "123456"
 
     client.post("/auth/register", json={

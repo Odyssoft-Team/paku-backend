@@ -4,11 +4,12 @@ from app.main import app
 
 
 client = TestClient(app)
+_EMAIL = "test_iam_flow_user_" + __import__("uuid").uuid4().hex + "@example.com"
 
 
 def test_register_returns_201():
     payload = {
-        "email": "test_iam_flow_user@example.com",
+        "email": _EMAIL,
         "password": "123456",
         "phone": "+51999999999",
         "first_name": "Test",
@@ -27,7 +28,7 @@ def test_register_returns_201():
 
 
 def test_login_returns_tokens():
-    payload = {"email": "test_iam_flow_user@example.com", "password": "123456"}
+    payload = {"email": _EMAIL, "password": "123456"}
     r = client.post("/auth/login", json=payload)
     assert r.status_code == 200
     data = r.json()
@@ -43,7 +44,7 @@ def test_me_requires_auth():
 
 
 def test_me_with_token_returns_user():
-    login_payload = {"email": "test_iam_flow_user@example.com", "password": "123456"}
+    login_payload = {"email": _EMAIL, "password": "123456"}
     login = client.post("/auth/login", json=login_payload)
     assert login.status_code == 200
     access_token = login.json()["access_token"]

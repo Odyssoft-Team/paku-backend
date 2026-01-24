@@ -7,7 +7,7 @@ client = TestClient(app)
 
 
 def test_create_hold_returns_201_and_status_held():
-    email = "test_booking_flow_hold@example.com"
+    email = "test_booking_flow_hold_" + __import__("uuid").uuid4().hex + "@example.com"
     password = "123456"
 
     client.post("/auth/register", json={
@@ -44,7 +44,7 @@ def test_create_hold_returns_201_and_status_held():
 
 
 def test_confirm_hold_changes_status():
-    email = "test_booking_flow_confirm@example.com"
+    email = "test_booking_flow_confirm_" + __import__("uuid").uuid4().hex + "@example.com"
     password = "123456"
 
     client.post("/auth/register", json={
@@ -80,7 +80,7 @@ def test_confirm_hold_changes_status():
 
 
 def test_cancel_hold_is_idempotent():
-    email = "test_booking_flow_cancel@example.com"
+    email = "test_booking_flow_cancel_" + __import__("uuid").uuid4().hex + "@example.com"
     password = "123456"
 
     client.post("/auth/register", json={

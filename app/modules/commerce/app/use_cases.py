@@ -1,36 +1,22 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
 
 from app.modules.commerce.domain.service import Service, Species, ServiceType
-from app.modules.commerce.infra.service_repository import list_services
+from app.modules.commerce.infra.postgres_commerce_repository import PostgresCommerceRepository
+from app.modules.pets.domain.pet import PetRepository
 
 
 @dataclass
 # [TECH] Filtra catálogo por especie y reglas de raza. Input: species/breed. Output: List[Service].
 # [NEGOCIO] Devuelve los servicios que realmente se pueden ofrecer a esa mascota.
 class ListServices:
-    def execute(self, *, species: Species, breed: Optional[str] = None) -> List[Service]:
-        items = list_services()
-        out: List[Service] = []
+    repo: PostgresCommerceRepository
 
-        for s in items:
-            if not s.is_active:
-                continue
-            if s.species != species:
-                continue
-
-            if s.allowed_breeds:
-                if breed is None:
-                    continue
-                if breed not in s.allowed_breeds:
-                    continue
-
-            out.append(s)
-
-        return out
+    async def execute(self, *, species: Species, breed: Optional[str] = None) -> List[Service]:
+        return await self.repo.list_services(species=species, breed=breed)
 
 
 @dataclass
@@ -55,18 +41,16 @@ def _breed_allowed(allowed_breeds: Optional[List[str]], breed: Optional[str]) ->
 # [TECH] Lista servicios base y addons aplicables para una mascota. Input: pet_id. Output: List[AvailableService].
 # [NEGOCIO] Indica qué combinaciones de servicio + adicionales puede contratar el cliente.
 class ListAvailableServices:
-    async def execute(self, *, pet_id: UUID) -> List[AvailableService]:
-        from app.modules.pets.api.router import _repo as pets_repo
+    repo: PostgresCommerceRepository
+    pets_repo: PetRepository
 
-        pet = await pets_repo.get_by_id(pet_id)
+    async def execute(self, *, pet_id: UUID) -> List[AvailableService]:
+        pet = await self.pets_repo.get_by_id(pet_id)
         if not pet:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
-
-        raw_species = getattr(pet.species, "value", pet.species)
-        pet_species = Species(str(raw_species))
         pet_breed = getattr(pet, "breed", None)
 
-        items = [s for s in list_services() if s.is_active and s.species == pet_species]
+        items = await self.repo.list_services_for_pet(pet)
         bases = [
             s
             for s in items
@@ -111,44 +95,17 @@ def _breed_category(breed: Optional[str]) -> str:
     if not breed:
         return "mestizo"
     if breed.lower() in {"husky", "labrador"}:
-        return "official_breed"
+        return "official"
     return "otros"
-
-
-# [TECH] Normaliza el peso a un rango para pricing. Input: weight. Output: str. Flujo: precios.
-# [NEGOCIO] Clasifica el tamaño de la mascota para ajustar el precio.
-def _weight_range(weight: Optional[float]) -> str:
-    w = float(weight or 0)
-    if w <= 10:
-        return "0-10"
-    if w <= 25:
-        return "10-25"
-    return "25+"
-
-
-# [TECH] Busca precio en tabla por (servicio, especie, categoría raza, rango peso). Output: int. Flujo: precios.
-# [NEGOCIO] Obtiene el precio correcto según las características de la mascota.
-def _price_for(
-    table: Dict[Tuple[UUID, Species, str, str], int],
-    *,
-    service_id: UUID,
-    species: Species,
-    breed_category: str,
-    weight_range: str,
-) -> int:
-    key = (service_id, species, breed_category, weight_range)
-    if key in table:
-        return table[key]
-    fallback = (service_id, species, "mestizo", weight_range)
-    if fallback in table:
-        return table[fallback]
-    return 0
 
 
 @dataclass
 # [TECH] Calcula cotización del servicio base + addons para una mascota. Output: QuoteResult. Flujo: precios/addons/reglas.
 # [NEGOCIO] Determina el total a cobrar al cliente según su mascota y lo que selecciona.
 class Quote:
+    repo: PostgresCommerceRepository
+    pets_repo: PetRepository
+
     async def execute(
         self,
         *,
@@ -156,18 +113,16 @@ class Quote:
         base_service_id: UUID,
         addon_ids: Optional[List[UUID]] = None,
     ) -> QuoteResult:
-        from app.modules.pets.api.router import _repo as pets_repo
-
-        pet = await pets_repo.get_by_id(pet_id)
+        pet = await self.pets_repo.get_by_id(pet_id)
         if not pet:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
 
         raw_species = getattr(pet.species, "value", pet.species)
         pet_species = Species(str(raw_species))
         pet_breed = getattr(pet, "breed", None)
-        pet_weight = getattr(pet, "weight", None)
+        pet_weight = getattr(pet, "weight_kg", None)
 
-        items = [s for s in list_services() if s.is_active and s.species == pet_species]
+        items = await self.repo.list_services_for_pet(pet)
         by_id = {s.id: s for s in items}
 
         base = by_id.get(base_service_id)
@@ -177,23 +132,15 @@ class Quote:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base service not applicable")
 
         breed_cat = _breed_category(pet_breed)
-        w_range = _weight_range(pet_weight)
+        weight = float(pet_weight or 0)
 
-        price_table: Dict[Tuple[UUID, Species, str, str], int] = {
-            (base.id, Species.dog, "mestizo", "0-10"): 50,
-            (base.id, Species.dog, "mestizo", "10-25"): 70,
-            (base.id, Species.dog, "mestizo", "25+"): 90,
-            (base.id, Species.cat, "mestizo", "0-10"): 45,
-        }
-
-        base_price = _price_for(
-            price_table,
+        base_price = await self.repo.price_for(
             service_id=base.id,
             species=pet_species,
             breed_category=breed_cat,
-            weight_range=w_range,
+            weight=weight,
         )
-        base_line = QuoteLine(service_id=base.id, name=base.name, price=base_price)
+        base_line = QuoteLine(service_id=base.id, name=base.name, price=base_price.price)
 
         addons_out: List[QuoteLine] = []
         for addon_id in addon_ids or []:
@@ -219,14 +166,13 @@ class Quote:
                     detail={"addon_id": str(addon_id), "reason": "missing_requires"},
                 )
 
-            addon_price = _price_for(
-                price_table,
+            addon_price = await self.repo.price_for(
                 service_id=addon.id,
                 species=pet_species,
                 breed_category=breed_cat,
-                weight_range=w_range,
+                weight=weight,
             )
-            addons_out.append(QuoteLine(service_id=addon.id, name=addon.name, price=addon_price))
+            addons_out.append(QuoteLine(service_id=addon.id, name=addon.name, price=addon_price.price))
 
         total = base_line.price + sum(a.price for a in addons_out)
         return QuoteResult(pet_id=pet_id, base=base_line, addons=addons_out, total=total)
