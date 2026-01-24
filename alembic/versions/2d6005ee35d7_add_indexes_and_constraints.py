@@ -18,62 +18,107 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # iam users: unique email (si ya existe, no fallará)
+    # iam users: unique email
     try:
         op.create_unique_constraint('uq_users_email', 'users', ['email'])
     except Exception:
         pass
 
     # pets: index owner_id
-    op.create_index('ix_pets_owner_id', 'pets', ['owner_id'])
+    try:
+        op.create_index('ix_pets_owner_id', 'pets', ['owner_id'])
+    except Exception:
+        pass
 
     # pets weight history: index (pet_id, recorded_at DESC)
-    op.create_index('ix_pet_weight_entries_pet_recorded', 'pet_weight_entries', ['pet_id', 'recorded_at'])
+    try:
+        op.create_index('ix_pet_weight_entries_pet_recorded', 'pet_weight_entries', ['pet_id', 'recorded_at'])
+    except Exception:
+        pass
 
     # commerce services: index (species, is_active)
-    op.create_index('ix_services_species_active', 'services', ['species', 'is_active'])
+    try:
+        op.create_index('ix_services_species_active', 'services', ['species', 'is_active'])
+    except Exception:
+        pass
 
     # commerce price_rules: index (service_id, species, is_active)
-    op.create_index('ix_price_rules_service_species_active', 'price_rules', ['service_id', 'species', 'is_active'])
+    try:
+        op.create_index('ix_price_rules_service_species_active', 'price_rules', ['service_id', 'species', 'is_active'])
+    except Exception:
+        pass
 
     # commerce price_rules: index (weight_min, weight_max)
-    op.create_index('ix_price_rules_weight_range', 'price_rules', ['weight_min', 'weight_max'])
+    try:
+        op.create_index('ix_price_rules_weight_range', 'price_rules', ['weight_min', 'weight_max'])
+    except Exception:
+        pass
 
     # booking holds: index (user_id, status)
-    op.create_index('ix_holds_user_status', 'holds', ['user_id', 'status'])
+    try:
+        op.create_index('ix_holds_user_status', 'holds', ['user_id', 'status'])
+    except Exception:
+        pass
 
     # booking holds: index expires_at
-    op.create_index('ix_holds_expires_at', 'holds', ['expires_at'])
+    try:
+        op.create_index('ix_holds_expires_at', 'holds', ['expires_at'])
+    except Exception:
+        pass
 
     # orders: index (user_id, created_at DESC)
-    op.create_index('ix_orders_user_created_desc', 'orders', ['user_id', sa.text('created_at DESC')])
+    try:
+        op.create_index('ix_orders_user_created_desc', 'orders', ['user_id', sa.text('created_at DESC')])
+    except Exception:
+        pass
 
     # orders: index status
-    op.create_index('ix_orders_status', 'orders', ['status'])
+    try:
+        op.create_index('ix_orders_status', 'orders', ['status'])
+    except Exception:
+        pass
 
     # notifications: index (user_id, is_read, created_at DESC)
-    op.create_index('ix_notifications_user_read_created_desc', 'notifications', ['user_id', 'is_read', sa.text('created_at DESC')])
+    try:
+        op.create_index('ix_notifications_user_read_created_desc', 'notifications', ['user_id', 'is_read', sa.text('created_at DESC')])
+    except Exception:
+        pass
 
     # notifications: index created_at
-    op.create_index('ix_notifications_created_at', 'notifications', ['created_at'])
+    try:
+        op.create_index('ix_notifications_created_at', 'notifications', ['created_at'])
+    except Exception:
+        pass
 
-    # push device_tokens: unique (user_id, platform, token) (si ya existe, no fallará)
+    # push device_tokens: unique (user_id, platform, token)
     try:
         op.create_unique_constraint('uq_device_tokens_user_platform_token', 'device_tokens', ['user_id', 'platform', 'token'])
     except Exception:
         pass
 
     # push device_tokens: index (user_id, is_active)
-    op.create_index('ix_device_tokens_user_active', 'device_tokens', ['user_id', 'is_active'])
+    try:
+        op.create_index('ix_device_tokens_user_active', 'device_tokens', ['user_id', 'is_active'])
+    except Exception:
+        pass
 
     # cart sessions: index (user_id, status)
-    op.create_index('ix_cart_sessions_user_status', 'cart_sessions', ['user_id', 'status'])
+    try:
+        op.create_index('ix_cart_sessions_user_status', 'cart_sessions', ['user_id', 'status'])
+    except Exception:
+        pass
 
     # cart sessions: index expires_at
-    op.create_index('ix_cart_sessions_expires_at', 'cart_sessions', ['expires_at'])
+    try:
+        op.create_index('ix_cart_sessions_expires_at', 'cart_sessions', ['expires_at'])
+    except Exception:
+        pass
 
     # cart items: index cart_id
-    op.create_index('ix_cart_items_cart_id', 'cart_items', ['cart_id'])
+    try:
+        op.create_index('ix_cart_items_cart_id', 'cart_items', ['cart_id'])
+    except Exception:
+        pass
 
 
 def downgrade() -> None:
