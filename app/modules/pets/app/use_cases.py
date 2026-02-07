@@ -125,7 +125,24 @@ class GetWeightHistory:
     repo: PetRepository
 
     async def execute(self, *, pet_id: UUID) -> List[PetWeightEntry]:
-        pet = await self.repo.get_by_id(pet_id)
-        if not pet:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
-        return await self.repo.get_weight_history(pet_id)
+        entries = await self.repo.get_weight_history(pet_id=pet_id)
+        return entries
+
+
+@dataclass
+class ListPets:
+    repo: PetRepository
+
+    async def execute(
+        self,
+        *,
+        owner_id: UUID,
+        limit: int = 7,
+        offset: int = 0,
+    ) -> List[Pet]:
+        pets = await self.repo.list_by_owner(
+            owner_id=owner_id,
+            limit=limit,
+            offset=offset,
+        )
+        return pets

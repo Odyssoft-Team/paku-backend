@@ -50,11 +50,13 @@ class PostgresPetRepository(PetRepository):
         if model.sex is not None:
             sex = Sex(model.sex)
 
+        species = Species(model.species)
+
         return Pet(
             id=model.id,
             owner_id=model.owner_id,
             name=model.name,
-            species=Species(model.species),
+            species=species,
             breed=model.breed,
             sex=sex,
             birth_date=model.birth_date,
@@ -75,6 +77,7 @@ class PostgresPetRepository(PetRepository):
             raise ValueError("pet_not_found")
 
         model.name = pet.name
+        model.species = str(pet.species.value if hasattr(pet.species, "value") else pet.species)
         model.breed = pet.breed
         model.sex = (str(pet.sex.value) if pet.sex is not None else None)
         model.birth_date = pet.birth_date
@@ -86,16 +89,10 @@ class PostgresPetRepository(PetRepository):
         await self._session.commit()
 
     async def add_weight_entry(self, entry: PetWeightEntry) -> None:
-        from app.modules.pets.infra.models import PetModel, PetWeightEntryModel, ensure_pets_schema, utcnow
+        """ from app.modules.pets.infra.models import PetWeightEntryModel, ensure_pets_schema, utcnow """
+        from app.modules.pets.infra.models import PetWeightEntryModel, ensure_pets_schema
 
         await ensure_pets_schema(self._engine)
-
-        pet = await self._session.get(PetModel, entry.pet_id)
-        if pet is None:
-            raise ValueError("pet_not_found")
-
-        pet.weight_kg = entry.weight_kg
-        pet.updated_at = utcnow()
 
         model = PetWeightEntryModel(
             id=entry.id,
@@ -111,12 +108,57 @@ class PostgresPetRepository(PetRepository):
 
         await ensure_pets_schema(self._engine)
 
-        stmt = select(PetWeightEntryModel).where(PetWeightEntryModel.pet_id == pet_id).order_by(
-            desc(PetWeightEntryModel.recorded_at)
+        stmt = (
+            select(PetWeightEntryModel)
+            .where(PetWeightEntryModel.pet_id == pet_id)
+            .order_by(desc(PetWeightEntryModel.recorded_at))
         )
-        res = await self._session.execute(stmt)
-        rows = res.scalars().all()
+        result = await self._session.execute(stmt)
+        models = result.scalars().all()
+
         return [
-            PetWeightEntry(id=r.id, pet_id=r.pet_id, weight_kg=float(r.weight_kg), recorded_at=r.recorded_at)
-            for r in rows
+            PetWeightEntry(
+                id=model.id,
+                pet_id=model.pet_id,
+                weight_kg=model.weight_kg,
+                recorded_at=model.recorded_at,
+            )
+            for model in models
+        ]
+
+    async def list_by_owner(self, owner_id: UUID, limit: int = 7, offset: int = 0) -> List[Pet]:
+        from app.modules.pets.infra.models import PetModel, ensure_pets_schema
+
+        await ensure_pets_schema(self._engine)
+
+        # Apply limits: max 14, default 7
+        limit = min(max(limit, 1), 14)
+        offset = max(offset, 0)
+
+        stmt = (
+            select(PetModel)
+            .where(PetModel.owner_id == owner_id)
+            .order_by(desc(PetModel.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.execute(stmt)
+        models = result.scalars().all()
+
+        return [
+            Pet(
+                id=model.id,
+                owner_id=model.owner_id,
+                name=model.name,
+                species=Species(model.species),
+                breed=model.breed,
+                sex=(Sex(model.sex) if model.sex is not None else None),
+                birth_date=model.birth_date,
+                notes=model.notes,
+                created_at=model.created_at,
+                photo_url=model.photo_url,
+                weight_kg=model.weight_kg,
+                updated_at=model.updated_at,
+            )
+            for model in models
         ]

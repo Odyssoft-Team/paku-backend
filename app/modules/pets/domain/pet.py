@@ -79,3 +79,6 @@ class PetRepository(Protocol):
 
     async def get_weight_history(self, pet_id: UUID) -> list[PetWeightEntry]:
         ...
+
+    async def list_by_owner(self, owner_id: UUID, limit: int = 7, offset: int = 0) -> list[Pet]:
+        ...
