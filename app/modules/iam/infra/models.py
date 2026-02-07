@@ -4,9 +4,9 @@ from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, Float, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, String, Text
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 from app.core.base import Base
@@ -44,6 +44,58 @@ class UserModel(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class DistrictModel(Base):
+    __tablename__ = "geo_districts"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    province_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    department_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    # Relationships
+    user_addresses: Mapped[list["UserAddressModel"]] = relationship(back_populates="district", lazy="dynamic")
+
+
+class UserAddressModel(Base):
+    __tablename__ = "user_addresses"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    district_id: Mapped[str] = mapped_column(String(20), ForeignKey("geo_districts.id"), nullable=False)
+    
+    address_line: Mapped[str] = mapped_column(String(255), nullable=False)
+    reference: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    building_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    apartment_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lng: Mapped[float] = mapped_column(Float, nullable=False)
+    
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    # Relationships
+    user: Mapped[UserModel] = relationship(backref="addresses")
+    district: Mapped[DistrictModel] = relationship(back_populates="user_addresses")
+
+    # Indexes
+    __table_args__ = (
+        Index("ix_user_addresses_user_id", "user_id"),
+        Index("ix_user_addresses_district_id", "district_id"),
+        Index("ix_user_addresses_user_default", "user_id", "is_default"),
+        Index("ix_user_addresses_user_deleted", "user_id", "deleted_at"),
+    )
 
 
 _iam_schema_ready = False

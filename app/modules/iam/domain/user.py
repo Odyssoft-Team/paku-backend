@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from enum import Enum
-from typing import Literal, Optional, Protocol
+from typing import Any, Literal, Optional, Protocol
 from uuid import UUID, uuid4
 
 # [TECH]
@@ -97,7 +97,7 @@ class User:
     ) -> "User":
         return User(
             id=uuid4(),
-            email=email.strip().lower(),
+            email=email.lower(),
             password_hash=password_hash,
             role=role,
             is_active=True,
@@ -122,14 +122,57 @@ class User:
 # Contrato de almacenamiento de usuarios.
 # Permite buscar, crear y actualizar usuarios sin depender de una tecnología específica.
 class UserRepository(Protocol):
-    async def get_by_email(self, email: str) -> Optional[User]:
-        ...
-
-    async def get_by_id(self, user_id: UUID) -> Optional[User]:
-        ...
-
     async def add(self, user: User) -> None:
         ...
 
+    async def get_by_email(self, email: str) -> Optional[User]:
+        ...
+
+    async def get_by_id(self, id: UUID) -> Optional[User]:
+        ...
+
     async def update(self, user: User) -> None:
+        ...
+
+
+# [TECH]
+# Protocol defining repository operations for district management.
+# Implemented by infrastructure layer (PostgresDistrictRepository).
+#
+# [BUSINESS]
+# Interfaz para consultar catálogo de distritos.
+class DistrictRepository(Protocol):
+    async def list_districts(self, active_only: bool = True) -> list[Any]:
+        ...
+
+    async def get_district(self, id: str) -> Optional[Any]:
+        ...
+
+
+# [TECH]
+# Protocol defining repository operations for user address management.
+# Implemented by infrastructure layer (PostgresAddressRepository).
+#
+# [BUSINESS]
+# Interfaz para gestionar libreta de direcciones del usuario.
+class AddressRepository(Protocol):
+    async def list_addresses_by_user(self, user_id: UUID, include_deleted: bool = False) -> list[Any]:
+        ...
+
+    async def get_address_for_user(self, user_id: UUID, address_id: UUID) -> Optional[Any]:
+        ...
+
+    async def create_address(self, user_id: UUID, address_data: Any) -> Any:
+        ...
+
+    async def update_address(self, user_id: UUID, address_id: UUID, patch: Any) -> Any:
+        ...
+
+    async def soft_delete_address(self, user_id: UUID, address_id: UUID) -> None:
+        ...
+
+    async def set_default_address(self, user_id: UUID, address_id: UUID) -> None:
+        ...
+
+    async def get_default_address(self, user_id: UUID) -> Optional[Any]:
         ...

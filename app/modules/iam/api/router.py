@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 from app.core.auth import CurrentUser, create_access_token, decode_token
 from app.core.db import engine, get_async_session
-from app.modules.iam.api.schemas import AddressOut, LoginIn, RefreshIn, RegisterIn, TokenOut, UpdateProfileIn, UserOut
+from app.modules.iam.api.schemas import AddressCreateIn, AddressOut, AddressOutExtended, AddressUpdateIn, DistrictOut, LoginIn, RefreshIn, RegisterIn, TokenOut, UpdateProfileIn, UserOut
 from app.modules.iam.app.use_cases import GetMe, LoginUser, RegisterUser, UpdateProfile
 from app.modules.iam.domain.user import Address, Sex
 from app.modules.iam.domain.user import UserRepository
@@ -59,18 +60,6 @@ async def get_current_user_db(
 
 
 @router.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-# [TECH]
-# This handler registers a new user.
-# Inputs: RegisterIn (email, password, personal data, optional address).
-# Output: UserOut representation of the created user.
-# Flow: authentication (account creation). Delegates to RegisterUser use case and
-# maps the domain Address object back to an API AddressOut.
-# Depends on: RegisterUser (business rules) + InMemoryUserRepository (storage).
-#
-# [BUSINESS]
-# Esta ruta crea una cuenta nueva en el sistema.
-# Recibe los datos del usuario (incluyendo contraseña) y devuelve el perfil ya creado.
-# Es el primer paso para que alguien pueda empezar a usar la plataforma.
 async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_repo)) -> UserOut:
     address_domain = None
     if payload.address:
@@ -105,34 +94,12 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
 
 
 @router.post("/auth/login", response_model=TokenOut)
-# [TECH]
-# This handler authenticates a user using email/password.
-# Inputs: LoginIn (email, password).
-# Output: TokenOut with access_token + refresh_token.
-# Flow: authentication (login). Delegates credential validation to LoginUser.
-# Depends on: LoginUser (hash comparison, active user check) + token utilities.
-#
-# [BUSINESS]
-# Esta ruta permite iniciar sesión.
-# Si el usuario y contraseña son correctos, devuelve los tokens necesarios para
-# mantener la sesión activa en la app.
 async def login(payload: LoginIn, repo: UserRepository = Depends(get_user_repo)) -> TokenOut:
     tokens = await LoginUser(repo=repo).execute(email=payload.email, password=payload.password)
     return TokenOut(**tokens)
 
 
 @router.post("/auth/refresh", response_model=TokenOut)
-# [TECH]
-# This handler issues a new access token using a refresh token.
-# Inputs: RefreshIn (refresh_token).
-# Output: TokenOut with a newly minted access_token and the same refresh_token.
-# Flow: authentication (token renewal). It decodes the refresh token, validates its type,
-# and mints a new access token with the embedded user claims.
-# Depends on: decode_token + create_access_token.
-#
-# [BUSINESS]
-# Esta ruta renueva la sesión del usuario sin pedirle que vuelva a ingresar su contraseña.
-# Si el refresh token es válido, se entrega un nuevo access token para seguir usando la app.
 async def refresh(payload: RefreshIn) -> TokenOut:
     data = decode_token(payload.refresh_token)
     if data.get("type") != "refresh":
@@ -146,16 +113,6 @@ async def refresh(payload: RefreshIn) -> TokenOut:
 
 
 @router.get("/users/me", response_model=UserOut)
-# [TECH]
-# This handler returns the current authenticated user's profile.
-# Inputs: current (CurrentUser) extracted from the Bearer access token.
-# Output: UserOut.
-# Flow: identity/profile. Delegates lookup to GetMe.
-# Depends on: get_current_user (auth dependency) + GetMe use case.
-#
-# [BUSINESS]
-# Esta ruta devuelve "mi perfil": los datos del usuario que está autenticado.
-# Se usa para mostrar la información del usuario en la app (nombre, correo, etc.).
 async def me(current: CurrentUser = Depends(get_current_user_db), repo: UserRepository = Depends(get_user_repo)) -> UserOut:
     user = await GetMe(repo=repo).execute(user_id=current.id)
     result = user.__dict__.copy()
@@ -170,28 +127,15 @@ async def me(current: CurrentUser = Depends(get_current_user_db), repo: UserRepo
 
 
 @router.put("/users/me", response_model=UserOut)
-# [TECH]
-# This handler updates the current authenticated user's profile.
-# Inputs: UpdateProfileIn (optional fields to change) + current (CurrentUser from token).
-# Output: UserOut of the updated user.
-# Flow: identity/profile update. Delegates update logic to UpdateProfile.
-# Depends on: get_current_user + UpdateProfile use case.
-#
-# [BUSINESS]
-# Esta ruta permite que el usuario actualice su información personal (por ejemplo teléfono,
-# nombre, dirección o foto). Solo modifica el perfil del usuario que está logueado.
 async def update_me(
     payload: UpdateProfileIn,
     current: CurrentUser = Depends(get_current_user_db),
     repo: UserRepository = Depends(get_user_repo),
 ) -> UserOut:
-    address_domain = None
-    if payload.address:
-        address_domain = Address(
-            district_id=payload.address.district_id,
-            address_line=payload.address.address_line,
-            lat=payload.address.lat,
-            lng=payload.address.lng,
+    if payload.address is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Profile address is deprecated. Use /addresses endpoints.",
         )
     user = await UpdateProfile(repo=repo).execute(
         user_id=current.id,
@@ -201,7 +145,7 @@ async def update_me(
         sex=Sex(payload.sex) if payload.sex else None,
         birth_date=payload.birth_date,
         dni=payload.dni,
-        address=address_domain,
+        address=None,
         profile_photo_url=payload.profile_photo_url,
     )
     result = user.__dict__.copy()
@@ -213,3 +157,221 @@ async def update_me(
             lng=user.address.lng,
         )
     return UserOut(**result)
+
+
+@router.get("/geo/districts", response_model=list[DistrictOut])
+async def list_geo_districts(
+    active: bool = Query(default=True),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> list[DistrictOut]:
+    items = await repo.list_districts(active_only=active)
+    return [
+        DistrictOut(
+            id=i["id"] if isinstance(i, dict) else i.id,
+            name=i["name"] if isinstance(i, dict) else i.name,
+            province_name=(i.get("province_name") if isinstance(i, dict) else getattr(i, "province_name", None)),
+            department_name=(i.get("department_name") if isinstance(i, dict) else getattr(i, "department_name", None)),
+            active=i["active"] if isinstance(i, dict) else i.active,
+        )
+        for i in items
+    ]
+
+
+@router.get("/geo/districts/{district_id}", response_model=DistrictOut)
+async def get_geo_district(
+    district_id: str,
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> DistrictOut:
+    item = await repo.get_district(district_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="District not found")
+
+    return DistrictOut(
+        id=item["id"] if isinstance(item, dict) else item.id,
+        name=item["name"] if isinstance(item, dict) else item.name,
+        province_name=(item.get("province_name") if isinstance(item, dict) else getattr(item, "province_name", None)),
+        department_name=(item.get("department_name") if isinstance(item, dict) else getattr(item, "department_name", None)),
+        active=item["active"] if isinstance(item, dict) else item.active,
+    )
+
+
+# [TECH]
+# User address management endpoints.
+# These endpoints require authentication and provide CRUD operations for user addresses.
+# They use the existing PostgresUserRepository methods for address management.
+#
+# [BUSINESS]
+# Gestión de libreta de direcciones del usuario.
+# Permite crear, listar, actualizar, eliminar y marcar dirección por defecto.
+
+@router.get("/addresses", response_model=list[AddressOutExtended])
+async def list_addresses(
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> list[AddressOutExtended]:
+    """List all addresses for the current user."""
+    addresses = await repo.list_addresses_by_user(user_id=current.id)
+    return [
+        AddressOutExtended(
+            id=addr["id"],
+            district_id=addr["district_id"],
+            address_line=addr["address_line"],
+            lat=addr["lat"],
+            lng=addr["lng"],
+            reference=addr["reference"],
+            building_number=addr["building_number"],
+            apartment_number=addr["apartment_number"],
+            label=addr["label"],
+            type=addr["type"],
+            is_default=addr["is_default"],
+            created_at=addr["created_at"],
+        )
+        for addr in addresses
+    ]
+
+
+@router.post("/addresses", response_model=AddressOutExtended, status_code=status.HTTP_201_CREATED)
+async def create_address(
+    payload: AddressCreateIn,
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> AddressOutExtended:
+    """Create a new address for the current user."""
+    # Validate district exists and is active
+    district = await repo.get_district(payload.district_id)
+    if not district:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="District not found")
+    if not district["active"]:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District is not active")
+    
+    # Determine if this is the first address BEFORE creating it
+    existing_before = await repo.list_addresses_by_user(user_id=current.id)
+
+    # Create address
+    address = await repo.create_address(user_id=current.id, address_data=payload.dict())
+
+    # Set as default if it's the first address or explicitly requested
+    if len(existing_before) == 0 or bool(payload.is_default):
+        await repo.set_default_address(user_id=current.id, address_id=address["id"])
+        # Refresh to get updated default status (repo returns None if not found)
+        refreshed = await repo.get_address_for_user(user_id=current.id, address_id=address["id"])
+        if refreshed:
+            address = refreshed
+    
+    return AddressOutExtended(
+        id=address["id"],
+        district_id=address["district_id"],
+        address_line=address["address_line"],
+        lat=address["lat"],
+        lng=address["lng"],
+        reference=address["reference"],
+        building_number=address["building_number"],
+        apartment_number=address["apartment_number"],
+        label=address["label"],
+        type=address["type"],
+        is_default=address["is_default"],
+        created_at=address["created_at"],
+    )
+
+
+@router.get("/addresses/{address_id}", response_model=AddressOutExtended)
+async def get_address(
+    address_id: UUID,
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> AddressOutExtended:
+    """Get a specific address by ID."""
+    address = await repo.get_address_for_user(user_id=current.id, address_id=address_id)
+    if not address:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+    
+    return AddressOutExtended(
+        id=address["id"],
+        district_id=address["district_id"],
+        address_line=address["address_line"],
+        lat=address["lat"],
+        lng=address["lng"],
+        reference=address["reference"],
+        building_number=address["building_number"],
+        apartment_number=address["apartment_number"],
+        label=address["label"],
+        type=address["type"],
+        is_default=address["is_default"],
+        created_at=address["created_at"],
+    )
+
+
+@router.put("/addresses/{address_id}", response_model=AddressOutExtended)
+async def update_address(
+    address_id: UUID,
+    payload: AddressUpdateIn,
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> AddressOutExtended:
+    """Update a specific address."""
+    # Validate district if provided
+    if payload.district_id:
+        district = await repo.get_district(payload.district_id)
+        if not district:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="District not found")
+        if not district["active"]:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District is not active")
+    
+    # Update address
+    try:
+        address = await repo.update_address(
+            user_id=current.id,
+            address_id=address_id,
+            patch=payload.dict(exclude_unset=True),
+        )
+    except ValueError as exc:
+        if str(exc) == "address_not_found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found") from exc
+        raise
+    
+    return AddressOutExtended(
+        id=address["id"],
+        district_id=address["district_id"],
+        address_line=address["address_line"],
+        lat=address["lat"],
+        lng=address["lng"],
+        reference=address["reference"],
+        building_number=address["building_number"],
+        apartment_number=address["apartment_number"],
+        label=address["label"],
+        type=address["type"],
+        is_default=address["is_default"],
+        created_at=address["created_at"],
+    )
+
+
+@router.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_address(
+    address_id: UUID,
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> None:
+    """Soft delete a specific address."""
+    try:
+        await repo.soft_delete_address(user_id=current.id, address_id=address_id)
+    except ValueError as exc:
+        if str(exc) == "address_not_found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found") from exc
+        elif str(exc) == "no_addresses_left":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot delete last address") from exc
+        raise
+
+
+@router.put("/addresses/{address_id}/default", status_code=status.HTTP_204_NO_CONTENT)
+async def set_default_address(
+    address_id: UUID,
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> None:
+    """Set an address as the default address."""
+    try:
+        await repo.set_default_address(user_id=current.id, address_id=address_id)
+    except ValueError as exc:
+        if str(exc) == "address_not_found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found") from exc
+        raise

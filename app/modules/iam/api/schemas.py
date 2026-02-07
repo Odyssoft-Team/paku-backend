@@ -26,6 +26,77 @@ Sex = Literal["male", "female"]
 
 
 # [TECH]
+# Output DTO for district data.
+# Used to serialize district information for API responses.
+#
+# [BUSINESS]
+# Representación de distrito para consultas geográficas.
+class DistrictOut(BaseModel):
+    id: str
+    name: str
+    province_name: Optional[str] = None
+    department_name: Optional[str] = None
+    active: bool
+
+
+# [TECH]
+# Input DTO for creating user addresses.
+# Used to validate address creation requests.
+#
+# [BUSINESS]
+# Datos necesarios para crear una nueva dirección en la libreta del usuario.
+class AddressCreateIn(BaseModel):
+    district_id: str
+    address_line: str
+    lat: float
+    lng: float
+    reference: Optional[str] = None
+    building_number: Optional[str] = None
+    apartment_number: Optional[str] = None
+    label: Optional[str] = None
+    type: Optional[str] = None
+    is_default: Optional[bool] = False
+
+
+# [TECH]
+# Input DTO for updating user addresses.
+# All fields are optional to allow partial updates.
+#
+# [BUSINESS]
+# Datos que el usuario puede modificar de una dirección existente.
+class AddressUpdateIn(BaseModel):
+    district_id: Optional[str] = None
+    address_line: Optional[str] = None
+    reference: Optional[str] = None
+    building_number: Optional[str] = None
+    apartment_number: Optional[str] = None
+    label: Optional[str] = None
+    type: Optional[str] = None
+    is_default: Optional[bool] = None
+
+
+# [TECH]
+# Output DTO for user addresses with full details.
+# Used to serialize address data for API responses.
+#
+# [BUSINESS]
+# Representación completa de dirección para respuestas de la API.
+class AddressOutExtended(BaseModel):
+    id: UUID
+    district_id: str
+    address_line: str
+    lat: float
+    lng: float
+    reference: Optional[str] = None
+    building_number: Optional[str] = None
+    apartment_number: Optional[str] = None
+    label: Optional[str] = None
+    type: Optional[str] = None
+    is_default: bool
+    created_at: datetime
+
+
+# [TECH]
 # Input DTO for user address.
 # Inputs: district_id, address_line, lat, lng.
 # Output: validated object used to build the domain Address.

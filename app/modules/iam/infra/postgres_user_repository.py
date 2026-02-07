@@ -6,8 +6,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.modules.iam.domain.user import Address, Sex, User, UserRepository
-from app.modules.iam.infra.models import UserModel, ensure_iam_schema, utcnow
+from app.modules.iam.domain.user import Address, Sex, User, UserRepository, DistrictRepository, AddressRepository
+from app.modules.iam.infra.models import UserModel, DistrictModel, UserAddressModel, ensure_iam_schema, utcnow
 
 
 def _to_domain(model: UserModel) -> User:
@@ -43,7 +43,7 @@ def _to_domain(model: UserModel) -> User:
     )
 
 
-class PostgresUserRepository(UserRepository):
+class PostgresUserRepository(UserRepository, DistrictRepository, AddressRepository):
     def __init__(self, *, session: AsyncSession, engine: AsyncEngine) -> None:
         self._session = session
         self._engine = engine
@@ -131,3 +131,295 @@ class PostgresUserRepository(UserRepository):
         model.updated_at = utcnow()
 
         await self._session.commit()
+
+    # DistrictRepository methods
+    async def list_districts(self, active_only: bool = True) -> list[dict]:
+        await ensure_iam_schema(self._engine)
+
+        stmt = select(DistrictModel)
+        if active_only:
+            stmt = stmt.where(DistrictModel.active == True)
+        
+        stmt = stmt.order_by(DistrictModel.name)
+        result = await self._session.execute(stmt)
+        models = result.scalars().all()
+
+        return [
+            {
+                "id": model.id,
+                "name": model.name,
+                "province_name": model.province_name,
+                "department_name": model.department_name,
+                "active": model.active,
+                "created_at": model.created_at,
+                "updated_at": model.updated_at,
+            }
+            for model in models
+        ]
+
+    async def get_district(self, id: str) -> Optional[dict]:
+        await ensure_iam_schema(self._engine)
+
+        model = await self._session.get(DistrictModel, id)
+        if model is None:
+            return None
+
+        return {
+            "id": model.id,
+            "name": model.name,
+            "province_name": model.province_name,
+            "department_name": model.department_name,
+            "active": model.active,
+            "created_at": model.created_at,
+            "updated_at": model.updated_at,
+        }
+
+    # AddressRepository methods
+    async def list_addresses_by_user(self, user_id: UUID, include_deleted: bool = False) -> list[dict]:
+        await ensure_iam_schema(self._engine)
+
+        stmt = select(UserAddressModel).where(UserAddressModel.user_id == user_id)
+        if not include_deleted:
+            stmt = stmt.where(UserAddressModel.deleted_at.is_(None))
+        
+        stmt = stmt.order_by(UserAddressModel.is_default.desc(), UserAddressModel.created_at.desc())
+        result = await self._session.execute(stmt)
+        models = result.scalars().all()
+
+        return [
+            {
+                "id": model.id,
+                "user_id": model.user_id,
+                "district_id": model.district_id,
+                "address_line": model.address_line,
+                "reference": model.reference,
+                "building_number": model.building_number,
+                "apartment_number": model.apartment_number,
+                "label": model.label,
+                "type": model.type,
+                "lat": model.lat,
+                "lng": model.lng,
+                "is_default": model.is_default,
+                "deleted_at": model.deleted_at,
+                "created_at": model.created_at,
+                "updated_at": model.updated_at,
+            }
+            for model in models
+        ]
+
+    async def get_address_for_user(self, user_id: UUID, address_id: UUID) -> Optional[dict]:
+        await ensure_iam_schema(self._engine)
+
+        stmt = select(UserAddressModel).where(
+            UserAddressModel.user_id == user_id,
+            UserAddressModel.id == address_id,
+            UserAddressModel.deleted_at.is_(None)
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        
+        if model is None:
+            return None
+
+        return {
+            "id": model.id,
+            "user_id": model.user_id,
+            "district_id": model.district_id,
+            "address_line": model.address_line,
+            "reference": model.reference,
+            "building_number": model.building_number,
+            "apartment_number": model.apartment_number,
+            "label": model.label,
+            "type": model.type,
+            "lat": model.lat,
+            "lng": model.lng,
+            "is_default": model.is_default,
+            "deleted_at": model.deleted_at,
+            "created_at": model.created_at,
+            "updated_at": model.updated_at,
+        }
+
+    async def create_address(self, user_id: UUID, address_data: dict) -> dict:
+        await ensure_iam_schema(self._engine)
+
+        model = UserAddressModel(
+            user_id=user_id,
+            district_id=address_data["district_id"],
+            address_line=address_data["address_line"],
+            reference=address_data.get("reference"),
+            building_number=address_data.get("building_number"),
+            apartment_number=address_data.get("apartment_number"),
+            label=address_data.get("label"),
+            type=address_data.get("type"),
+            lat=address_data["lat"],
+            lng=address_data["lng"],
+            is_default=address_data.get("is_default", False),
+        )
+        self._session.add(model)
+        await self._session.commit()
+        await self._session.refresh(model)
+
+        return {
+            "id": model.id,
+            "user_id": model.user_id,
+            "district_id": model.district_id,
+            "address_line": model.address_line,
+            "reference": model.reference,
+            "building_number": model.building_number,
+            "apartment_number": model.apartment_number,
+            "label": model.label,
+            "type": model.type,
+            "lat": model.lat,
+            "lng": model.lng,
+            "is_default": model.is_default,
+            "deleted_at": model.deleted_at,
+            "created_at": model.created_at,
+            "updated_at": model.updated_at,
+        }
+
+    async def update_address(self, user_id: UUID, address_id: UUID, patch: dict) -> dict:
+        await ensure_iam_schema(self._engine)
+
+        stmt = select(UserAddressModel).where(
+            UserAddressModel.user_id == user_id,
+            UserAddressModel.id == address_id,
+            UserAddressModel.deleted_at.is_(None)
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        
+        if model is None:
+            raise ValueError("address_not_found")
+
+        # Update fields
+        for key, value in patch.items():
+            if hasattr(model, key) and key not in ["id", "user_id", "created_at", "deleted_at"]:
+                setattr(model, key, value)
+        
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+
+        return {
+            "id": model.id,
+            "user_id": model.user_id,
+            "district_id": model.district_id,
+            "address_line": model.address_line,
+            "reference": model.reference,
+            "building_number": model.building_number,
+            "apartment_number": model.apartment_number,
+            "label": model.label,
+            "type": model.type,
+            "lat": model.lat,
+            "lng": model.lng,
+            "is_default": model.is_default,
+            "deleted_at": model.deleted_at,
+            "created_at": model.created_at,
+            "updated_at": model.updated_at,
+        }
+
+    async def soft_delete_address(self, user_id: UUID, address_id: UUID) -> None:
+        await ensure_iam_schema(self._engine)
+
+        # Get address to delete
+        stmt = select(UserAddressModel).where(
+            UserAddressModel.user_id == user_id,
+            UserAddressModel.id == address_id,
+            UserAddressModel.deleted_at.is_(None)
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        
+        if model is None:
+            raise ValueError("address_not_found")
+
+        was_default = model.is_default
+        
+        # Soft delete
+        model.deleted_at = utcnow()
+        model.is_default = False
+        model.updated_at = utcnow()
+
+        # If it was default, assign new default
+        if was_default:
+            new_default_stmt = select(UserAddressModel).where(
+                UserAddressModel.user_id == user_id,
+                UserAddressModel.deleted_at.is_(None),
+                UserAddressModel.id != address_id
+            ).order_by(UserAddressModel.created_at.desc()).limit(1)
+            
+            new_default_result = await self._session.execute(new_default_stmt)
+            new_default_model = new_default_result.scalar_one_or_none()
+            
+            if new_default_model:
+                new_default_model.is_default = True
+                new_default_model.updated_at = utcnow()
+            else:
+                raise ValueError("no_addresses_left")
+
+        await self._session.commit()
+
+    async def set_default_address(self, user_id: UUID, address_id: UUID) -> None:
+        await ensure_iam_schema(self._engine)
+
+        # Verify address exists and is not deleted
+        stmt = select(UserAddressModel).where(
+            UserAddressModel.user_id == user_id,
+            UserAddressModel.id == address_id,
+            UserAddressModel.deleted_at.is_(None)
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        
+        if model is None:
+            raise ValueError("address_not_found")
+
+        # Set all other addresses to non-default
+        from sqlalchemy import update
+        await self._session.execute(
+            update(UserAddressModel)
+            .where(
+                UserAddressModel.user_id == user_id,
+                UserAddressModel.deleted_at.is_(None),
+                UserAddressModel.id != address_id
+            )
+            .values(is_default=False, updated_at=utcnow())
+        )
+
+        # Set this address as default
+        model.is_default = True
+        model.updated_at = utcnow()
+
+        await self._session.commit()
+
+    async def get_default_address(self, user_id: UUID) -> Optional[dict]:
+        await ensure_iam_schema(self._engine)
+
+        stmt = select(UserAddressModel).where(
+            UserAddressModel.user_id == user_id,
+            UserAddressModel.is_default == True,
+            UserAddressModel.deleted_at.is_(None)
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        
+        if model is None:
+            return None
+
+        return {
+            "id": model.id,
+            "user_id": model.user_id,
+            "district_id": model.district_id,
+            "address_line": model.address_line,
+            "reference": model.reference,
+            "building_number": model.building_number,
+            "apartment_number": model.apartment_number,
+            "label": model.label,
+            "type": model.type,
+            "lat": model.lat,
+            "lng": model.lng,
+            "is_default": model.is_default,
+            "deleted_at": model.deleted_at,
+            "created_at": model.created_at,
+            "updated_at": model.updated_at,
+        }
