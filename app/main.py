@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.settings import settings
 from app.modules.booking.api.router import router as booking_router
@@ -17,6 +18,15 @@ from app.core.scheduler import start_scheduler, stop_scheduler
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG
+)
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(iam_router)
