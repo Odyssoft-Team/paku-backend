@@ -1,7 +1,11 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.settings import settings
+from app.core.scheduler import start_scheduler, stop_scheduler
+
 from app.modules.booking.api.router import router as booking_router
 from app.modules.clinical_history.api.router import router as clinical_history_router
 from app.modules.cart.api.router import router as cart_router
@@ -12,19 +16,31 @@ from app.modules.push.api.router import router as push_router
 from app.modules.pets.api.router import router as pets_router
 from app.modules.commerce.api.router import router as commerce_router
 from app.modules.wallet.api.router import router as wallet_router
-from app.core.scheduler import start_scheduler, stop_scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
 
 
 app = FastAPI(
     title=settings.APP_NAME,
-    debug=settings.DEBUG
+    debug=settings.DEBUG,
+    lifespan=lifespan,
 )
 
 # CORS configuration
+origins = settings.CORS_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=origins,
+    # Avoid invalid CORS config: "*" cannot be used with credentials
+    allow_credentials=("*" not in origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -41,16 +57,6 @@ app.include_router(push_router)
 app.include_router(orders_router)
 
 
-@app.on_event("startup")
-async def _startup() -> None:
-    start_scheduler()
-
-
-@app.on_event("shutdown")
-async def _shutdown() -> None:
-    stop_scheduler()
-
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -63,9 +69,10 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=settings.DEBUG
+        reload=settings.DEBUG,
     )
