@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -138,4 +138,57 @@ class UpdateOrderStatus:
             data={"order_id": str(updated.id), "status": updated.status.value},
         )
 
+        return updated
+
+
+@dataclass
+class PatchOrder:
+    orders_repo: PostgresOrderRepository
+
+    async def execute(self, *, order_id: UUID, user_id: UUID, status: Optional[OrderStatus] = None) -> Order:
+        if status is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one field must be provided for patch"
+            )
+
+        try:
+            # Verificar que la orden exista y pertenezca al usuario
+            existing = await self.orders_repo.get_order(id=order_id, user_id=user_id)
+            if existing is None:
+                raise ValueError("order_not_found")
+
+            # Validar transición de estado
+            if not existing.can_advance_to(status):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Cannot transition from {existing.status.value} to {status.value}"
+                )
+
+            # Actualizar estado
+            updated = await self.orders_repo.update_status(id=order_id, status=status)
+            
+        except ValueError as exc:
+            if str(exc) == "order_not_found":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found") from exc
+            if str(exc) == "invalid_status_transition":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Invalid status transition",
+                ) from exc
+            raise
+
+        # Crear notificación para el usuario
+        from app.modules.notifications.api.router import _repo as notifications_repo
+        from app.modules.notifications.app.use_cases import CreateNotification
+
+        title, body = _status_message(updated.status.value)
+        await CreateNotification(repo=notifications_repo).execute(
+            user_id=updated.user_id,
+            type="order_status",
+            title=title,
+            body=body,
+            data={"order_id": str(updated.id), "status": updated.status.value},
+        )
+        
         return updated

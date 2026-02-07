@@ -26,6 +26,15 @@ class UpdateStatusIn(BaseModel):
 
 
 # [TECH]
+# Input DTO for PATCH /orders/{id} - partial updates.
+#
+# [NATURAL/BUSINESS]
+# Campos opcionales para actualizar un pedido.
+class PatchOrderIn(BaseModel):
+    status: Optional[OrderStatus] = None
+
+
+# [TECH]
 # Output DTO serializing Order entity for API responses.
 #
 # [NATURAL/BUSINESS]

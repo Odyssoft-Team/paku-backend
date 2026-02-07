@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import CurrentUser, get_current_user
 from app.core.db import engine, get_async_session
-from app.modules.orders.api.schemas import CreateOrderIn, OrderOut, UpdateStatusIn
-from app.modules.orders.app.use_cases import CreateOrderFromCart, GetOrder, ListOrders, UpdateOrderStatus
+from app.modules.orders.api.schemas import CreateOrderIn, OrderOut, PatchOrderIn, UpdateStatusIn
+from app.modules.orders.app.use_cases import CreateOrderFromCart, GetOrder, ListOrders, PatchOrder, UpdateOrderStatus
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 
 
@@ -43,6 +43,21 @@ async def get_order(
     repo: PostgresOrderRepository = Depends(get_orders_repo),
 ) -> OrderOut:
     order = await GetOrder(orders_repo=repo).execute(order_id=id, user_id=current.id)
+    return OrderOut(**order.__dict__)
+
+
+@router.patch("/{id}", response_model=OrderOut)
+async def patch_order(
+    id: UUID,
+    payload: PatchOrderIn,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+) -> OrderOut:
+    order = await PatchOrder(orders_repo=repo).execute(
+        order_id=id, 
+        user_id=current.id, 
+        status=payload.status
+    )
     return OrderOut(**order.__dict__)
 
 
