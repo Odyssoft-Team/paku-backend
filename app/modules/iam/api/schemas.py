@@ -97,37 +97,6 @@ class AddressOutExtended(BaseModel):
 
 
 # [TECH]
-# Input DTO for user address.
-# Inputs: district_id, address_line, lat, lng.
-# Output: validated object used to build the domain Address.
-# Flow: registration/profile update validation at the API boundary.
-#
-# [BUSINESS]
-# Representa la dirección que un usuario registra/actualiza en su perfil.
-# Se usa para ubicar al usuario y mejorar la experiencia de servicios/operaciones.
-class AddressIn(BaseModel):
-    district_id: str
-    address_line: str
-    lat: float
-    lng: float
-
-
-# [TECH]
-# Output DTO for user address.
-# Used to serialize the domain Address back to API consumers.
-# Flow: profile retrieval and registration responses.
-#
-# [BUSINESS]
-# Es la dirección que el sistema devuelve al cliente cuando consulta o recibe su perfil.
-# Permite que la app muestre y reutilice la dirección guardada.
-class AddressOut(BaseModel):
-    district_id: str
-    address_line: str
-    lat: float
-    lng: float
-
-
-# [TECH]
 # Input DTO for user registration.
 # Receives credentials (email/password) and personal profile data.
 # Output: validated payload passed to the RegisterUser use case.
@@ -146,7 +115,6 @@ class RegisterIn(BaseModel):
     birth_date: date
     role: Role = "user"
     dni: Optional[str] = None
-    address: Optional[AddressIn] = None
     profile_photo_url: Optional[str] = None
 
 
@@ -208,7 +176,6 @@ class UserOut(BaseModel):
     sex: Sex
     birth_date: date
     dni: Optional[str] = None
-    address: Optional[AddressOut] = None
     profile_photo_url: Optional[str] = None
 
 
@@ -227,5 +194,4 @@ class UpdateProfileIn(BaseModel):
     sex: Optional[Sex] = None
     birth_date: Optional[date] = None
     dni: Optional[str] = None
-    address: Optional[AddressIn] = None
     profile_photo_url: Optional[str] = None

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.iam.domain.user import Address, Sex, User, UserRepository, DistrictRepository, AddressRepository
-from app.modules.iam.infra.models import UserModel, DistrictModel, UserAddressModel, ensure_iam_schema, utcnow
+from app.modules.iam.infra.models import UserModel, DistrictModel, UserAddressModel, utcnow
 
 
 def _to_domain(model: UserModel) -> User:
@@ -49,7 +49,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         self._engine = engine
 
     async def get_by_email(self, email: str) -> Optional[User]:
-        await ensure_iam_schema(self._engine)
 
         stmt = select(UserModel).where(UserModel.email == email.strip().lower())
         res = await self._session.execute(stmt)
@@ -59,7 +58,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         return _to_domain(model)
 
     async def get_by_id(self, user_id: UUID) -> Optional[User]:
-        await ensure_iam_schema(self._engine)
 
         model = await self._session.get(UserModel, user_id)
         if model is None:
@@ -67,7 +65,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         return _to_domain(model)
 
     async def add(self, user: User) -> None:
-        await ensure_iam_schema(self._engine)
 
         address_district_id: Optional[str] = None
         address_line: Optional[str] = None
@@ -103,7 +100,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         await self._session.commit()
 
     async def update(self, user: User) -> None:
-        await ensure_iam_schema(self._engine)
 
         model = await self._session.get(UserModel, user.id)
         if model is None:
@@ -134,11 +130,10 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
 
     # DistrictRepository methods
     async def list_districts(self, active_only: bool = True) -> list[dict]:
-        await ensure_iam_schema(self._engine)
 
         stmt = select(DistrictModel)
         if active_only:
-            stmt = stmt.where(DistrictModel.active == True)
+            stmt = stmt.where(DistrictModel.active)
         
         stmt = stmt.order_by(DistrictModel.name)
         result = await self._session.execute(stmt)
@@ -158,7 +153,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         ]
 
     async def get_district(self, id: str) -> Optional[dict]:
-        await ensure_iam_schema(self._engine)
 
         model = await self._session.get(DistrictModel, id)
         if model is None:
@@ -176,7 +170,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
 
     # AddressRepository methods
     async def list_addresses_by_user(self, user_id: UUID, include_deleted: bool = False) -> list[dict]:
-        await ensure_iam_schema(self._engine)
 
         stmt = select(UserAddressModel).where(UserAddressModel.user_id == user_id)
         if not include_deleted:
@@ -208,7 +201,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         ]
 
     async def get_address_for_user(self, user_id: UUID, address_id: UUID) -> Optional[dict]:
-        await ensure_iam_schema(self._engine)
 
         stmt = select(UserAddressModel).where(
             UserAddressModel.user_id == user_id,
@@ -240,7 +232,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         }
 
     async def create_address(self, user_id: UUID, address_data: dict) -> dict:
-        await ensure_iam_schema(self._engine)
 
         model = UserAddressModel(
             user_id=user_id,
@@ -278,7 +269,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         }
 
     async def update_address(self, user_id: UUID, address_id: UUID, patch: dict) -> dict:
-        await ensure_iam_schema(self._engine)
 
         stmt = select(UserAddressModel).where(
             UserAddressModel.user_id == user_id,
@@ -293,6 +283,8 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
 
         # Update fields
         for key, value in patch.items():
+            if key == "is_default":
+                continue  # is_default se maneja solo por set_default_address
             if hasattr(model, key) and key not in ["id", "user_id", "created_at", "deleted_at"]:
                 setattr(model, key, value)
         
@@ -319,7 +311,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         }
 
     async def soft_delete_address(self, user_id: UUID, address_id: UUID) -> None:
-        await ensure_iam_schema(self._engine)
 
         # Get address to delete
         stmt = select(UserAddressModel).where(
@@ -360,7 +351,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         await self._session.commit()
 
     async def set_default_address(self, user_id: UUID, address_id: UUID) -> None:
-        await ensure_iam_schema(self._engine)
 
         # Verify address exists and is not deleted
         stmt = select(UserAddressModel).where(
@@ -393,11 +383,10 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         await self._session.commit()
 
     async def get_default_address(self, user_id: UUID) -> Optional[dict]:
-        await ensure_iam_schema(self._engine)
 
         stmt = select(UserAddressModel).where(
             UserAddressModel.user_id == user_id,
-            UserAddressModel.is_default == True,
+            UserAddressModel.is_default,
             UserAddressModel.deleted_at.is_(None)
         )
         result = await self._session.execute(stmt)

@@ -7,7 +7,6 @@ from app.core.auth import CurrentUser, create_access_token, decode_token
 from app.core.db import engine, get_async_session
 from app.modules.iam.api.schemas import (
     AddressCreateIn,
-    AddressOut,
     AddressOutExtended,
     AddressUpdateIn,
     DistrictOut,
@@ -19,7 +18,7 @@ from app.modules.iam.api.schemas import (
     UserOut,
 )
 from app.modules.iam.app.use_cases import GetMe, LoginUser, RegisterUser, UpdateProfile
-from app.modules.iam.domain.user import Address, Sex
+from app.modules.iam.domain.user import Sex
 from app.modules.iam.domain.user import UserRepository
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
 
@@ -89,22 +88,12 @@ async def get_current_user_db(
 
 @router.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 # [TECH]
-# Registers a new user. Optional profile address uses legacy Address domain object.
-# Note: Profile address is deprecated for updates, but still supported on register
-# to keep backward compatibility (if you want, later we can remove it too).
+# Registers a new user without address support.
+# Address book is managed exclusively via /addresses endpoints.
 #
 # [BUSINESS]
 # Crea una cuenta nueva en el sistema y devuelve el perfil creado.
 async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_repo)) -> UserOut:
-    address_domain = None
-    if payload.address:
-        address_domain = Address(
-            district_id=payload.address.district_id,
-            address_line=payload.address.address_line,
-            lat=payload.address.lat,
-            lng=payload.address.lng,
-        )
-
     user = await RegisterUser(repo=repo).execute(
         email=payload.email,
         password=payload.password,
@@ -115,18 +104,11 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
         birth_date=payload.birth_date,
         role=payload.role,
         dni=payload.dni,
-        address=address_domain,
+        address=None,
         profile_photo_url=payload.profile_photo_url,
     )
 
     result = user.__dict__.copy()
-    if user.address:
-        result["address"] = AddressOut(
-            district_id=user.address.district_id,
-            address_line=user.address.address_line,
-            lat=user.address.lat,
-            lng=user.address.lng,
-        )
     return UserOut(**result)
 
 
@@ -162,23 +144,17 @@ async def refresh(payload: RefreshIn) -> TokenOut:
 
 @router.get("/users/me", response_model=UserOut)
 # [TECH]
-# Returns current user profile.
+# Returns current user profile without address (address book lives in /addresses).
 #
 # [BUSINESS]
-# Devuelve "mi perfil" del usuario autenticado.
+# Devuelve "mi perfil" del usuario autenticado (sin dirección de perfil).
 async def me(
     current: CurrentUser = Depends(get_current_user_db),
     repo: UserRepository = Depends(get_user_repo),
 ) -> UserOut:
     user = await GetMe(repo=repo).execute(user_id=current.id)
     result = user.__dict__.copy()
-    if user.address:
-        result["address"] = AddressOut(
-            district_id=user.address.district_id,
-            address_line=user.address.address_line,
-            lat=user.address.lat,
-            lng=user.address.lng,
-        )
+    # Address book is now exclusively in /addresses
     return UserOut(**result)
 
 
@@ -213,13 +189,7 @@ async def update_me(
     )
 
     result = user.__dict__.copy()
-    if user.address:
-        result["address"] = AddressOut(
-            district_id=user.address.district_id,
-            address_line=user.address.address_line,
-            lat=user.address.lat,
-            lng=user.address.lng,
-        )
+    # Address book is now exclusively in /addresses
     return UserOut(**result)
 
 
@@ -328,7 +298,7 @@ async def create_address(
     existing_before = await repo.list_addresses_by_user(user_id=current.id)
 
     # Create address
-    address = await repo.create_address(user_id=current.id, address_data=payload.dict())
+    address = await repo.create_address(user_id=current.id, address_data=payload.model_dump())
 
     # Default is a UX helper. We only auto-default the very first address,
     # or when the client explicitly requests is_default=true.
@@ -402,7 +372,7 @@ async def update_address(
         address = await repo.update_address(
             user_id=current.id,
             address_id=address_id,
-            patch=payload.dict(exclude_unset=True),
+            patch=payload.model_dump(exclude_unset=True),
         )
     except ValueError as exc:
         if str(exc) == "address_not_found":
