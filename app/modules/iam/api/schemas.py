@@ -26,20 +26,6 @@ Sex = Literal["male", "female"]
 
 
 # [TECH]
-# Output DTO for district data.
-# Used to serialize district information for API responses.
-#
-# [BUSINESS]
-# Representación de distrito para consultas geográficas.
-class DistrictOut(BaseModel):
-    id: str
-    name: str
-    province_name: Optional[str] = None
-    department_name: Optional[str] = None
-    active: bool
-
-
-# [TECH]
 # Input DTO for creating user addresses.
 # Used to validate address creation requests.
 #

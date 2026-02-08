@@ -6,8 +6,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.modules.iam.domain.user import Address, Sex, User, UserRepository, DistrictRepository, AddressRepository
-from app.modules.iam.infra.models import UserModel, DistrictModel, UserAddressModel, utcnow
+from app.modules.iam.domain.user import Address, Sex, User, UserRepository, AddressRepository
+from app.modules.iam.infra.models import UserModel, UserAddressModel, utcnow
 
 
 def _to_domain(model: UserModel) -> User:
@@ -43,7 +43,7 @@ def _to_domain(model: UserModel) -> User:
     )
 
 
-class PostgresUserRepository(UserRepository, DistrictRepository, AddressRepository):
+class PostgresUserRepository(UserRepository, AddressRepository):
     def __init__(self, *, session: AsyncSession, engine: AsyncEngine) -> None:
         self._session = session
         self._engine = engine
@@ -127,46 +127,6 @@ class PostgresUserRepository(UserRepository, DistrictRepository, AddressReposito
         model.updated_at = utcnow()
 
         await self._session.commit()
-
-    # DistrictRepository methods
-    async def list_districts(self, active_only: bool = True) -> list[dict]:
-
-        stmt = select(DistrictModel)
-        if active_only:
-            stmt = stmt.where(DistrictModel.active)
-        
-        stmt = stmt.order_by(DistrictModel.name)
-        result = await self._session.execute(stmt)
-        models = result.scalars().all()
-
-        return [
-            {
-                "id": model.id,
-                "name": model.name,
-                "province_name": model.province_name,
-                "department_name": model.department_name,
-                "active": model.active,
-                "created_at": model.created_at,
-                "updated_at": model.updated_at,
-            }
-            for model in models
-        ]
-
-    async def get_district(self, id: str) -> Optional[dict]:
-
-        model = await self._session.get(DistrictModel, id)
-        if model is None:
-            return None
-
-        return {
-            "id": model.id,
-            "name": model.name,
-            "province_name": model.province_name,
-            "department_name": model.department_name,
-            "active": model.active,
-            "created_at": model.created_at,
-            "updated_at": model.updated_at,
-        }
 
     # AddressRepository methods
     async def list_addresses_by_user(self, user_id: UUID, include_deleted: bool = False) -> list[dict]:

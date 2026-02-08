@@ -136,20 +136,6 @@ class UserRepository(Protocol):
 
 
 # [TECH]
-# Protocol defining repository operations for district management.
-# Implemented by infrastructure layer (PostgresDistrictRepository).
-#
-# [BUSINESS]
-# Interfaz para consultar catálogo de distritos.
-class DistrictRepository(Protocol):
-    async def list_districts(self, active_only: bool = True) -> list[Any]:
-        ...
-
-    async def get_district(self, id: str) -> Optional[Any]:
-        ...
-
-
-# [TECH]
 # Protocol defining repository operations for user address management.
 # Implemented by infrastructure layer (PostgresAddressRepository).
 #
