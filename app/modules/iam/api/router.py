@@ -5,11 +5,12 @@ from uuid import UUID
 
 from app.core.auth import CurrentUser, create_access_token, decode_token
 from app.core.db import engine, get_async_session
+from app.modules.geo.infra.repository import PostgresDistrictRepository
+from app.modules.geo.use_cases.geo_service import GeoService
 from app.modules.iam.api.schemas import (
     AddressCreateIn,
     AddressOutExtended,
     AddressUpdateIn,
-    DistrictOut,
     LoginIn,
     RefreshIn,
     RegisterIn,
@@ -27,7 +28,6 @@ from app.modules.iam.infra.postgres_user_repository import PostgresUserRepositor
 # It is the entry point for:
 # - authentication (register/login/refresh)
 # - basic identity operations (get/update current profile)
-# - geo lookups (districts)
 # - address book management (/addresses)
 #
 # It orchestrates DTO validation (pydantic schemas), delegates business rules to use cases,
@@ -36,25 +36,28 @@ from app.modules.iam.infra.postgres_user_repository import PostgresUserRepositor
 # Key dependencies:
 # - app.core.auth for token creation/decoding and current_user extraction
 # - app.modules.iam.app.use_cases for IAM business logic
-# - app.modules.iam.infra.postgres_user_repository for persistence and geo/address operations
-#
-# NOTE: In this implementation PostgresUserRepository.get_district/list_districts return dicts.
+# - app.modules.iam.infra.postgres_user_repository for persistence and address operations
 #
 # [BUSINESS]
 # Esta sección define las rutas del sistema de identidad.
 # Permite que un usuario se registre, inicie sesión y renueve su sesión.
 # También permite consultar y actualizar los datos del perfil del usuario autenticado.
-# Además incluye:
-# - consultas geográficas de distritos
-# - gestión de libreta de direcciones del usuario (/addresses)
+# Además incluye gestión de libreta de direcciones del usuario (/addresses).
 router = APIRouter(tags=["iam"])
 security = HTTPBearer()
 
 
 def get_user_repo(session: AsyncSession = Depends(get_async_session)) -> UserRepository:
     # [TECH] Repository factory (per-request session injected by FastAPI)
-    # [BUSINESS] Acceso a datos de usuarios, distritos y direcciones.
+    # [BUSINESS] Acceso a datos de usuarios y direcciones.
     return PostgresUserRepository(session=session, engine=engine)
+
+
+def get_geo_service(session: AsyncSession = Depends(get_async_session)) -> GeoService:
+    # [TECH] GeoService factory for district validation.
+    # [BUSINESS] Validación de distritos para direcciones.
+    repo = PostgresDistrictRepository(session=session)
+    return GeoService(district_repo=repo)
 
 
 async def get_current_user_db(
@@ -193,52 +196,6 @@ async def update_me(
     return UserOut(**result)
 
 
-@router.get("/geo/districts", response_model=list[DistrictOut])
-# [TECH]
-# Lists districts. Repo returns list[dict]; we map dict -> DistrictOut.
-#
-# [BUSINESS]
-# Lista distritos (por defecto solo activos) para selección en UI.
-async def list_geo_districts(
-    active: bool = Query(default=True),
-    repo: PostgresUserRepository = Depends(get_user_repo),
-) -> list[DistrictOut]:
-    items = await repo.list_districts(active_only=active)
-    return [
-        DistrictOut(
-            id=i["id"],
-            name=i["name"],
-            province_name=i.get("province_name"),
-            department_name=i.get("department_name"),
-            active=i["active"],
-        )
-        for i in items
-    ]
-
-
-@router.get("/geo/districts/{district_id}", response_model=DistrictOut)
-# [TECH]
-# Gets a district by id. Repo returns dict or None; we map to DistrictOut.
-#
-# [BUSINESS]
-# Devuelve un distrito específico.
-async def get_geo_district(
-    district_id: str,
-    repo: PostgresUserRepository = Depends(get_user_repo),
-) -> DistrictOut:
-    item = await repo.get_district(district_id)
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="District not found")
-
-    return DistrictOut(
-        id=item["id"],
-        name=item["name"],
-        province_name=item.get("province_name"),
-        department_name=item.get("department_name"),
-        active=item["active"],
-    )
-
-
 # [TECH]
 # User address management endpoints.
 # These endpoints require authentication and provide CRUD operations for user addresses.
@@ -285,14 +242,12 @@ async def create_address(
     payload: AddressCreateIn,
     current: CurrentUser = Depends(get_current_user_db),
     repo: PostgresUserRepository = Depends(get_user_repo),
+    geo: GeoService = Depends(get_geo_service),
 ) -> AddressOutExtended:
     """Create a new address for the current user."""
-    # Validate district exists and is active
-    district = await repo.get_district(payload.district_id)
-    if not district:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="District not found")
-    if district["active"] is not True:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District is not active")
+    # Validate district exists and is active via Geo service
+    if not await geo.validate_district_exists_and_active(payload.district_id):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District not found or not active")
 
     # Determine if this is the first address BEFORE creating it
     existing_before = await repo.list_addresses_by_user(user_id=current.id)
@@ -357,15 +312,13 @@ async def update_address(
     payload: AddressUpdateIn,
     current: CurrentUser = Depends(get_current_user_db),
     repo: PostgresUserRepository = Depends(get_user_repo),
+    geo: GeoService = Depends(get_geo_service),
 ) -> AddressOutExtended:
     """Update a specific address."""
-    # Validate district if provided
+    # Validate district if provided via Geo service
     if payload.district_id:
-        district = await repo.get_district(payload.district_id)
-        if not district:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="District not found")
-        if district["active"] is not True:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District is not active")
+        if not await geo.validate_district_exists_and_active(payload.district_id):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District not found or not active")
 
     # Update address (ownership and deleted_at are validated inside repository)
     try:

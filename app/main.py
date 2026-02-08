@@ -7,14 +7,15 @@ from app.core.settings import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 
 from app.modules.booking.api.router import router as booking_router
-from app.modules.clinical_history.api.router import router as clinical_history_router
 from app.modules.cart.api.router import router as cart_router
+from app.modules.clinical_history.api.router import router as clinical_history_router
+from app.modules.commerce.api.router import router as commerce_router
+from app.modules.geo.api.router import router as geo_router
 from app.modules.iam.api.router import router as iam_router
 from app.modules.notifications.api.router import router as notifications_router
 from app.modules.orders.api.router import router as orders_router
-from app.modules.push.api.router import router as push_router
 from app.modules.pets.api.router import router as pets_router
-from app.modules.commerce.api.router import router as commerce_router
+from app.modules.push.api.router import router as push_router
 from app.modules.wallet.api.router import router as wallet_router
 
 
@@ -45,6 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(geo_router, prefix="/geo")
 app.include_router(iam_router)
 app.include_router(pets_router)
 app.include_router(commerce_router)
