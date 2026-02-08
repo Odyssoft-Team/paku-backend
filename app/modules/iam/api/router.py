@@ -5,7 +5,19 @@ from uuid import UUID
 
 from app.core.auth import CurrentUser, create_access_token, decode_token
 from app.core.db import engine, get_async_session
-from app.modules.iam.api.schemas import AddressCreateIn, AddressOut, AddressOutExtended, AddressUpdateIn, DistrictOut, LoginIn, RefreshIn, RegisterIn, TokenOut, UpdateProfileIn, UserOut
+from app.modules.iam.api.schemas import (
+    AddressCreateIn,
+    AddressOut,
+    AddressOutExtended,
+    AddressUpdateIn,
+    DistrictOut,
+    LoginIn,
+    RefreshIn,
+    RegisterIn,
+    TokenOut,
+    UpdateProfileIn,
+    UserOut,
+)
 from app.modules.iam.app.use_cases import GetMe, LoginUser, RegisterUser, UpdateProfile
 from app.modules.iam.domain.user import Address, Sex
 from app.modules.iam.domain.user import UserRepository
@@ -16,21 +28,33 @@ from app.modules.iam.infra.postgres_user_repository import PostgresUserRepositor
 # It is the entry point for:
 # - authentication (register/login/refresh)
 # - basic identity operations (get/update current profile)
+# - geo lookups (districts)
+# - address book management (/addresses)
+#
 # It orchestrates DTO validation (pydantic schemas), delegates business rules to use cases,
-# and uses the auth utilities to mint/validate JWTs. It depends on:
+# and uses the auth utilities to mint/validate JWTs.
+#
+# Key dependencies:
 # - app.core.auth for token creation/decoding and current_user extraction
 # - app.modules.iam.app.use_cases for IAM business logic
-# - app.modules.iam.infra.user_repository for persistence (in-memory in this project)
+# - app.modules.iam.infra.postgres_user_repository for persistence and geo/address operations
+#
+# NOTE: In this implementation PostgresUserRepository.get_district/list_districts return dicts.
 #
 # [BUSINESS]
 # Esta sección define las rutas del sistema de identidad.
 # Permite que un usuario se registre, inicie sesión y renueve su sesión.
 # También permite consultar y actualizar los datos del perfil del usuario autenticado.
+# Además incluye:
+# - consultas geográficas de distritos
+# - gestión de libreta de direcciones del usuario (/addresses)
 router = APIRouter(tags=["iam"])
 security = HTTPBearer()
 
 
 def get_user_repo(session: AsyncSession = Depends(get_async_session)) -> UserRepository:
+    # [TECH] Repository factory (per-request session injected by FastAPI)
+    # [BUSINESS] Acceso a datos de usuarios, distritos y direcciones.
     return PostgresUserRepository(session=session, engine=engine)
 
 
@@ -38,14 +62,18 @@ async def get_current_user_db(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     repo: UserRepository = Depends(get_user_repo),
 ) -> CurrentUser:
+    # [TECH]
+    # Extracts Bearer token, decodes JWT, validates it's an access token,
+    # loads user from DB, verifies is_active, returns CurrentUser claims.
+    #
+    # [BUSINESS]
+    # Obtiene el usuario autenticado a partir del token enviado por la app.
     token = credentials.credentials
     data = decode_token(token)
     if data.get("type") != "access":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     try:
-        from uuid import UUID
-
         user_id = UUID(str(data.get("sub")))
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
@@ -60,6 +88,13 @@ async def get_current_user_db(
 
 
 @router.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+# [TECH]
+# Registers a new user. Optional profile address uses legacy Address domain object.
+# Note: Profile address is deprecated for updates, but still supported on register
+# to keep backward compatibility (if you want, later we can remove it too).
+#
+# [BUSINESS]
+# Crea una cuenta nueva en el sistema y devuelve el perfil creado.
 async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_repo)) -> UserOut:
     address_domain = None
     if payload.address:
@@ -69,6 +104,7 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
             lat=payload.address.lat,
             lng=payload.address.lng,
         )
+
     user = await RegisterUser(repo=repo).execute(
         email=payload.email,
         password=payload.password,
@@ -82,6 +118,7 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
         address=address_domain,
         profile_photo_url=payload.profile_photo_url,
     )
+
     result = user.__dict__.copy()
     if user.address:
         result["address"] = AddressOut(
@@ -94,16 +131,27 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
 
 
 @router.post("/auth/login", response_model=TokenOut)
+# [TECH]
+# Authenticates user credentials and returns access/refresh tokens.
+#
+# [BUSINESS]
+# Permite iniciar sesión y obtener tokens de sesión.
 async def login(payload: LoginIn, repo: UserRepository = Depends(get_user_repo)) -> TokenOut:
     tokens = await LoginUser(repo=repo).execute(email=payload.email, password=payload.password)
     return TokenOut(**tokens)
 
 
 @router.post("/auth/refresh", response_model=TokenOut)
+# [TECH]
+# Renews access token using a refresh token.
+#
+# [BUSINESS]
+# Renueva la sesión del usuario sin pedir contraseña.
 async def refresh(payload: RefreshIn) -> TokenOut:
     data = decode_token(payload.refresh_token)
     if data.get("type") != "refresh":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
     access_token = create_access_token(
         user_id=data.get("sub"),
         email=data.get("email"),
@@ -113,7 +161,15 @@ async def refresh(payload: RefreshIn) -> TokenOut:
 
 
 @router.get("/users/me", response_model=UserOut)
-async def me(current: CurrentUser = Depends(get_current_user_db), repo: UserRepository = Depends(get_user_repo)) -> UserOut:
+# [TECH]
+# Returns current user profile.
+#
+# [BUSINESS]
+# Devuelve "mi perfil" del usuario autenticado.
+async def me(
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: UserRepository = Depends(get_user_repo),
+) -> UserOut:
     user = await GetMe(repo=repo).execute(user_id=current.id)
     result = user.__dict__.copy()
     if user.address:
@@ -127,6 +183,12 @@ async def me(current: CurrentUser = Depends(get_current_user_db), repo: UserRepo
 
 
 @router.put("/users/me", response_model=UserOut)
+# [TECH]
+# Updates current user profile.
+# IMPORTANT: profile.address is deprecated; users must use /addresses endpoints.
+#
+# [BUSINESS]
+# Actualiza datos del perfil (teléfono, nombre, etc.). Dirección del perfil ya no se edita aquí.
 async def update_me(
     payload: UpdateProfileIn,
     current: CurrentUser = Depends(get_current_user_db),
@@ -137,6 +199,7 @@ async def update_me(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Profile address is deprecated. Use /addresses endpoints.",
         )
+
     user = await UpdateProfile(repo=repo).execute(
         user_id=current.id,
         phone=payload.phone,
@@ -148,6 +211,7 @@ async def update_me(
         address=None,
         profile_photo_url=payload.profile_photo_url,
     )
+
     result = user.__dict__.copy()
     if user.address:
         result["address"] = AddressOut(
@@ -160,6 +224,11 @@ async def update_me(
 
 
 @router.get("/geo/districts", response_model=list[DistrictOut])
+# [TECH]
+# Lists districts. Repo returns list[dict]; we map dict -> DistrictOut.
+#
+# [BUSINESS]
+# Lista distritos (por defecto solo activos) para selección en UI.
 async def list_geo_districts(
     active: bool = Query(default=True),
     repo: PostgresUserRepository = Depends(get_user_repo),
@@ -167,31 +236,36 @@ async def list_geo_districts(
     items = await repo.list_districts(active_only=active)
     return [
         DistrictOut(
-            id=i["id"] if isinstance(i, dict) else i.id,
-            name=i["name"] if isinstance(i, dict) else i.name,
-            province_name=(i.get("province_name") if isinstance(i, dict) else getattr(i, "province_name", None)),
-            department_name=(i.get("department_name") if isinstance(i, dict) else getattr(i, "department_name", None)),
-            active=i["active"] if isinstance(i, dict) else i.active,
+            id=i["id"],
+            name=i["name"],
+            province_name=i.get("province_name"),
+            department_name=i.get("department_name"),
+            active=i["active"],
         )
         for i in items
     ]
 
 
 @router.get("/geo/districts/{district_id}", response_model=DistrictOut)
+# [TECH]
+# Gets a district by id. Repo returns dict or None; we map to DistrictOut.
+#
+# [BUSINESS]
+# Devuelve un distrito específico.
 async def get_geo_district(
     district_id: str,
     repo: PostgresUserRepository = Depends(get_user_repo),
 ) -> DistrictOut:
     item = await repo.get_district(district_id)
     if not item:
-        raise HTTPException(status_code=404, detail="District not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="District not found")
 
     return DistrictOut(
-        id=item["id"] if isinstance(item, dict) else item.id,
-        name=item["name"] if isinstance(item, dict) else item.name,
-        province_name=(item.get("province_name") if isinstance(item, dict) else getattr(item, "province_name", None)),
-        department_name=(item.get("department_name") if isinstance(item, dict) else getattr(item, "department_name", None)),
-        active=item["active"] if isinstance(item, dict) else item.active,
+        id=item["id"],
+        name=item["name"],
+        province_name=item.get("province_name"),
+        department_name=item.get("department_name"),
+        active=item["active"],
     )
 
 
@@ -200,9 +274,15 @@ async def get_geo_district(
 # These endpoints require authentication and provide CRUD operations for user addresses.
 # They use the existing PostgresUserRepository methods for address management.
 #
+# Notes:
+# - We validate District existence + active on create/update (when district_id is provided).
+# - We DO NOT auto-use "default" for orders. Orders must receive address_id explicitly.
+# - Default is only a UX helper (suggested address in UI) and should not change constantly.
+#
 # [BUSINESS]
 # Gestión de libreta de direcciones del usuario.
 # Permite crear, listar, actualizar, eliminar y marcar dirección por defecto.
+# En el flujo de compra, el usuario elige una dirección y la orden recibe address_id explícito.
 
 @router.get("/addresses", response_model=list[AddressOutExtended])
 async def list_addresses(
@@ -218,11 +298,11 @@ async def list_addresses(
             address_line=addr["address_line"],
             lat=addr["lat"],
             lng=addr["lng"],
-            reference=addr["reference"],
-            building_number=addr["building_number"],
-            apartment_number=addr["apartment_number"],
-            label=addr["label"],
-            type=addr["type"],
+            reference=addr.get("reference"),
+            building_number=addr.get("building_number"),
+            apartment_number=addr.get("apartment_number"),
+            label=addr.get("label"),
+            type=addr.get("type"),
             is_default=addr["is_default"],
             created_at=addr["created_at"],
         )
@@ -241,34 +321,34 @@ async def create_address(
     district = await repo.get_district(payload.district_id)
     if not district:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="District not found")
-    if not district["active"]:
+    if district["active"] is not True:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District is not active")
-    
+
     # Determine if this is the first address BEFORE creating it
     existing_before = await repo.list_addresses_by_user(user_id=current.id)
 
     # Create address
     address = await repo.create_address(user_id=current.id, address_data=payload.dict())
 
-    # Set as default if it's the first address or explicitly requested
+    # Default is a UX helper. We only auto-default the very first address,
+    # or when the client explicitly requests is_default=true.
     if len(existing_before) == 0 or bool(payload.is_default):
         await repo.set_default_address(user_id=current.id, address_id=address["id"])
-        # Refresh to get updated default status (repo returns None if not found)
         refreshed = await repo.get_address_for_user(user_id=current.id, address_id=address["id"])
         if refreshed:
             address = refreshed
-    
+
     return AddressOutExtended(
         id=address["id"],
         district_id=address["district_id"],
         address_line=address["address_line"],
         lat=address["lat"],
         lng=address["lng"],
-        reference=address["reference"],
-        building_number=address["building_number"],
-        apartment_number=address["apartment_number"],
-        label=address["label"],
-        type=address["type"],
+        reference=address.get("reference"),
+        building_number=address.get("building_number"),
+        apartment_number=address.get("apartment_number"),
+        label=address.get("label"),
+        type=address.get("type"),
         is_default=address["is_default"],
         created_at=address["created_at"],
     )
@@ -284,18 +364,18 @@ async def get_address(
     address = await repo.get_address_for_user(user_id=current.id, address_id=address_id)
     if not address:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
-    
+
     return AddressOutExtended(
         id=address["id"],
         district_id=address["district_id"],
         address_line=address["address_line"],
         lat=address["lat"],
         lng=address["lng"],
-        reference=address["reference"],
-        building_number=address["building_number"],
-        apartment_number=address["apartment_number"],
-        label=address["label"],
-        type=address["type"],
+        reference=address.get("reference"),
+        building_number=address.get("building_number"),
+        apartment_number=address.get("apartment_number"),
+        label=address.get("label"),
+        type=address.get("type"),
         is_default=address["is_default"],
         created_at=address["created_at"],
     )
@@ -314,10 +394,10 @@ async def update_address(
         district = await repo.get_district(payload.district_id)
         if not district:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="District not found")
-        if not district["active"]:
+        if district["active"] is not True:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District is not active")
-    
-    # Update address
+
+    # Update address (ownership and deleted_at are validated inside repository)
     try:
         address = await repo.update_address(
             user_id=current.id,
@@ -328,18 +408,18 @@ async def update_address(
         if str(exc) == "address_not_found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found") from exc
         raise
-    
+
     return AddressOutExtended(
         id=address["id"],
         district_id=address["district_id"],
         address_line=address["address_line"],
         lat=address["lat"],
         lng=address["lng"],
-        reference=address["reference"],
-        building_number=address["building_number"],
-        apartment_number=address["apartment_number"],
-        label=address["label"],
-        type=address["type"],
+        reference=address.get("reference"),
+        building_number=address.get("building_number"),
+        apartment_number=address.get("apartment_number"),
+        label=address.get("label"),
+        type=address.get("type"),
         is_default=address["is_default"],
         created_at=address["created_at"],
     )
@@ -357,7 +437,7 @@ async def delete_address(
     except ValueError as exc:
         if str(exc) == "address_not_found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found") from exc
-        elif str(exc) == "no_addresses_left":
+        if str(exc) == "no_addresses_left":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot delete last address") from exc
         raise
 

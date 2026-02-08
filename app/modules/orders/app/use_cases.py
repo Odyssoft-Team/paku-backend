@@ -40,7 +40,7 @@ def _calc_total(items: list[Any]) -> float:
 class CreateOrderFromCart:
     orders_repo: PostgresOrderRepository
 
-    async def execute(self, *, user_id: UUID, cart_id: UUID) -> Order:
+    async def execute(self, *, user_id: UUID, cart_id: UUID, delivery_address_snapshot: dict) -> Order:
         from app.modules.cart.api.router import _repo as cart_repo
         from app.modules.cart.domain.cart import CartStatus
         from app.modules.notifications.api.router import _repo as notifications_repo
@@ -59,7 +59,7 @@ class CreateOrderFromCart:
             items_snapshot=items_snapshot,
             total_snapshot=total_snapshot,
             currency="PEN",
-            delivery_address_snapshot=None,
+            delivery_address_snapshot=delivery_address_snapshot,
         )
         created = await self.orders_repo.create_order(order)
 
