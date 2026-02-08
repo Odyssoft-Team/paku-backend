@@ -39,14 +39,5 @@ _booking_schema_ready = False
 
 
 async def ensure_booking_schema(engine: AsyncEngine) -> None:
-    global _booking_schema_ready
-    if _booking_schema_ready:
-        return
-
-    async with engine.begin() as conn:
-        def _create(sync_conn):
-            Base.metadata.create_all(sync_conn, tables=[HoldModel.__table__])
-
-        await conn.run_sync(_create)
-
-    _booking_schema_ready = True
+    # DDL gestionado por Alembic. No crear tablas aquí.
+    pass

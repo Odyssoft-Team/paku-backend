@@ -53,17 +53,5 @@ _pets_schema_ready = False
 
 
 async def ensure_pets_schema(engine: AsyncEngine) -> None:
-    global _pets_schema_ready
-    if _pets_schema_ready:
-        return
-
-    async with engine.begin() as conn:
-        def _create(sync_conn):
-            Base.metadata.create_all(
-                sync_conn,
-                tables=[PetModel.__table__, PetWeightEntryModel.__table__],
-            )
-
-        await conn.run_sync(_create)
-
-    _pets_schema_ready = True
+    # DDL gestionado por Alembic. No crear tablas aquí.
+    pass

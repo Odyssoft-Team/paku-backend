@@ -38,14 +38,5 @@ _orders_schema_ready = False
 
 
 async def ensure_orders_schema(engine: AsyncEngine) -> None:
-    global _orders_schema_ready
-    if _orders_schema_ready:
-        return
-
-    async with engine.begin() as conn:
-        def _create(sync_conn):
-            Base.metadata.create_all(sync_conn, tables=[OrderModel.__table__])
-
-        await conn.run_sync(_create)
-
-    _orders_schema_ready = True
+    # DDL gestionado por Alembic. No crear tablas aquí.
+    pass

@@ -84,11 +84,5 @@ _iam_schema_ready = False
 
 
 async def ensure_iam_schema(engine: AsyncEngine) -> None:
-    global _iam_schema_ready
-    if _iam_schema_ready:
-        return
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    _iam_schema_ready = True
+    # DDL gestionado por Alembic. No crear tablas aquí.
+    pass

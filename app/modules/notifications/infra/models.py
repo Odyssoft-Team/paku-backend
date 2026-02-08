@@ -32,5 +32,5 @@ class NotificationModel(Base):
 
 
 async def ensure_notifications_schema(engine: AsyncEngine) -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all, tables=[NotificationModel.__table__])
+    # DDL gestionado por Alembic. No crear tablas aquí.
+    pass

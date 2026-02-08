@@ -31,5 +31,5 @@ class DeviceTokenModel(Base):
 
 
 async def ensure_push_schema(engine: AsyncEngine) -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all, tables=[DeviceTokenModel.__table__])
+    # DDL gestionado por Alembic. No crear tablas aquí.
+    pass
