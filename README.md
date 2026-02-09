@@ -238,6 +238,70 @@ curl -H "Origin: exp://192.168.1.100:8081" http://localhost:8000/pets
 - Cleanup automático cada 5 minutos
 - Estados: `active`, `checked_out`, `expired`, `cancelled`
 
+---
+
+## 📍 Geo Module (Districts)
+
+### Overview
+The **Geo** module provides a catalog of geographic districts (distritos) for address validation.
+
+**⚠️ IMPORTANT:** Districts are currently **HARDCODED** (no database required).
+
+### How it works
+- Districts are defined in `app/modules/geo/infra/districts_data.py`
+- No need to populate `geo_districts` table
+- API endpoints work immediately without DB seed
+
+### Available Districts (MVP)
+```python
+# Currently supporting 3 districts in Lima:
+- Barranco (150104)
+- Jesús María (150113)
+- Lince (150116)
+```
+
+### API Endpoints
+```bash
+# List all active districts
+GET /geo/districts?active=true
+
+# Get specific district
+GET /geo/districts/150104
+```
+
+### Testing
+```bash
+# Test districts without database
+python test_hardcoded_districts.py
+```
+
+### Adding New Districts
+Edit `app/modules/geo/infra/districts_data.py`:
+```python
+DISTRICTS_DATA = [
+    # ... existing districts
+    {
+        "id": "150114",  # UBIGEO from INEI
+        "name": "La Molina",
+        "province_name": "Lima",
+        "department_name": "Lima",
+        "active": True,
+    },
+]
+```
+
+No migration needed! Restart server and new district is available.
+
+### Future: Database Migration
+When ready to use database:
+1. Populate `geo_districts` table (migration already exists)
+2. Update `repository.py` to query DB
+3. No changes needed in other modules (same interface)
+
+See full documentation: `app/modules/geo/README.md`
+
+---
+
 ## 🔄 Workflow Típico
 
 ### 1. Nuevo desarrollo local

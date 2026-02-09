@@ -1,58 +1,53 @@
 """Geo infrastructure repository.
 
-Postgres implementation of the DistrictRepository protocol.
+HARDCODED implementation using in-memory data.
+This allows the platform to work without populating geo_districts table.
+
+NOTE: For MVP, we use hardcoded districts from districts_data.py.
+In the future, this can be switched back to database queries or external API.
 """
 
 from typing import Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.geo.domain import DistrictRepository
-from app.modules.geo.infra.model import DistrictModel
+from app.modules.geo.infra.districts_data import get_all_districts, get_district_by_id
 
 
 class PostgresDistrictRepository:
-    """Postgres implementation for district catalog queries."""
+    """District repository using hardcoded data.
+    
+    NOTE: Despite the name 'Postgres', this now uses hardcoded data
+    to avoid dependency on populated geo_districts table.
+    The session parameter is kept for future compatibility.
+    """
     
     def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+        self._session = session  # Kept for future use, not used now
     
     async def list_districts(self, active_only: bool = True) -> list[dict]:
-        """List all districts, optionally filtering by active status."""
-        stmt = select(DistrictModel)
-        if active_only:
-            stmt = stmt.where(DistrictModel.active)
+        """List all districts from hardcoded data.
         
-        stmt = stmt.order_by(DistrictModel.name)
-        result = await self._session.execute(stmt)
-        models = result.scalars().all()
+        Args:
+            active_only: If True, return only active districts.
         
-        return [
-            {
-                "id": model.id,
-                "name": model.name,
-                "province_name": model.province_name,
-                "department_name": model.department_name,
-                "active": model.active,
-                "created_at": model.created_at,
-                "updated_at": model.updated_at,
-            }
-            for model in models
-        ]
+        Returns:
+            List of district dictionaries.
+        """
+        # Use hardcoded data instead of DB query
+        districts = get_all_districts(active_only=active_only)
+        # Sort by name for consistent ordering
+        return sorted(districts, key=lambda d: d["name"])
     
     async def get_district(self, id: str) -> Optional[dict]:
-        """Get a single district by its ID. Returns None if not found."""
-        model = await self._session.get(DistrictModel, id)
-        if model is None:
-            return None
+        """Get a single district by its ID from hardcoded data.
         
-        return {
-            "id": model.id,
-            "name": model.name,
-            "province_name": model.province_name,
-            "department_name": model.department_name,
-            "active": model.active,
-            "created_at": model.created_at,
-            "updated_at": model.updated_at,
-        }
+        Args:
+            id: The district UBIGEO code.
+        
+        Returns:
+            District dictionary or None if not found.
+        """
+        # Use hardcoded data instead of DB query
+        return get_district_by_id(id)
