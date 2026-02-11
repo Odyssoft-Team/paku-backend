@@ -306,7 +306,7 @@ async def get_address(
     )
 
 
-@router.put("/addresses/{address_id}", response_model=AddressOutExtended)
+@router.patch("/addresses/{address_id}", response_model=AddressOutExtended)
 async def update_address(
     address_id: UUID,
     payload: AddressUpdateIn,
@@ -314,7 +314,7 @@ async def update_address(
     repo: PostgresUserRepository = Depends(get_user_repo),
     geo: GeoService = Depends(get_geo_service),
 ) -> AddressOutExtended:
-    """Update a specific address."""
+    """Update a specific address (partial update)."""
     # Validate district if provided via Geo service
     if payload.district_id:
         if not await geo.validate_district_exists_and_active(payload.district_id):

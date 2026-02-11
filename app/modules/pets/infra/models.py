@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text, Boolean
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -30,6 +30,22 @@ class PetModel(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     photo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     weight_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Nuevos campos para detalles adicionales
+    sterilized: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    size: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    activity_level: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    coat_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    skin_sensitivity: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    bath_behavior: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    tolerates_drying: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    tolerates_nail_clipping: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    vaccines_up_to_date: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    grooming_frequency: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    receive_reminders: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    antiparasitic: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    antiparasitic_interval: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    special_shampoo: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)

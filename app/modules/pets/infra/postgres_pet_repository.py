@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.modules.pets.domain.pet import Pet, PetRepository, Sex, Species
+from app.modules.pets.domain.pet import Pet, PetRepository, Sex, Species, Size, ActivityLevel, CoatType, BathBehavior, AntiparasiticInterval
 from app.modules.pets.domain.weight_entry import PetWeightEntry
 
 
@@ -33,6 +33,20 @@ class PostgresPetRepository(PetRepository):
             weight_kg=pet.weight_kg,
             created_at=pet.created_at,
             updated_at=utcnow(),
+            sterilized=pet.sterilized,
+            size=(str(pet.size.value) if pet.size is not None else None),
+            activity_level=(str(pet.activity_level.value) if pet.activity_level is not None else None),
+            coat_type=(str(pet.coat_type.value) if pet.coat_type is not None else None),
+            skin_sensitivity=pet.skin_sensitivity,
+            bath_behavior=(str(pet.bath_behavior.value) if pet.bath_behavior is not None else None),
+            tolerates_drying=pet.tolerates_drying,
+            tolerates_nail_clipping=pet.tolerates_nail_clipping,
+            vaccines_up_to_date=pet.vaccines_up_to_date,
+            grooming_frequency=pet.grooming_frequency,
+            receive_reminders=pet.receive_reminders,
+            antiparasitic=pet.antiparasitic,
+            antiparasitic_interval=(str(pet.antiparasitic_interval.value) if pet.antiparasitic_interval is not None else None),
+            special_shampoo=pet.special_shampoo,
         )
         self._session.add(model)
         await self._session.commit()
@@ -65,6 +79,20 @@ class PostgresPetRepository(PetRepository):
             photo_url=model.photo_url,
             weight_kg=model.weight_kg,
             updated_at=model.updated_at,
+            sterilized=model.sterilized,
+            size=(Size(model.size) if model.size is not None else None),
+            activity_level=(ActivityLevel(model.activity_level) if model.activity_level is not None else None),
+            coat_type=(CoatType(model.coat_type) if model.coat_type is not None else None),
+            skin_sensitivity=model.skin_sensitivity,
+            bath_behavior=(BathBehavior(model.bath_behavior) if model.bath_behavior is not None else None),
+            tolerates_drying=model.tolerates_drying,
+            tolerates_nail_clipping=model.tolerates_nail_clipping,
+            vaccines_up_to_date=model.vaccines_up_to_date,
+            grooming_frequency=model.grooming_frequency,
+            receive_reminders=model.receive_reminders,
+            antiparasitic=model.antiparasitic,
+            antiparasitic_interval=(AntiparasiticInterval(model.antiparasitic_interval) if model.antiparasitic_interval is not None else None),
+            special_shampoo=model.special_shampoo,
         )
 
     async def update(self, pet: Pet) -> None:
@@ -85,6 +113,21 @@ class PostgresPetRepository(PetRepository):
         model.photo_url = pet.photo_url
         model.weight_kg = pet.weight_kg
         model.updated_at = utcnow()
+
+        model.sterilized = pet.sterilized
+        model.size = (str(pet.size.value) if pet.size is not None else None)
+        model.activity_level = (str(pet.activity_level.value) if pet.activity_level is not None else None)
+        model.coat_type = (str(pet.coat_type.value) if pet.coat_type is not None else None)
+        model.skin_sensitivity = pet.skin_sensitivity
+        model.bath_behavior = (str(pet.bath_behavior.value) if pet.bath_behavior is not None else None)
+        model.tolerates_drying = pet.tolerates_drying
+        model.tolerates_nail_clipping = pet.tolerates_nail_clipping
+        model.vaccines_up_to_date = pet.vaccines_up_to_date
+        model.grooming_frequency = pet.grooming_frequency
+        model.receive_reminders = pet.receive_reminders
+        model.antiparasitic = pet.antiparasitic
+        model.antiparasitic_interval = (str(pet.antiparasitic_interval.value) if pet.antiparasitic_interval is not None else None)
+        model.special_shampoo = pet.special_shampoo
 
         await self._session.commit()
 
@@ -159,6 +202,20 @@ class PostgresPetRepository(PetRepository):
                 photo_url=model.photo_url,
                 weight_kg=model.weight_kg,
                 updated_at=model.updated_at,
+                sterilized=model.sterilized,
+                size=(Size(model.size) if model.size is not None else None),
+                activity_level=(ActivityLevel(model.activity_level) if model.activity_level is not None else None),
+                coat_type=(CoatType(model.coat_type) if model.coat_type is not None else None),
+                skin_sensitivity=model.skin_sensitivity,
+                bath_behavior=(BathBehavior(model.bath_behavior) if model.bath_behavior is not None else None),
+                tolerates_drying=model.tolerates_drying,
+                tolerates_nail_clipping=model.tolerates_nail_clipping,
+                vaccines_up_to_date=model.vaccines_up_to_date,
+                grooming_frequency=model.grooming_frequency,
+                receive_reminders=model.receive_reminders,
+                antiparasitic=model.antiparasitic,
+                antiparasitic_interval=(AntiparasiticInterval(model.antiparasitic_interval) if model.antiparasitic_interval is not None else None),
+                special_shampoo=model.special_shampoo,
             )
             for model in models
         ]

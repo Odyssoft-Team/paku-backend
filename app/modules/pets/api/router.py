@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import CurrentUser, get_current_user
 from app.core.db import engine, get_async_session
-from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, WeightEntryIn, WeightEntryOut
-from app.modules.pets.app.use_cases import CreatePet, GetPet, GetWeightHistory, ListPets, RecordWeight, UpdatePet
+from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, WeightEntryIn, WeightEntryOut, PatchPetOptionalIn
+from app.modules.pets.app.use_cases import CreatePet, GetPet, GetWeightHistory, ListPets, RecordWeight, UpdatePet, PatchPetOptional
 from app.modules.pets.domain.pet import PetRepository
 from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 
@@ -31,6 +31,36 @@ async def create_pet(
         sex=payload.sex,
         birth_date=payload.birth_date,
         notes=payload.notes,
+        sterilized=payload.sterilized,
+        size=payload.size,
+        weight_kg=payload.weight_kg,
+        activity_level=payload.activity_level,
+        coat_type=payload.coat_type,
+        skin_sensitivity=payload.skin_sensitivity,
+        bath_behavior=payload.bath_behavior,
+        tolerates_drying=payload.tolerates_drying,
+        tolerates_nail_clipping=payload.tolerates_nail_clipping,
+        vaccines_up_to_date=payload.vaccines_up_to_date,
+        grooming_frequency=payload.grooming_frequency,
+        receive_reminders=payload.receive_reminders,
+        antiparasitic=payload.antiparasitic,
+        antiparasitic_interval=payload.antiparasitic_interval,
+        special_shampoo=payload.special_shampoo,
+    )
+    return PetOut(**pet.__dict__)
+
+
+@router.patch("/pets/{id}/optional", response_model=PetOut)
+async def patch_pet_optional(
+    id: UUID,
+    payload: PatchPetOptionalIn,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PetRepository = Depends(get_pet_repo),
+) -> PetOut:
+    pet = await PatchPetOptional(repo=repo).execute(
+        pet_id=id,
+        owner_id=current.id,
+        **{k: v for k, v in payload.dict().items() if v is not None},
     )
     return PetOut(**pet.__dict__)
 

@@ -56,6 +56,23 @@ def upgrade() -> None:
         sa.Column('notes', sa.Text(), nullable=True),
         sa.Column('photo_url', sa.String(length=500), nullable=True),
         sa.Column('weight_kg', sa.Float(), nullable=True),
+
+        # Nuevos campos
+        sa.Column('sterilized', sa.Boolean(), nullable=True),
+        sa.Column('size', sa.String(length=20), nullable=True),
+        sa.Column('activity_level', sa.String(length=20), nullable=True),
+        sa.Column('coat_type', sa.String(length=20), nullable=True),
+        sa.Column('skin_sensitivity', sa.Boolean(), nullable=True),
+        sa.Column('bath_behavior', sa.String(length=20), nullable=True),
+        sa.Column('tolerates_drying', sa.Boolean(), nullable=True),
+        sa.Column('tolerates_nail_clipping', sa.Boolean(), nullable=True),
+        sa.Column('vaccines_up_to_date', sa.Boolean(), nullable=True),
+        sa.Column('grooming_frequency', sa.String(length=100), nullable=True),
+        sa.Column('receive_reminders', sa.Boolean(), nullable=True),
+        sa.Column('antiparasitic', sa.Boolean(), nullable=True),
+        sa.Column('antiparasitic_interval', sa.String(length=20), nullable=True),
+        sa.Column('special_shampoo', sa.Boolean(), nullable=True),
+
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint('id')

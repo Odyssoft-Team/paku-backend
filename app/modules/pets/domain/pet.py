@@ -19,6 +19,35 @@ class Sex(str, Enum):
     female = "female"
 
 
+class Size(str, Enum):
+    small = "small"
+    medium = "medium"
+    large = "large"
+
+
+class ActivityLevel(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class CoatType(str, Enum):
+    short = "short"
+    medium = "medium"
+    long = "long"
+
+
+class BathBehavior(str, Enum):
+    calm = "calm"
+    fearful = "fearful"
+    anxious = "anxious"
+
+
+class AntiparasiticInterval(str, Enum):
+    monthly = "monthly"
+    trimestral = "trimestral"
+
+
 @dataclass(frozen=True)
 class Pet:
     id: UUID
@@ -34,6 +63,22 @@ class Pet:
     weight_kg: Optional[float] = None
     updated_at: Optional[datetime] = None
 
+    # Nuevos campos
+    sterilized: Optional[bool] = None
+    size: Optional[Size] = None
+    activity_level: Optional[ActivityLevel] = None
+    coat_type: Optional[CoatType] = None
+    skin_sensitivity: Optional[bool] = None
+    bath_behavior: Optional[BathBehavior] = None
+    tolerates_drying: Optional[bool] = None
+    tolerates_nail_clipping: Optional[bool] = None
+    vaccines_up_to_date: Optional[bool] = None
+    grooming_frequency: Optional[str] = None
+    receive_reminders: Optional[bool] = None
+    antiparasitic: Optional[bool] = None
+    antiparasitic_interval: Optional[AntiparasiticInterval] = None
+    special_shampoo: Optional[bool] = None
+
     @staticmethod
     def new(
         *,
@@ -46,6 +91,20 @@ class Pet:
         notes: Optional[str] = None,
         photo_url: Optional[str] = None,
         weight_kg: Optional[float] = None,
+        sterilized: Optional[bool] = None,
+        size: Optional[Size] = None,
+        activity_level: Optional[ActivityLevel] = None,
+        coat_type: Optional[CoatType] = None,
+        skin_sensitivity: Optional[bool] = None,
+        bath_behavior: Optional[BathBehavior] = None,
+        tolerates_drying: Optional[bool] = None,
+        tolerates_nail_clipping: Optional[bool] = None,
+        vaccines_up_to_date: Optional[bool] = None,
+        grooming_frequency: Optional[str] = None,
+        receive_reminders: Optional[bool] = None,
+        antiparasitic: Optional[bool] = None,
+        antiparasitic_interval: Optional[AntiparasiticInterval] = None,
+        special_shampoo: Optional[bool] = None,
     ) -> "Pet":
         now = datetime.now(timezone.utc)
         return Pet(
@@ -61,6 +120,20 @@ class Pet:
             photo_url=photo_url,
             weight_kg=weight_kg,
             updated_at=now,
+            sterilized=sterilized,
+            size=size,
+            activity_level=activity_level,
+            coat_type=coat_type,
+            skin_sensitivity=skin_sensitivity,
+            bath_behavior=bath_behavior,
+            tolerates_drying=tolerates_drying,
+            tolerates_nail_clipping=tolerates_nail_clipping,
+            vaccines_up_to_date=vaccines_up_to_date,
+            grooming_frequency=grooming_frequency,
+            receive_reminders=receive_reminders,
+            antiparasitic=antiparasitic,
+            antiparasitic_interval=antiparasitic_interval,
+            special_shampoo=special_shampoo,
         )
 
 
