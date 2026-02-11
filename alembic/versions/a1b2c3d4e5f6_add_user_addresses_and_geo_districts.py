@@ -1,4 +1,4 @@
-"""add_user_addresses_and_geo_districts
+"""add_user_addresses
 
 Revision ID: a1b2c3d4e5f6
 Revises: eae7270101c6
@@ -17,21 +17,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Create geo_districts table
-    op.create_table(
-        'geo_districts',
-        sa.Column('id', sa.String(length=20), nullable=False),
-        sa.Column('name', sa.String(length=100), nullable=False),
-        sa.Column('province_name', sa.String(length=100), nullable=True),
-        sa.Column('department_name', sa.String(length=100), nullable=True),
-        sa.Column('active', sa.Boolean(), nullable=False, default=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_geo_districts_name'), 'geo_districts', ['name'], unique=False)
-    op.create_index(op.f('ix_geo_districts_active'), 'geo_districts', ['active'], unique=False)
-
     # Create user_addresses table
     op.create_table(
         'user_addresses',
@@ -50,11 +35,10 @@ def upgrade() -> None:
         sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.ForeignKeyConstraint(['district_id'], ['geo_districts.id'], ),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
-    
+
     # Create indexes for user_addresses
     op.create_index(op.f('ix_user_addresses_user_id'), 'user_addresses', ['user_id'], unique=False)
     op.create_index(op.f('ix_user_addresses_district_id'), 'user_addresses', ['district_id'], unique=False)
@@ -68,9 +52,6 @@ def downgrade() -> None:
     op.drop_index('ix_user_addresses_user_default', table_name='user_addresses')
     op.drop_index(op.f('ix_user_addresses_district_id'), table_name='user_addresses')
     op.drop_index(op.f('ix_user_addresses_user_id'), table_name='user_addresses')
-    
+
     # Drop tables
     op.drop_table('user_addresses')
-    op.drop_index(op.f('ix_geo_districts_active'), table_name='geo_districts')
-    op.drop_index(op.f('ix_geo_districts_name'), table_name='geo_districts')
-    op.drop_table('geo_districts')
