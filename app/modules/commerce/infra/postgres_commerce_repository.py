@@ -51,7 +51,7 @@ class PostgresCommerceRepository:
         addon_dog_nails = UUID("22222222-2222-2222-2222-222222222222")
         base_cat_groom = UUID("33333333-3333-3333-3333-333333333333")
         addon_dog_teeth = UUID("44444444-4444-4444-4444-444444444444")
-        base_dog_haircut = UUID("55555555-5555-5555-5555-555555555555")
+        addon_dog_haircut = UUID("55555555-5555-5555-5555-555555555555")
 
         services = [
             ServiceModel(
@@ -99,12 +99,12 @@ class PostgresCommerceRepository:
                 updated_at=now,
             ),
             ServiceModel(
-                id=base_dog_haircut,
-                name="Corte de pelo (perro)",
-                type=ServiceType.base.value,
+                id=addon_dog_haircut,
+                name="Corte de pelo",
+                type=ServiceType.addon.value,
                 species=Species.dog.value,
-                allowed_breeds=None,
-                requires=None,
+                allowed_breeds=["husky", "labrador"],
+                requires=[str(base_dog_bath)],
                 is_active=True,
                 created_at=now,
                 updated_at=now,
@@ -141,8 +141,7 @@ class PostgresCommerceRepository:
             _rule(service_id=base_dog_bath, species=Species.dog, breed_category="mestizo", weight_min=25, weight_max=None, price=90),
             _rule(service_id=base_dog_bath, species=Species.dog, breed_category="official", weight_min=0, weight_max=10, price=60),
             _rule(service_id=base_cat_groom, species=Species.cat, breed_category="mestizo", weight_min=0, weight_max=10, price=45),
-            _rule(service_id=base_dog_haircut, species=Species.dog, breed_category="mestizo", weight_min=0, weight_max=10, price=55),
-            _rule(service_id=base_dog_haircut, species=Species.dog, breed_category="mestizo", weight_min=10, weight_max=25, price=80),
+            _rule(service_id=addon_dog_haircut, species=Species.dog, breed_category="mestizo", weight_min=0, weight_max=None, price=55),
             _rule(service_id=addon_dog_nails, species=Species.dog, breed_category="mestizo", weight_min=0, weight_max=None, price=15),
             _rule(service_id=addon_dog_teeth, species=Species.dog, breed_category="mestizo", weight_min=0, weight_max=None, price=25),
         ]

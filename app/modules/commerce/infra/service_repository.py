@@ -29,27 +29,56 @@ _BASE_DOG_BATH = UUID("11111111-1111-1111-1111-111111111111")
 _ADDON_DOG_NAILS = UUID("22222222-2222-2222-2222-222222222222")
 _BASE_CAT_GROOM = UUID("33333333-3333-3333-3333-333333333333")
 _ADDON_DOG_TEETH = UUID("44444444-4444-4444-4444-444444444444")
+_ADDON_DOG_HAIRCUT = UUID("55555555-5555-5555-5555-555555555555")
+
 
 _default_repo = InMemoryServiceRepository(
     services=[
+        # BASE DOG
         Service(
             id=_BASE_DOG_BATH,
-            name="Bano base (perro)",
+            name="Baño base (perro)",
             type=ServiceType.base,
             species=Species.dog,
             allowed_breeds=None,
             requires=None,
             is_active=True,
         ),
+
+        # ADDON 1 - Limpieza dental (todas las razas)
+        Service(
+            id=_ADDON_DOG_TEETH,
+            name="Limpieza dental",
+            type=ServiceType.addon,
+            species=Species.dog,
+            allowed_breeds=None,
+            requires=[_BASE_DOG_BATH],
+            is_active=True,
+        ),
+
+        # ADDON 2 - Corte de uñas (todas las razas)
         Service(
             id=_ADDON_DOG_NAILS,
-            name="Corte de unas (addon)",
+            name="Corte de uñas",
+            type=ServiceType.addon,
+            species=Species.dog,
+            allowed_breeds=None,
+            requires=[_BASE_DOG_BATH],
+            is_active=True,
+        ),
+
+        # ADDON 3 - Corte de pelo (solo husky y labrador)
+        Service(
+            id=_ADDON_DOG_HAIRCUT,
+            name="Corte de pelo",
             type=ServiceType.addon,
             species=Species.dog,
             allowed_breeds=["husky", "labrador"],
             requires=[_BASE_DOG_BATH],
             is_active=True,
         ),
+
+        # BASE CAT
         Service(
             id=_BASE_CAT_GROOM,
             name="Aseo base (gato)",
@@ -57,15 +86,6 @@ _default_repo = InMemoryServiceRepository(
             species=Species.cat,
             allowed_breeds=None,
             requires=None,
-            is_active=True,
-        ),
-        Service(
-            id=_ADDON_DOG_TEETH,
-            name="Limpieza dental (addon)",
-            type=ServiceType.addon,
-            species=Species.dog,
-            allowed_breeds=None,
-            requires=[_BASE_DOG_BATH],
             is_active=True,
         ),
     ]
