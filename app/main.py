@@ -17,6 +17,7 @@ from app.modules.orders.api.router import router as orders_router
 from app.modules.pets.api.router import router as pets_router
 from app.modules.push.api.router import router as push_router
 from app.modules.wallet.api.router import router as wallet_router
+from app.modules.catalog.api.router import router as catalog_router
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ app.add_middleware(
 )
 
 app.include_router(geo_router, prefix="/geo")
+app.include_router(catalog_router)
 app.include_router(iam_router)
 app.include_router(pets_router)
 app.include_router(commerce_router)
