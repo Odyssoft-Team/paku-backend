@@ -2,11 +2,12 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Union
 from uuid import UUID
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.settings import settings
 
@@ -45,18 +46,71 @@ def decode_token(token: str) -> Dict[str, Any]:
     try:
         h, p, s = token.split(".")
     except ValueError as exc:
+        _log_auth_failure(
+            failure_reason="malformed_token",
+            extra={}
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
     signing_input = f"{h}.{p}".encode("utf-8")
     expected = _sign(signing_input)
     if not hmac.compare_digest(expected, s):
+        # Try to extract user_id if possible
+        user_id = None
+        try:
+            payload = json.loads(_b64url_decode(p).decode("utf-8"))
+            user_id = payload.get("sub")
+        except Exception:
+            pass
+        _log_auth_failure(
+            failure_reason="invalid_signature",
+            extra={"user_id": user_id}
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    payload = json.loads(_b64url_decode(p).decode("utf-8"))
+    try:
+        payload = json.loads(_b64url_decode(p).decode("utf-8"))
+    except Exception as exc:
+        _log_auth_failure(
+            failure_reason="malformed_token",
+            extra={}
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+
     exp = payload.get("exp")
     if exp is not None and datetime.now(timezone.utc).timestamp() > float(exp):
+        _log_auth_failure(
+            failure_reason="expired_token",
+            extra={"user_id": payload.get("sub")}
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
     return payload
+
+
+def _log_auth_failure(failure_reason: str, extra: dict):
+    import inspect
+    from fastapi import Request
+    import sys
+    # Try to get request context if available
+    request = None
+    for frame_info in inspect.stack():
+        frame = frame_info.frame
+        if "request" in frame.f_locals and isinstance(frame.f_locals["request"], Request):
+            request = frame.f_locals["request"]
+            break
+    request_path = request.url.path if request else None
+    http_method = request.method if request else None
+    client_ip = request.client.host if request and request.client else None
+    user_id = extra.get("user_id") if extra else None
+    log_data = {
+        "failure_reason": failure_reason,
+        "request_path": request_path,
+        "http_method": http_method,
+        "client_ip": client_ip,
+        "user_id": user_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    logging.warning(f"AUTH FAILURE: {log_data}")
 
 def create_access_token(
     user: Optional[Any] = None,
@@ -99,15 +153,38 @@ def create_refresh_token(user: Any) -> str:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request = None,
 ) -> CurrentUser:
     token = credentials.credentials
-    data = decode_token(token)
+    try:
+        data = decode_token(token)
+    except HTTPException as exc:
+        # Already logged in decode_token
+        raise
     if data.get("type") != "access":
+        _log_auth_failure(
+            failure_reason="invalid_token",
+            extra={
+                "request_path": request.url.path if request else None,
+                "http_method": request.method if request else None,
+                "client_ip": request.client.host if request and request.client else None,
+                "user_id": data.get("sub") if data else None,
+            },
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     try:
         user_id = UUID(str(data.get("sub")))
     except Exception as exc:
+        _log_auth_failure(
+            failure_reason="malformed_token",
+            extra={
+                "request_path": request.url.path if request else None,
+                "http_method": request.method if request else None,
+                "client_ip": request.client.host if request and request.client else None,
+                "user_id": data.get("sub") if data else None,
+            },
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
     return CurrentUser(
