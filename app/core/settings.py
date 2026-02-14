@@ -18,5 +18,13 @@ class Settings:
     # CORS
     CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "*").split(",")
 
+    # GCS
+    GCS_BUCKET: Optional[str] = os.getenv("GCS_BUCKET")
+    _GCS_SIGNED_URL_TTL_RAW: str = os.getenv("GCS_SIGNED_URL_TTL_SECONDS", "300")
+    try:
+        GCS_SIGNED_URL_TTL_SECONDS: int = int(_GCS_SIGNED_URL_TTL_RAW)
+    except ValueError:
+        GCS_SIGNED_URL_TTL_SECONDS: int = 300
+
 
 settings = Settings()
