@@ -16,6 +16,22 @@ from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 
 router = APIRouter(tags=["booking"])
 
+# ========================================
+# SERVICE IDs PARA TESTING (FRONTEND)
+# ========================================
+# Usar estos UUIDs hardcoded para probar availability y holds en desarrollo.
+# Estos IDs corresponden a los servicios seed en postgres_commerce_repository.py
+#
+# BASE_DOG_BATH:    11111111-1111-1111-1111-111111111111  (Baño base perro)
+# BASE_CAT_GROOM:   33333333-3333-3333-3333-333333333333  (Aseo base gato)
+# ADDON_DOG_NAILS:  22222222-2222-2222-2222-222222222222  (Corte de uñas)
+# ADDON_DOG_TEETH:  44444444-4444-4444-4444-444444444444  (Limpieza dental)
+# ADDON_DOG_HAIRCUT: 55555555-5555-5555-5555-555555555555 (Corte de pelo)
+#
+# Ejemplo de uso en frontend:
+# GET /availability?service_id=11111111-1111-1111-1111-111111111111
+# ========================================
+
 
 def get_hold_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresHoldRepository:
     return PostgresHoldRepository(session=session, engine=engine)
@@ -58,11 +74,24 @@ async def cancel(id: UUID, repo: PostgresHoldRepository = Depends(get_hold_repo)
 
 @router.get("/availability", response_model=list[AvailabilityOut])
 async def availability(
-    service_id: UUID = Query(...),
-    date_from: Optional[date] = Query(None),
-    days: int = Query(7, ge=1, le=30),
+    service_id: UUID = Query(..., description="Use test ID: 11111111-1111-1111-1111-111111111111"),
+    date_from: Optional[date] = Query(None, description="Start date (default: today)"),
+    days: int = Query(7, ge=1, le=30, description="Number of days to return (1-30)"),
     _: CurrentUser = Depends(get_current_user),
 ) -> list[AvailabilityOut]:
+    """Get availability calendar for a service (MOCK implementation for testing).
+    
+    Returns mock availability data. Capacity is hardcoded to 20 slots per day.
+    
+    **Testing with frontend:**
+    - Use `service_id=11111111-1111-1111-1111-111111111111` (Base Dog Bath)
+    - Or `service_id=33333333-3333-3333-3333-333333333333` (Base Cat Groom)
+    
+    **Example:**
+    ```
+    GET /availability?service_id=11111111-1111-1111-1111-111111111111&date_from=2026-02-20&days=7
+    ```
+    """
     capacity = 20
     start = date_from or date.today()
     out: list[AvailabilityOut] = []
