@@ -20,7 +20,7 @@ class CreateNotification:
         body: str,
         data: Optional[dict[str, Any]] = None,
     ) -> Notification:
-        n = self.repo.create_notification(user_id=user_id, type=type, title=title, body=body, data=data)
+        n = await self.repo.create_notification(user_id=user_id, type=type, title=title, body=body, data=data)
 
         try:
             from app.core.db import engine, get_async_session
@@ -30,7 +30,7 @@ class CreateNotification:
 
             async with get_async_session() as session:
                 devices_repo = PostgresDeviceTokenRepository(session=session, engine=engine)
-                tokens = devices_repo.get_active_tokens(user_id)
+                tokens = await devices_repo.get_active_tokens(user_id)
                 if tokens:
                     MockPushProvider().send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
         except Exception:
@@ -44,7 +44,7 @@ class ListNotifications:
     repo: NotificationRepository
 
     async def execute(self, *, user_id: UUID, unread_only: bool = False, limit: int = 20) -> list[Notification]:
-        return self.repo.list_notifications(user_id=user_id, unread_only=unread_only, limit=limit)
+        return await self.repo.list_notifications(user_id=user_id, unread_only=unread_only, limit=limit)
 
 
 @dataclass
@@ -53,7 +53,7 @@ class MarkRead:
 
     async def execute(self, *, user_id: UUID, notification_id: UUID) -> Notification:
         try:
-            return self.repo.mark_read(user_id=user_id, notification_id=notification_id)
+            return await self.repo.mark_read(user_id=user_id, notification_id=notification_id)
         except ValueError as exc:
             if str(exc) == "notification_not_found":
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found") from exc
@@ -65,4 +65,4 @@ class UnreadCount:
     repo: NotificationRepository
 
     async def execute(self, *, user_id: UUID) -> int:
-        return self.repo.unread_count(user_id=user_id)
+        return await self.repo.unread_count(user_id=user_id)

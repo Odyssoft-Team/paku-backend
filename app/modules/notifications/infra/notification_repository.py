@@ -12,7 +12,7 @@ class InMemoryNotificationRepository(NotificationRepository):
         self._by_id: Dict[UUID, Notification] = {}
         self._by_user: Dict[UUID, List[UUID]] = {}
 
-    def create_notification(
+    async def create_notification(
         self,
         user_id: UUID,
         type: str,
@@ -28,7 +28,7 @@ class InMemoryNotificationRepository(NotificationRepository):
         self._by_user[user_id].append(n.id)
         return n
 
-    def list_notifications(self, user_id: UUID, *, unread_only: bool = False, limit: int = 20) -> list[Notification]:
+    async def list_notifications(self, user_id: UUID, *, unread_only: bool = False, limit: int = 20) -> list[Notification]:
         ids = self._by_user.get(user_id, [])
         items: List[Notification] = []
         for nid in ids:
@@ -42,7 +42,7 @@ class InMemoryNotificationRepository(NotificationRepository):
         items.sort(key=lambda x: x.created_at, reverse=True)
         return items[: max(0, int(limit))]
 
-    def mark_read(self, user_id: UUID, notification_id: UUID) -> Notification:
+    async def mark_read(self, user_id: UUID, notification_id: UUID) -> Notification:
         n = self._by_id.get(notification_id)
         if not n or n.user_id != user_id:
             raise ValueError("notification_not_found")
@@ -63,7 +63,7 @@ class InMemoryNotificationRepository(NotificationRepository):
         self._by_id[notification_id] = updated
         return updated
 
-    def unread_count(self, user_id: UUID) -> int:
+    async def unread_count(self, user_id: UUID) -> int:
         ids = self._by_user.get(user_id, [])
         count = 0
         for nid in ids:

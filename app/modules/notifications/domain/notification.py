@@ -55,7 +55,7 @@ class Notification:
 # [NATURAL/BUSINESS]
 # Guarda y gestiona notificaciones de usuarios.
 class NotificationRepository(Protocol):
-    def create_notification(
+    async def create_notification(
         self,
         user_id: UUID,
         type: str,
@@ -65,11 +65,11 @@ class NotificationRepository(Protocol):
     ) -> Notification:
         ...
 
-    def list_notifications(self, user_id: UUID, *, unread_only: bool = False, limit: int = 20) -> list[Notification]:
+    async def list_notifications(self, user_id: UUID, *, unread_only: bool = False, limit: int = 20) -> list[Notification]:
         ...
 
-    def mark_read(self, user_id: UUID, notification_id: UUID) -> Notification:
+    async def mark_read(self, user_id: UUID, notification_id: UUID) -> Notification:
         ...
 
-    def unread_count(self, user_id: UUID) -> int:
+    async def unread_count(self, user_id: UUID) -> int:
         ...
