@@ -43,7 +43,8 @@ class CreateOrderFromCart:
     async def execute(self, *, user_id: UUID, cart_id: UUID, delivery_address_snapshot: dict) -> Order:
         from app.modules.cart.api.router import _repo as cart_repo
         from app.modules.cart.domain.cart import CartStatus
-        from app.modules.notifications.api.router import _repo as notifications_repo
+        from app.core.db import engine
+        from app.modules.notifications.infra.postgres_notification_repository import PostgresNotificationRepository
         from app.modules.notifications.app.use_cases import CreateNotification
 
         cart = cart_repo.get_cart(cart_id=cart_id, user_id=user_id)
@@ -63,6 +64,8 @@ class CreateOrderFromCart:
         )
         created = await self.orders_repo.create_order(order)
 
+        # Crear notificación usando el mismo session que orders_repo
+        notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
         await CreateNotification(repo=notifications_repo).execute(
             user_id=user_id,
             type="order_status",
@@ -110,7 +113,8 @@ class UpdateOrderStatus:
     orders_repo: PostgresOrderRepository
 
     async def execute(self, *, order_id: UUID, status: OrderStatus) -> Order:
-        from app.modules.notifications.api.router import _repo as notifications_repo
+        from app.core.db import engine
+        from app.modules.notifications.infra.postgres_notification_repository import PostgresNotificationRepository
         from app.modules.notifications.app.use_cases import CreateNotification
 
         try:
@@ -130,6 +134,9 @@ class UpdateOrderStatus:
             raise
 
         title, body = _status_message(updated.status.value)
+        
+        # Crear notificación usando el mismo session que orders_repo
+        notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
         await CreateNotification(repo=notifications_repo).execute(
             user_id=updated.user_id,
             type="order_status",
@@ -179,10 +186,14 @@ class PatchOrder:
             raise
 
         # Crear notificación para el usuario
-        from app.modules.notifications.api.router import _repo as notifications_repo
+        from app.core.db import engine
+        from app.modules.notifications.infra.postgres_notification_repository import PostgresNotificationRepository
         from app.modules.notifications.app.use_cases import CreateNotification
 
         title, body = _status_message(updated.status.value)
+        
+        # Crear notificación usando el mismo session que orders_repo
+        notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
         await CreateNotification(repo=notifications_repo).execute(
             user_id=updated.user_id,
             type="order_status",
