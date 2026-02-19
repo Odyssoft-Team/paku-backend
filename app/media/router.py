@@ -4,15 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import CurrentUser, get_current_user
-
-# IMPORTANTE:
-# Cambia este import por el dependency REAL que tu proyecto usa para obtener AsyncSession.
-# Ejemplos comunes:
-# - from app.core.db import get_session, engine
-# - from app.core.db import get_db, engine
-# - from app.core.db import get_async_session, engine
-from app.core.db import engine, get_session  # <-- AJUSTA ESTO
-
+from app.core.db import engine, get_async_session
 from app.media.gcs import (
     ALLOWED_CONTENT_TYPES,
     build_object_name,
@@ -22,15 +14,14 @@ from app.media.gcs import (
     validate_object_name,
 )
 from app.media.schemas import (
+    MediaEntityType,
     SignedReadRequest,
     SignedReadResponse,
     SignedUploadRequest,
     SignedUploadResponse,
-    MediaEntityType,
     ConfirmProfilePhotoRequest,
     ConfirmProfilePhotoResponse,
 )
-
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
 
 router = APIRouter(tags=["media"])
@@ -41,6 +32,8 @@ async def create_signed_upload(
     payload: SignedUploadRequest,
     current: CurrentUser = Depends(get_current_user),
 ) -> SignedUploadResponse:
+    # (Si ya cambiaste schemas.py a Literal, esto casi nunca fallará,
+    #  pero lo dejo por seguridad y claridad.)
     if payload.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported content_type")
 
@@ -81,7 +74,7 @@ async def create_signed_read(
     current: CurrentUser = Depends(get_current_user),
 ) -> SignedReadResponse:
     # TODO: validate object_name ownership (user/pet) against current_user
-    # Recomendado futuro: leer object_name desde BD por user/pet, no aceptar string libre
+    # Recomendación futura: NO aceptar object_name libre; leerlo desde BD (user/pet)
 
     try:
         validate_object_name(payload.object_name)
@@ -105,35 +98,41 @@ async def create_signed_read(
 async def confirm_profile_photo(
     payload: ConfirmProfilePhotoRequest,
     current: CurrentUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),  # <-- AJUSTA si tu dependency se llama distinto
+    session: AsyncSession = Depends(get_async_session),
 ) -> ConfirmProfilePhotoResponse:
     """
-    Confirma una foto ya subida a GCS y la asocia a la entidad (MVP: solo user).
-    Guarda object_name en users.profile_photo_url y retorna un read_url firmado.
-    """
+    Confirma una foto ya subida a GCS y la asocia a la entidad.
 
+    MVP:
+    - user: guarda object_name en users.profile_photo_url
+    - pet: pendiente (ownership + persistencia en tabla pets)
+    """
+    # Validación básica de object_name
     try:
         validate_object_name(payload.object_name)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    # Ownership mínimo (user)
+    # Ownership mínimo + persistencia
     if payload.entity_type == MediaEntityType.user:
-        # Nota: current.id puede ser UUID o string; normalizamos
+        # Normalizar current.id (puede ser UUID o string según tu auth)
         try:
             current_id = UUID(str(current.id))
-        except Exception:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid current user id")
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid current user id") from exc
 
         if current_id != payload.entity_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot set profile photo for another user")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot set profile photo for another user",
+            )
 
         repo = PostgresUserRepository(session=session, engine=engine)
         user = await repo.get_by_id(payload.entity_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-        # Guardamos el object_name (aunque el campo se llame profile_photo_url)
+        # Guardamos object_name (aunque el campo se llame profile_photo_url)
         user.profile_photo_url = payload.object_name
         await repo.update(user)
 
@@ -143,6 +142,7 @@ async def confirm_profile_photo(
         # - guardar object_name en el modelo Pet
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Pet profile photo not implemented yet")
 
+    # Devolver read_url listo para mostrar en frontend
     expires_in = get_ttl_seconds()
     try:
         read_url = generate_signed_read_url(payload.object_name, expires_in=expires_in)
