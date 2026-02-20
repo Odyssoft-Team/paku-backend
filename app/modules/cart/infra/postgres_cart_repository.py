@@ -190,6 +190,84 @@ class PostgresCartRepository(CartRepository):
 
         return item
 
+    async def add_items(self, cart_id: UUID, user_id: UUID, items: list[CartItem]) -> list[CartItem]:
+        """
+        Agrega múltiples items al carrito de una vez.
+        """
+        cart = await self.get_cart(cart_id, user_id)
+        if cart.status != CartStatus.active:
+            raise ValueError("cart_not_active")
+
+        from app.modules.cart.infra.models import CartItemModel
+
+        models = []
+        for item in items:
+            if item.cart_id != cart_id:
+                raise ValueError("invalid_cart_item")
+
+            model = CartItemModel(
+                id=item.id,
+                cart_id=item.cart_id,
+                kind=item.kind,
+                ref_id=str(item.ref_id),
+                name=item.name,
+                qty=item.qty,
+                unit_price=item.unit_price,
+                meta=item.meta,
+                created_at=datetime.now(timezone.utc),
+            )
+            models.append(model)
+
+        self._session.add_all(models)
+        await self._session.flush()
+
+        # Update cart updated_at
+        await self._touch_cart(cart_id)
+
+        return items
+
+    async def replace_all_items(self, cart_id: UUID, user_id: UUID, items: list[CartItem]) -> list[CartItem]:
+        """
+        Reemplaza todos los items del carrito.
+        Útil para cambiar de servicio base.
+        """
+        cart = await self.get_cart(cart_id, user_id)
+        if cart.status != CartStatus.active:
+            raise ValueError("cart_not_active")
+
+        from app.modules.cart.infra.models import CartItemModel
+
+        # Eliminar todos los items actuales
+        stmt = delete(CartItemModel).where(CartItemModel.cart_id == cart_id)
+        await self._session.execute(stmt)
+
+        # Agregar los nuevos items
+        models = []
+        for item in items:
+            if item.cart_id != cart_id:
+                raise ValueError("invalid_cart_item")
+
+            model = CartItemModel(
+                id=item.id,
+                cart_id=item.cart_id,
+                kind=item.kind,
+                ref_id=str(item.ref_id),
+                name=item.name,
+                qty=item.qty,
+                unit_price=item.unit_price,
+                meta=item.meta,
+                created_at=datetime.now(timezone.utc),
+            )
+            models.append(model)
+
+        self._session.add_all(models)
+        await self._session.flush()
+
+        # Update cart updated_at
+        await self._touch_cart(cart_id)
+
+        return items
+
     async def remove_item(self, cart_id: UUID, user_id: UUID, item_id: UUID) -> None:
         cart = await self.get_cart(cart_id, user_id)
         if cart.status != CartStatus.active:

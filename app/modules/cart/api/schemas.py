@@ -36,6 +36,15 @@ class CartItemIn(BaseModel):
 
 
 # [TECH]
+# Input DTO for batch adding items to cart.
+#
+# [NATURAL/BUSINESS]
+# Datos para agregar múltiples items al carrito de una vez.
+class CartItemsBatchIn(BaseModel):
+    items: list[CartItemIn] = Field(..., min_length=1, description="Lista de items a agregar (mínimo 1)")
+
+
+# [TECH]
 # Output DTO serializing CartItem for API responses.
 #
 # [NATURAL/BUSINESS]
@@ -72,3 +81,11 @@ class CheckoutOut(BaseModel):
     total: float
     currency: str
     items: list[CartItemOut]
+
+
+class CartValidationOut(BaseModel):
+    valid: bool
+    errors: list[str] = Field(default_factory=list, description="Lista de errores que bloquean el checkout")
+    warnings: list[str] = Field(default_factory=list, description="Lista de advertencias no bloqueantes")
+    total: float = Field(description="Total calculado del carrito")
+    currency: str = Field(default="PEN", description="Moneda del total")

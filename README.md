@@ -1,5 +1,18 @@
 # 🚀 Paku Backend - Comandos Esenciales
 
+## 📚 **DOCUMENTACIÓN TÉCNICA**
+
+### **🛒 Sistema de Carrito (Cart)**
+- **[CART_BATCH_OPERATIONS.md](./CART_BATCH_OPERATIONS.md)** - Endpoints y operaciones batch
+- **[CART_VALIDATIONS.md](./CART_VALIDATIONS.md)** - Sistema completo de validaciones
+- **[CART_IMPLEMENTATION_SUMMARY.md](./CART_IMPLEMENTATION_SUMMARY.md)** - Resumen de implementación
+- **[FRONTEND_INTEGRATION_GUIDE.md](./FRONTEND_INTEGRATION_GUIDE.md)** - Guía de integración para frontend
+
+### **📱 Flujos de la App**
+- **[FLUJO_PAKU_SPA.md](./FLUJO_PAKU_SPA.md)** - Flujo completo frontend → backend
+
+---
+
 ## 🧑‍💻 LOCAL (sin Docker, con venv)
 
 ### 🐍 Python / venv
@@ -40,11 +53,8 @@ curl http://127.0.0.1:8000/health
 # IMPORTANTE: Configurar DATABASE_URL primero
 set DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/paku_db
 
-# Crear migración automática
-python -m alembic revision --autogenerate -m "mensaje"
-
-# Aplicar migraciones
-python -m alembic upgrade head
+# Verificar esquema de carrito (NO requiere migraciones)
+python verify_cart_schema.py
 
 # Ver migración actual
 python -m alembic current
@@ -52,9 +62,21 @@ python -m alembic current
 # Ver historial completo
 python -m alembic history
 
+# Aplicar migraciones pendientes
+python -m alembic upgrade head
+
+# Crear migración automática (si hay cambios en modelos)
+python -m alembic revision --autogenerate -m "mensaje"
+
 # Crear migración manual (para enums, cambios complejos)
 python -m alembic revision -m "fix_cartstatus_enum"
+
+# Downgrade (revertir última migración)
+python -m alembic downgrade -1
 ```
+
+**📋 NOTA:** Las mejoras de validación del carrito NO requieren migraciones.  
+Ver [DATABASE_STATUS.md](./DATABASE_STATUS.md) para más detalles.
 
 ### 🧪 Tests (local)
 ```bash
