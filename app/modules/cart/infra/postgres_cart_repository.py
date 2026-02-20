@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import delete, select, update
@@ -117,6 +118,49 @@ class PostgresCartRepository(CartRepository):
 
     async def get_cart(self, cart_id: UUID, user_id: UUID) -> CartSession:
         return await self._apply_expiration(cart_id, user_id)
+
+    async def get_active_cart_for_user(self, user_id: UUID) -> Optional[CartSession]:
+        """
+        Obtiene el carrito activo más reciente del usuario.
+        Retorna None si no tiene carrito activo o si expiró.
+        """
+        from app.modules.cart.infra.models import CartSessionModel
+
+        stmt = (
+            select(CartSessionModel)
+            .where(
+                CartSessionModel.user_id == user_id,
+                CartSessionModel.status == CartStatus.active
+            )
+            .order_by(CartSessionModel.created_at.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        row = result.scalar_one_or_none()
+
+        if not row:
+            return None
+
+        # Verificar si expiró
+        now = datetime.now(timezone.utc)
+        if now > row.expires_at:
+            # Marcar como expirado
+            stmt_update = (
+                update(CartSessionModel)
+                .where(CartSessionModel.id == row.id)
+                .values(status=CartStatus.expired, updated_at=now)
+            )
+            await self._session.execute(stmt_update)
+            return None
+
+        return CartSession(
+            id=row.id,
+            user_id=row.user_id,
+            status=row.status,
+            expires_at=row.expires_at,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
 
     async def add_item(self, cart_id: UUID, user_id: UUID, item: CartItem) -> CartItem:
         cart = await self.get_cart(cart_id, user_id)

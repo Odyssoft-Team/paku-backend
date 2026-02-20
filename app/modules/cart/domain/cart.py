@@ -118,6 +118,9 @@ class CartRepository(Protocol):
     def get_cart(self, cart_id: UUID, user_id: UUID) -> CartSession:
         ...
 
+    def get_active_cart_for_user(self, user_id: UUID) -> Optional[CartSession]:
+        ...
+
     def add_item(self, cart_id: UUID, user_id: UUID, item: CartItem) -> CartItem:
         ...
 

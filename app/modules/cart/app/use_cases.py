@@ -43,6 +43,24 @@ class GetCart:
 
 
 @dataclass
+class GetOrCreateActiveCart:
+    repo: CartRepository
+
+    async def execute(self, *, user_id: UUID) -> CartSession:
+        """
+        Obtiene el carrito activo del usuario, o crea uno nuevo si no existe.
+        Útil para recuperar el carrito al abrir la app desde cualquier dispositivo.
+        """
+        cart = await self.repo.get_active_cart_for_user(user_id=user_id)
+        
+        if cart is None:
+            # No tiene carrito activo (o expiró), crear uno nuevo
+            cart = await self.repo.create_cart(user_id=user_id)
+        
+        return cart
+
+
+@dataclass
 class AddItem:
     repo: CartRepository
 

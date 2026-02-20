@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import CurrentUser, get_current_user
 from app.core.db import engine, get_async_session
 from app.modules.cart.api.schemas import CartItemIn, CartItemOut, CartOut, CartWithItemsOut, CheckoutOut
-from app.modules.cart.app.use_cases import AddItem, Checkout, CreateCart, GetCart, ListItems, RemoveItem
+from app.modules.cart.app.use_cases import AddItem, Checkout, CreateCart, GetCart, GetOrCreateActiveCart, ListItems, RemoveItem
 from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository
 
 
@@ -15,6 +15,29 @@ router = APIRouter(tags=["cart"], prefix="/cart")
 
 def get_cart_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresCartRepository:
     return PostgresCartRepository(session=session, engine=engine)
+
+
+@router.get("", response_model=CartWithItemsOut)
+async def get_active_cart(
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresCartRepository = Depends(get_cart_repo),
+) -> CartWithItemsOut:
+    """
+    Obtiene el carrito activo del usuario (o crea uno nuevo si no existe).
+    
+    Útil para:
+    - Abrir la app y recuperar el carrito desde cualquier dispositivo
+    - No perder el carrito si el usuario cierra/desinstala la app
+    - Continuar comprando desde donde dejó
+    
+    Si el carrito expiró (>2 horas), se crea uno nuevo automáticamente.
+    """
+    cart = await GetOrCreateActiveCart(repo=repo).execute(user_id=current.id)
+    items = await ListItems(repo=repo).execute(cart_id=cart.id, user_id=current.id)
+    return CartWithItemsOut(
+        cart=CartOut(**cart.__dict__),
+        items=[CartItemOut(**i.__dict__) for i in items],
+    )
 
 
 @router.post("", response_model=CartOut, status_code=status.HTTP_201_CREATED)

@@ -6,9 +6,10 @@ from pydantic import BaseModel
 
 
 class PakuSpaPlanOut(BaseModel):
-    code: str
+    id: str  # UUID fijo para usar en cart (ref_id)
+    code: str  # Para identificación legible (classic, premium, express)
     name: str
     description: str
-    price: int
+    price: float  # Changed from int to float for precision
     currency: str
     includes: List[str]
