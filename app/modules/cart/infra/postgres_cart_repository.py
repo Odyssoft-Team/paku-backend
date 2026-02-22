@@ -334,6 +334,7 @@ class PostgresCartRepository(CartRepository):
         )
         result = await self._session.execute(stmt)
         row = result.scalar_one()
+        await self._session.commit()
         return CartSession(
             id=row.id,
             user_id=row.user_id,
