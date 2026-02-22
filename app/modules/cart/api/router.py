@@ -213,7 +213,10 @@ async def checkout(
     repo: PostgresCartRepository = Depends(get_cart_repo),
 ) -> CheckoutOut:
     """
-    Finaliza el carrito y lo convierte en orden.
+    Finaliza el carrito marcándolo como checked_out.
+
+    Nota: la creación de la orden (tabla `orders`) se realiza vía POST /orders,
+    porque requiere seleccionar una dirección (address_id o default).
     
     IMPORTANTE: Valida automáticamente el carrito antes de procesar.
     Si hay errores, retorna 400 con la lista de problemas.

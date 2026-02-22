@@ -36,7 +36,7 @@ async def create_order(
     orders_repo = PostgresOrderRepository(session=session, engine=engine)
     cart_repo = PostgresCartRepository(session=session, engine=engine)
     iam_repo = PostgresUserRepository(session=session, engine=engine)
-    geo_repo = PostgresDistrictRepository(session=session, engine=engine)
+    geo_repo = PostgresDistrictRepository(session=session)
 
     # Address: explicit selection if provided; otherwise use default.
     if payload.address_id is not None:
