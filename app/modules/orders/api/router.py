@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import CurrentUser, get_current_user
 from app.core.db import engine, get_async_session
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
+from app.modules.geo.infra.repository import PostgresDistrictRepository
 from app.modules.orders.api.schemas import CreateOrderIn, OrderOut, PatchOrderIn, UpdateStatusIn
 from app.modules.orders.app.use_cases import CreateOrderFromCart, GetOrder, ListOrders, PatchOrder, UpdateOrderStatus
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
@@ -35,6 +36,7 @@ async def create_order(
     orders_repo = PostgresOrderRepository(session=session, engine=engine)
     cart_repo = PostgresCartRepository(session=session, engine=engine)
     iam_repo = PostgresUserRepository(session=session, engine=engine)
+    geo_repo = PostgresDistrictRepository(session=session, engine=engine)
 
     # Validate address ownership/existence (and not deleted)
     addr = await iam_repo.get_address_for_user(user_id=current.id, address_id=payload.address_id)
@@ -42,9 +44,8 @@ async def create_order(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
 
     # Validate district is active (service coverage)
-    # NOTE: we verified iam_repo.get_district returns a dict with "active".
-    district = await iam_repo.get_district(addr["district_id"])
-    if not district or district["active"] is not True:
+    district = await geo_repo.get_district(addr["district_id"])
+    if not district or district.get("active") is not True:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="District is not active")
 
     # Snapshot = "foto" de la dirección usada al crear la orden.
