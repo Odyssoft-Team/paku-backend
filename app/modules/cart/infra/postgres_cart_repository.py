@@ -83,6 +83,7 @@ class PostgresCartRepository(CartRepository):
         )
         self._session.add(model)
         await self._session.flush()
+        await self._session.commit()
         return cart
 
     async def _apply_expiration(self, cart_id: UUID, user_id: UUID) -> CartSession:
@@ -186,6 +187,7 @@ class PostgresCartRepository(CartRepository):
         )
         self._session.add(model)
         await self._session.flush()
+        await self._session.commit()
 
         # Update cart updated_at
         await self._touch_cart(cart_id)
@@ -224,6 +226,7 @@ class PostgresCartRepository(CartRepository):
 
         self._session.add_all(models)
         await self._session.flush()
+        await self._session.commit()
 
         # Update cart updated_at
         await self._touch_cart(cart_id)
@@ -268,6 +271,7 @@ class PostgresCartRepository(CartRepository):
 
         self._session.add_all(models)
         await self._session.flush()
+        await self._session.commit()
 
         # Update cart updated_at
         await self._touch_cart(cart_id)
@@ -288,6 +292,7 @@ class PostgresCartRepository(CartRepository):
         if result.rowcount == 0:
             raise ValueError("item_not_found")
 
+        await self._session.commit()
         await self._touch_cart(cart_id)
 
     async def list_items(self, cart_id: UUID, user_id: UUID) -> list[CartItem]:
