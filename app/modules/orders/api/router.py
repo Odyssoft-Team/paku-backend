@@ -38,10 +38,18 @@ async def create_order(
     iam_repo = PostgresUserRepository(session=session, engine=engine)
     geo_repo = PostgresDistrictRepository(session=session, engine=engine)
 
-    # Validate address ownership/existence (and not deleted)
-    addr = await iam_repo.get_address_for_user(user_id=current.id, address_id=payload.address_id)
-    if not addr:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+    # Address: explicit selection if provided; otherwise use default.
+    if payload.address_id is not None:
+        addr = await iam_repo.get_address_for_user(user_id=current.id, address_id=payload.address_id)
+        if not addr:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+    else:
+        addr = await iam_repo.get_default_address(user_id=current.id)
+        if not addr:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="address_id is required (no default address configured)",
+            )
 
     # Validate district is active (service coverage)
     district = await geo_repo.get_district(addr["district_id"])

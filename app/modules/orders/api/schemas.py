@@ -14,7 +14,7 @@ from app.modules.orders.domain.order import OrderStatus
 # Datos para crear un pedido desde el carrito.
 class CreateOrderIn(BaseModel):
     cart_id: UUID
-    address_id: UUID
+    address_id: Optional[UUID] = None
 
 
 # [TECH]
