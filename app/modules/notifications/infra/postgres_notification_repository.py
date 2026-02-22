@@ -47,6 +47,7 @@ class PostgresNotificationRepository(NotificationRepository):
         )
         self._session.add(model)
         await self._session.flush()
+        await self._session.commit()
         return notification
 
     async def list_notifications(self, user_id: UUID, *, unread_only: bool = False, limit: int = 20) -> list[Notification]:

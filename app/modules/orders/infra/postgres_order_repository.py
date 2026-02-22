@@ -58,6 +58,7 @@ class PostgresOrderRepository:
         )
         self._session.add(model)
         await self._session.flush()
+        await self._session.commit()
         return order
 
     async def get_order(self, *, id: UUID, user_id: UUID) -> Order:

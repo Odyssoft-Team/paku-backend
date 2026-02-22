@@ -46,6 +46,7 @@ class PostgresDeviceTokenRepository(DeviceTokenRepository):
             )
             self._session.add(row)
             await self._session.flush()
+            await self._session.commit()
 
         return DeviceToken(
             id=row.id,
