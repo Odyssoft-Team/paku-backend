@@ -8,7 +8,7 @@ from sqlalchemy import JSON, DateTime, Enum, Index, Integer, Numeric, String, Uu
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.modules.cart.domain.cart import CartItemKind, CartStatus
+from app.modules.cart.domain.cart import CartStatus
 
 
 class Base(DeclarativeBase):
@@ -36,7 +36,7 @@ class CartItemModel(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=lambda: UUID())
     cart_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
-    kind: Mapped[CartItemKind] = mapped_column(Enum(CartItemKind), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
     ref_id: Mapped[str] = mapped_column(String(200), nullable=False)
     name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
