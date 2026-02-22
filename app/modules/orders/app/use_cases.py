@@ -65,15 +65,19 @@ class CreateOrderFromCart:
         )
         created = await self.orders_repo.create_order(order)
 
-        # Crear notificación usando el mismo session que orders_repo
-        notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
-        await CreateNotification(repo=notifications_repo).execute(
-            user_id=user_id,
-            type="order_status",
-            title="Pedido creado",
-            body="Tu pedido fue creado y está en preparación.",
-            data={"order_id": str(created.id), "status": created.status.value},
-        )
+        # Crear notificación (best effort, no bloquea la orden)
+        try:
+            notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
+            await CreateNotification(repo=notifications_repo).execute(
+                user_id=user_id,
+                type="order_status",
+                title="Pedido creado",
+                body="Tu pedido fue creado y está en preparación.",
+                data={"order_id": str(created.id), "status": created.status.value},
+            )
+        except Exception as exc:
+            import logging
+            logging.exception("Failed to create order notification: %s", exc)
 
         return created
 
@@ -136,15 +140,19 @@ class UpdateOrderStatus:
 
         title, body = _status_message(updated.status.value)
         
-        # Crear notificación usando el mismo session que orders_repo
-        notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
-        await CreateNotification(repo=notifications_repo).execute(
-            user_id=updated.user_id,
-            type="order_status",
-            title=title,
-            body=body,
-            data={"order_id": str(updated.id), "status": updated.status.value},
-        )
+        # Crear notificación (best effort, no bloquea la actualización)
+        try:
+            notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
+            await CreateNotification(repo=notifications_repo).execute(
+                user_id=updated.user_id,
+                type="order_status",
+                title=title,
+                body=body,
+                data={"order_id": str(updated.id), "status": updated.status.value},
+            )
+        except Exception as exc:
+            import logging
+            logging.exception("Failed to create order status notification: %s", exc)
 
         return updated
 
@@ -193,14 +201,18 @@ class PatchOrder:
 
         title, body = _status_message(updated.status.value)
         
-        # Crear notificación usando el mismo session que orders_repo
-        notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
-        await CreateNotification(repo=notifications_repo).execute(
-            user_id=updated.user_id,
-            type="order_status",
-            title=title,
-            body=body,
-            data={"order_id": str(updated.id), "status": updated.status.value},
-        )
+        # Crear notificación (best effort, no bloquea la actualización)
+        try:
+            notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
+            await CreateNotification(repo=notifications_repo).execute(
+                user_id=updated.user_id,
+                type="order_status",
+                title=title,
+                body=body,
+                data={"order_id": str(updated.id), "status": updated.status.value},
+            )
+        except Exception as exc:
+            import logging
+            logging.exception("Failed to create order status notification: %s", exc)
         
         return updated
