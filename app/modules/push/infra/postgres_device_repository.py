@@ -33,6 +33,7 @@ class PostgresDeviceTokenRepository(DeviceTokenRepository):
             )
             result_update = await self._session.execute(stmt_update)
             row = result_update.scalar_one()
+            await self._session.commit()
         else:
             # Insertar nuevo
             device = DeviceToken.new(user_id=user_id, platform=platform, token=token)
@@ -87,6 +88,7 @@ class PostgresDeviceTokenRepository(DeviceTokenRepository):
             .returning(DeviceTokenModel)
         )
         result = await self._session.execute(stmt)
+        await self._session.commit()
         row = result.scalar_one_or_none()
         if not row:
             raise ValueError("device_not_found")

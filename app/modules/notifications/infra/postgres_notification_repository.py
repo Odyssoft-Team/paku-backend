@@ -84,6 +84,7 @@ class PostgresNotificationRepository(NotificationRepository):
             .returning(NotificationModel)
         )
         result = await self._session.execute(stmt)
+        await self._session.commit()
         row = result.scalar_one_or_none()
         if not row:
             raise ValueError("notification_not_found")
