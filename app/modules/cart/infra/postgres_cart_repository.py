@@ -171,10 +171,12 @@ class PostgresCartRepository(CartRepository):
 
         from app.modules.cart.infra.models import CartItemModel
 
+        kind_value = getattr(getattr(item, "kind", None), "value", getattr(item, "kind", None))
+
         model = CartItemModel(
             id=item.id,
             cart_id=item.cart_id,
-            kind=item.kind,
+            kind=str(kind_value),
             ref_id=str(item.ref_id),
             name=item.name,
             qty=item.qty,
@@ -205,10 +207,12 @@ class PostgresCartRepository(CartRepository):
             if item.cart_id != cart_id:
                 raise ValueError("invalid_cart_item")
 
+            kind_value = getattr(getattr(item, "kind", None), "value", getattr(item, "kind", None))
+
             model = CartItemModel(
                 id=item.id,
                 cart_id=item.cart_id,
-                kind=item.kind,
+                kind=str(kind_value),
                 ref_id=str(item.ref_id),
                 name=item.name,
                 qty=item.qty,
@@ -247,10 +251,12 @@ class PostgresCartRepository(CartRepository):
             if item.cart_id != cart_id:
                 raise ValueError("invalid_cart_item")
 
+            kind_value = getattr(getattr(item, "kind", None), "value", getattr(item, "kind", None))
+
             model = CartItemModel(
                 id=item.id,
                 cart_id=item.cart_id,
-                kind=item.kind,
+                kind=str(kind_value),
                 ref_id=str(item.ref_id),
                 name=item.name,
                 qty=item.qty,

@@ -9,6 +9,7 @@ from app.modules.iam.infra.postgres_user_repository import PostgresUserRepositor
 from app.modules.orders.api.schemas import CreateOrderIn, OrderOut, PatchOrderIn, UpdateStatusIn
 from app.modules.orders.app.use_cases import CreateOrderFromCart, GetOrder, ListOrders, PatchOrder, UpdateOrderStatus
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
+from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository
 
 router = APIRouter(tags=["orders"], prefix="/orders")
 
@@ -32,6 +33,7 @@ async def create_order(
     # No usamos "default" porque el usuario puede querer enviar a otra dirección.
 
     orders_repo = PostgresOrderRepository(session=session, engine=engine)
+    cart_repo = PostgresCartRepository(session=session, engine=engine)
     iam_repo = PostgresUserRepository(session=session, engine=engine)
 
     # Validate address ownership/existence (and not deleted)
@@ -59,7 +61,7 @@ async def create_order(
         "lng": addr["lng"],
     }
 
-    order = await CreateOrderFromCart(orders_repo=orders_repo).execute(
+    order = await CreateOrderFromCart(orders_repo=orders_repo, cart_repo=cart_repo).execute(
         user_id=current.id,
         cart_id=payload.cart_id,
         delivery_address_snapshot=snapshot,

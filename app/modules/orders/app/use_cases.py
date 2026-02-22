@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 
 from app.modules.orders.domain.order import Order, OrderStatus
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
+from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository
 
 
 def _snapshot_cart_items(items: list[Any]) -> list[dict[str, Any]]:
@@ -39,19 +40,19 @@ def _calc_total(items: list[Any]) -> float:
 @dataclass
 class CreateOrderFromCart:
     orders_repo: PostgresOrderRepository
+    cart_repo: PostgresCartRepository
 
     async def execute(self, *, user_id: UUID, cart_id: UUID, delivery_address_snapshot: dict) -> Order:
-        from app.modules.cart.api.router import _repo as cart_repo
         from app.modules.cart.domain.cart import CartStatus
         from app.core.db import engine
         from app.modules.notifications.infra.postgres_notification_repository import PostgresNotificationRepository
         from app.modules.notifications.app.use_cases import CreateNotification
 
-        cart = cart_repo.get_cart(cart_id=cart_id, user_id=user_id)
+        cart = await self.cart_repo.get_cart(cart_id=cart_id, user_id=user_id)
         if cart.status != CartStatus.checked_out:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cart must be checked_out")
 
-        items = cart_repo.list_items(cart_id=cart_id, user_id=user_id)
+        items = await self.cart_repo.list_items(cart_id=cart_id, user_id=user_id)
         items_snapshot = _snapshot_cart_items(items)
         total_snapshot = _calc_total(items)
 
