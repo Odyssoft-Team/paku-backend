@@ -40,9 +40,7 @@ class PostgresCommerceRepository:
         from app.modules.commerce.infra.models import PriceRuleModel, ServiceModel, utcnow
 
         res = await self._session.execute(select(ServiceModel.id).limit(1))
-        if res.first() is not None:
-            _commerce_seeded = True
-            return
+        has_any_services = res.first() is not None
 
         now = utcnow()
 
@@ -51,6 +49,14 @@ class PostgresCommerceRepository:
         base_cat_groom = UUID("33333333-3333-3333-3333-333333333333")
         addon_dog_teeth = UUID("44444444-4444-4444-4444-444444444444")
         addon_dog_haircut = UUID("55555555-5555-5555-5555-555555555555")
+
+        from app.modules.commerce.domain.addons_rules import (
+            ADDON_CEPILLADO_ID,
+            ADDON_DESLANADO_ID,
+            ADDON_DESMOTADO_ID,
+            deslanado_applicable_breeds,
+            desmotado_applicable_breeds,
+        )
 
         services = [
             ServiceModel(
@@ -108,6 +114,41 @@ class PostgresCommerceRepository:
                 created_at=now,
                 updated_at=now,
             ),
+
+            # Grooming add-ons (breed rules)
+            ServiceModel(
+                id=ADDON_CEPILLADO_ID,
+                name="Cepillado",
+                type=ServiceType.addon.value,
+                species=Species.dog.value,
+                allowed_breeds=None,  # universal
+                requires=[str(base_dog_bath)],
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            ),
+            ServiceModel(
+                id=ADDON_DESLANADO_ID,
+                name="Deslanado",
+                type=ServiceType.addon.value,
+                species=Species.dog.value,
+                allowed_breeds=sorted(deslanado_applicable_breeds()),
+                requires=[str(base_dog_bath)],
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            ),
+            ServiceModel(
+                id=ADDON_DESMOTADO_ID,
+                name="Desmotado",
+                type=ServiceType.addon.value,
+                species=Species.dog.value,
+                allowed_breeds=sorted(desmotado_applicable_breeds()),
+                requires=[str(base_dog_bath)],
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            ),
         ]
 
         self._session.add_all(services)
@@ -147,15 +188,37 @@ class PostgresCommerceRepository:
 
         self._session.add_all(rules)
 
-        try:
-            await self._session.commit()
-        except IntegrityError:
-            # Seed puede correr concurrentemente en multi-worker.
-            # Si otro worker insertó primero, el commit puede fallar por PK duplicada.
-            await self._session.rollback()
-            res = await self._session.execute(select(ServiceModel.id).limit(1))
-            if res.first() is None:
-                raise
+        if has_any_services:
+            # La DB ya tiene catálogo inicial; solo aseguramos que los servicios nuevos existan.
+            # Esto evita que reglas nuevas (p.ej. deslanado requerido) rompan el flujo si el addon
+            # aún no está insertado en entornos ya sembrados.
+            ensure_ids = {
+                base_dog_bath,
+                ADDON_CEPILLADO_ID,
+                ADDON_DESLANADO_ID,
+                ADDON_DESMOTADO_ID,
+            }
+            existing = await self._session.execute(select(ServiceModel.id).where(ServiceModel.id.in_(ensure_ids)))
+            existing_ids = set(existing.scalars().all())
+            missing_ids = ensure_ids - existing_ids
+
+            if missing_ids:
+                missing_services = [s for s in services if s.id in missing_ids]
+                self._session.add_all(missing_services)
+                try:
+                    await self._session.commit()
+                except IntegrityError:
+                    await self._session.rollback()
+        else:
+            try:
+                await self._session.commit()
+            except IntegrityError:
+                # Seed puede correr concurrentemente en multi-worker.
+                # Si otro worker insertó primero, el commit puede fallar por PK duplicada.
+                await self._session.rollback()
+                res = await self._session.execute(select(ServiceModel.id).limit(1))
+                if res.first() is None:
+                    raise
         _commerce_seeded = True
 
     async def list_services(self, *, species: Species, breed: Optional[str] = None) -> List[Service]:
