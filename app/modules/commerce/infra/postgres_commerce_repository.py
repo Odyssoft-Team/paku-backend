@@ -6,6 +6,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import and_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.commerce.domain.service import Service, ServiceType, Species
@@ -147,7 +148,16 @@ class PostgresCommerceRepository:
         ]
 
         self._session.add_all(rules)
-        await self._session.commit()
+
+        try:
+            await self._session.commit()
+        except IntegrityError:
+            # Seed puede correr concurrentemente en multi-worker.
+            # Si otro worker insertó primero, el commit puede fallar por PK duplicada.
+            await self._session.rollback()
+            res = await self._session.execute(select(ServiceModel.id).limit(1))
+            if res.first() is None:
+                raise
         _commerce_seeded = True
 
     async def list_services(self, *, species: Species, breed: Optional[str] = None) -> List[Service]:
