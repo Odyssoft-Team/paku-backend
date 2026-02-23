@@ -2,16 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from fastapi.encoders import jsonable_encoder
 
 from app.modules.booking.domain.hold import Hold, HoldStatus
 from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepository
-from app.modules.commerce.infra.postgres_commerce_repository import PostgresCommerceRepository
-from app.modules.pets.domain.pet import PetRepository
 
 
 @dataclass
@@ -26,12 +22,8 @@ class CreateHold:
 @dataclass
 class ConfirmHold:
     repo: PostgresHoldRepository
-    commerce_repo: PostgresCommerceRepository
-    pets_repo: PetRepository
 
     async def execute(self, *, hold_id: UUID) -> Hold:
-        from app.modules.commerce.app.use_cases import Quote
-
         hold = await self.repo.get_hold(hold_id)
         if not hold:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hold not found")
@@ -40,13 +32,7 @@ class ConfirmHold:
         if hold.status != HoldStatus.held:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Hold cannot be confirmed")
 
-        quote: Any = await Quote(repo=self.commerce_repo, pets_repo=self.pets_repo).execute(
-            pet_id=hold.pet_id,
-            base_service_id=hold.service_id,
-            addon_ids=[],
-        )
-        snapshot = jsonable_encoder(quote)
-        updated = await self.repo.update_status(hold_id, HoldStatus.confirmed, quote_snapshot=snapshot)
+        updated = await self.repo.update_status(hold_id, HoldStatus.confirmed)
         return updated or hold
 
 
