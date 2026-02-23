@@ -39,8 +39,6 @@ class PostgresCommerceRepository:
 
         from app.modules.commerce.infra.models import PriceRuleModel, ServiceModel, utcnow
 
-        await self._session.flush()
-
         res = await self._session.execute(select(ServiceModel.id).limit(1))
         if res.first() is not None:
             _commerce_seeded = True
@@ -174,11 +172,21 @@ class PostgresCommerceRepository:
         res = await self._session.execute(stmt)
         rows = res.scalars().all()
 
+        def _norm(value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return None
+            v = value.strip().lower()
+            return v or None
+
+        breed_norm = _norm(breed)
+
         out: List[Service] = []
         for r in rows:
             allowed = r.allowed_breeds
             if allowed:
-                if breed is None or breed not in allowed:
+                allowed_norm = {_norm(b) for b in allowed}
+                allowed_norm.discard(None)
+                if breed_norm is None or breed_norm not in allowed_norm:
                     continue
 
             requires: Optional[List[UUID]] = None

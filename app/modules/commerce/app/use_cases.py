@@ -30,11 +30,20 @@ class AvailableService:
 # [TECH] Regla: valida si una raza está permitida para un servicio. Output: bool. Flujo: reglas/catálogo.
 # [NEGOCIO] Evita ofrecer servicios que no corresponden a la raza del cliente.
 def _breed_allowed(allowed_breeds: Optional[List[str]], breed: Optional[str]) -> bool:
+    def _norm(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        v = value.strip().lower()
+        return v or None
+
     if not allowed_breeds:
         return True
-    if breed is None:
+    breed_norm = _norm(breed)
+    if breed_norm is None:
         return False
-    return breed in allowed_breeds
+    allowed_norm = {_norm(b) for b in allowed_breeds}
+    allowed_norm.discard(None)
+    return breed_norm in allowed_norm
 
 
 @dataclass
@@ -92,9 +101,9 @@ class QuoteResult:
 # [TECH] Normaliza la raza a una categoría de pricing. Input: breed. Output: str. Flujo: precios/reglas.
 # [NEGOCIO] Simplifica las razas en grupos para aplicar precios consistentes.
 def _breed_category(breed: Optional[str]) -> str:
-    if not breed:
+    if not breed or not breed.strip():
         return "mestizo"
-    if breed.lower() in {"husky", "labrador"}:
+    if breed.strip().lower() in {"husky", "labrador"}:
         return "official"
     return "otros"
 
@@ -122,6 +131,12 @@ class Quote:
         pet_breed = getattr(pet, "breed", None)
         pet_weight = getattr(pet, "weight_kg", None)
 
+        if pet_weight is None or float(pet_weight) <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Pet weight_kg is required to quote",
+            )
+
         items = await self.repo.list_services_for_pet(pet)
         by_id = {s.id: s for s in items}
 
@@ -132,7 +147,7 @@ class Quote:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base service not applicable")
 
         breed_cat = _breed_category(pet_breed)
-        weight = float(pet_weight or 0)
+        weight = float(pet_weight)
 
         base_price = await self.repo.price_for(
             service_id=base.id,
