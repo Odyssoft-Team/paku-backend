@@ -67,14 +67,14 @@ class PushMessage:
 # [NATURAL/BUSINESS]
 # Guarda y gestiona tokens de dispositivos push.
 class DeviceTokenRepository(Protocol):
-    def register_device(self, user_id: UUID, platform: Platform, token: str) -> DeviceToken:
+    async def register_device(self, user_id: UUID, platform: Platform, token: str) -> DeviceToken:
         ...
 
-    def list_devices(self, user_id: UUID) -> list[DeviceToken]:
+    async def list_devices(self, user_id: UUID) -> list[DeviceToken]:
         ...
 
-    def deactivate_device(self, device_id: UUID, user_id: UUID) -> DeviceToken:
+    async def deactivate_device(self, device_id: UUID, user_id: UUID) -> DeviceToken:
         ...
 
-    def get_active_tokens(self, user_id: UUID) -> list[str]:
+    async def get_active_tokens(self, user_id: UUID) -> list[str]:
         ...

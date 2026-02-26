@@ -16,7 +16,7 @@ class RegisterDevice:
     repo: DeviceTokenRepository
 
     async def execute(self, *, user_id: UUID, platform: Platform, token: str) -> DeviceToken:
-        return self.repo.register_device(user_id=user_id, platform=platform, token=token)
+        return await self.repo.register_device(user_id=user_id, platform=platform, token=token)
 
 
 @dataclass
@@ -24,7 +24,7 @@ class ListDevices:
     repo: DeviceTokenRepository
 
     async def execute(self, *, user_id: UUID) -> list[DeviceToken]:
-        return self.repo.list_devices(user_id=user_id)
+        return await self.repo.list_devices(user_id=user_id)
 
 
 @dataclass
@@ -33,7 +33,7 @@ class DeactivateDevice:
 
     async def execute(self, *, user_id: UUID, device_id: UUID) -> DeviceToken:
         try:
-            return self.repo.deactivate_device(device_id=device_id, user_id=user_id)
+            return await self.repo.deactivate_device(device_id=device_id, user_id=user_id)
         except ValueError as exc:
             _raise_device_error(str(exc))
             raise

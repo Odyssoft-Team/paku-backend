@@ -26,13 +26,13 @@ class CreateNotification:
             from app.core.db import engine, get_async_session
             from app.modules.push.domain.push import PushMessage
             from app.modules.push.infra.postgres_device_repository import PostgresDeviceTokenRepository
-            from app.modules.push.infra.provider import MockPushProvider
+            from app.modules.push.infra.provider import ExpoPushProvider
 
             async with get_async_session() as session:
                 devices_repo = PostgresDeviceTokenRepository(session=session, engine=engine)
                 tokens = await devices_repo.get_active_tokens(user_id)
                 if tokens:
-                    MockPushProvider().send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
+                    ExpoPushProvider().send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
         except Exception:
             pass
 
