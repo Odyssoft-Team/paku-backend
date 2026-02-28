@@ -9,7 +9,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.modules.commerce.domain.service import Service, ServiceType, Species
+from app.modules.commerce.domain.service import PriceRule, Service, ServiceType, Species
 
 
 @dataclass(frozen=True)
@@ -383,3 +383,174 @@ class PostgresCommerceRepository:
 
         total = base_line.price + sum(a.price for a in addons_out)
         return QuoteResult(pet_id=pet.id, base=base_line, addons=addons_out, total=total)
+
+    # ------------------------------------------------------------------
+    # Admin helpers
+    # ------------------------------------------------------------------
+
+    def _row_to_service(self, r) -> Service:
+        requires: Optional[List[UUID]] = None
+        if r.requires:
+            requires = [UUID(x) for x in r.requires]
+        return Service(
+            id=r.id,
+            name=r.name,
+            type=ServiceType(r.type),
+            species=Species(r.species),
+            allowed_breeds=r.allowed_breeds,
+            requires=requires,
+            is_active=r.is_active,
+        )
+
+    def _row_to_price_rule(self, r) -> PriceRule:
+        return PriceRule(
+            id=r.id,
+            service_id=r.service_id,
+            species=Species(r.species),
+            breed_category=r.breed_category,
+            weight_min=r.weight_min,
+            weight_max=r.weight_max,
+            price=int(Decimal(r.price)),
+            currency=r.currency,
+            is_active=r.is_active,
+        )
+
+    # ------------------------------------------------------------------
+    # Admin — services
+    # ------------------------------------------------------------------
+
+    async def list_all_services(self) -> List[Service]:
+        await self._ensure_ready()
+        from app.modules.commerce.infra.models import ServiceModel
+
+        res = await self._session.execute(select(ServiceModel))
+        return [self._row_to_service(r) for r in res.scalars().all()]
+
+    async def create_service(
+        self,
+        *,
+        name: str,
+        type: ServiceType,
+        species: Species,
+        allowed_breeds: Optional[List[str]],
+        requires: Optional[List[UUID]],
+        is_active: bool = True,
+    ) -> Service:
+        await self._ensure_ready()
+        from app.modules.commerce.infra.models import ServiceModel, utcnow
+
+        now = utcnow()
+        model = ServiceModel(
+            name=name,
+            type=type.value,
+            species=species.value,
+            allowed_breeds=allowed_breeds or None,
+            requires=[str(r) for r in requires] if requires else None,
+            is_active=is_active,
+            created_at=now,
+            updated_at=now,
+        )
+        self._session.add(model)
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_service(model)
+
+    async def update_service(self, service_id: UUID, patch: dict) -> Service:
+        await self._ensure_ready()
+        from app.modules.commerce.infra.models import ServiceModel, utcnow
+
+        model = await self._session.get(ServiceModel, service_id)
+        if model is None:
+            raise ValueError("service_not_found")
+
+        allowed = {"name", "allowed_breeds", "requires"}
+        for key, value in patch.items():
+            if key not in allowed:
+                continue
+            if key == "requires" and value is not None:
+                setattr(model, key, [str(r) for r in value])
+            else:
+                setattr(model, key, value)
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_service(model)
+
+    async def set_service_active(self, service_id: UUID, is_active: bool) -> Service:
+        await self._ensure_ready()
+        from app.modules.commerce.infra.models import ServiceModel, utcnow
+
+        model = await self._session.get(ServiceModel, service_id)
+        if model is None:
+            raise ValueError("service_not_found")
+        model.is_active = is_active
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_service(model)
+
+    # ------------------------------------------------------------------
+    # Admin — price rules
+    # ------------------------------------------------------------------
+
+    async def list_price_rules(self, service_id: UUID) -> List[PriceRule]:
+        await self._ensure_ready()
+        from app.modules.commerce.infra.models import PriceRuleModel
+
+        res = await self._session.execute(
+            select(PriceRuleModel).where(PriceRuleModel.service_id == service_id)
+        )
+        return [self._row_to_price_rule(r) for r in res.scalars().all()]
+
+    async def create_price_rule(
+        self,
+        *,
+        service_id: UUID,
+        species: Species,
+        breed_category: str,
+        weight_min: float,
+        weight_max: Optional[float],
+        price: int,
+        currency: str = "PEN",
+    ) -> PriceRule:
+        await self._ensure_ready()
+        from app.modules.commerce.infra.models import PriceRuleModel, utcnow
+
+        now = utcnow()
+        model = PriceRuleModel(
+            service_id=service_id,
+            species=species.value,
+            breed_category=breed_category,
+            weight_min=weight_min,
+            weight_max=weight_max,
+            price=Decimal(price),
+            currency=currency,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        self._session.add(model)
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_price_rule(model)
+
+    async def update_price_rule(self, rule_id: UUID, patch: dict) -> PriceRule:
+        await self._ensure_ready()
+        from app.modules.commerce.infra.models import PriceRuleModel, utcnow
+
+        model = await self._session.get(PriceRuleModel, rule_id)
+        if model is None:
+            raise ValueError("price_rule_not_found")
+
+        allowed = {"price", "weight_min", "weight_max", "is_active"}
+        for key, value in patch.items():
+            if key not in allowed:
+                continue
+            if key == "price":
+                model.price = Decimal(value)
+            else:
+                setattr(model, key, value)
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_price_rule(model)

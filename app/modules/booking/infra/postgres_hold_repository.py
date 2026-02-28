@@ -37,6 +37,7 @@ class PostgresHoldRepository:
         pet_id: UUID,
         service_id: UUID,
         expires_at: datetime,
+        date=None,
         quote_snapshot: Optional[dict] = None,
     ) -> Hold:
         from app.modules.booking.infra.models import HoldModel, utcnow
@@ -50,6 +51,7 @@ class PostgresHoldRepository:
             service_id=service_id,
             expires_at=expires_at,
             created_at=now,
+            date=date,
             quote_snapshot=quote_snapshot,
         )
 
@@ -60,6 +62,7 @@ class PostgresHoldRepository:
             service_id=hold.service_id,
             status=hold.status.value,
             expires_at=hold.expires_at,
+            date=hold.date,
             quote_snapshot=hold.quote_snapshot,
             created_at=hold.created_at,
             updated_at=now,
@@ -86,6 +89,7 @@ class PostgresHoldRepository:
             status=HoldStatus(model.status),
             expires_at=model.expires_at,
             created_at=model.created_at,
+            date=model.date,
             quote_snapshot=model.quote_snapshot,
         )
         return await self._maybe_expire(hold)
@@ -140,6 +144,7 @@ class PostgresHoldRepository:
                 status=HoldStatus(r.status),
                 expires_at=r.expires_at,
                 created_at=r.created_at,
+                date=r.date,
                 quote_snapshot=r.quote_snapshot,
             )
             out.append(await self._maybe_expire(hold))

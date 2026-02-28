@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.modules.commerce.domain.service import ServiceType, Species
 
@@ -48,3 +48,55 @@ class QuoteOut(BaseModel):
     addons: List[QuoteLineOut]
     total: int
     currency: str = "PEN"
+
+
+# ------------------------------------------------------------------
+# Admin schemas
+# ------------------------------------------------------------------
+
+class ServiceCreateIn(BaseModel):
+    name: str
+    type: ServiceType
+    species: Species
+    allowed_breeds: Optional[List[str]] = None
+    requires: Optional[List[UUID]] = None
+    is_active: bool = True
+
+
+class ServiceUpdateIn(BaseModel):
+    name: Optional[str] = None
+    allowed_breeds: Optional[List[str]] = None
+    requires: Optional[List[UUID]] = None
+
+
+class ServiceToggleIn(BaseModel):
+    is_active: bool
+
+
+class PriceRuleOut(BaseModel):
+    id: UUID
+    service_id: UUID
+    species: Species
+    breed_category: str
+    weight_min: float
+    weight_max: Optional[float]
+    price: int
+    currency: str
+    is_active: bool
+
+
+class PriceRuleCreateIn(BaseModel):
+    service_id: UUID
+    species: Species
+    breed_category: str
+    weight_min: float = Field(ge=0)
+    weight_max: Optional[float] = None
+    price: int = Field(ge=0)
+    currency: str = "PEN"
+
+
+class PriceRuleUpdateIn(BaseModel):
+    price: Optional[int] = Field(default=None, ge=0)
+    weight_min: Optional[float] = Field(default=None, ge=0)
+    weight_max: Optional[float] = None
+    is_active: Optional[bool] = None

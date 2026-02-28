@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import date as date_type
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, JSON, String
+from sqlalchemy import Boolean, Date, DateTime, Integer, JSON, String, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -29,7 +30,25 @@ class HoldModel(Base):
 
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
 
+    date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True, index=True)
+
     quote_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class AvailabilitySlotModel(Base):
+    __tablename__ = "availability_slots"
+    __table_args__ = (UniqueConstraint("service_id", "date", name="uq_availability_service_date"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+
+    service_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False)
+    date: Mapped[date_type] = mapped_column(Date, index=True, nullable=False)
+    capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    booked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)

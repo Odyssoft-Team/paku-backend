@@ -193,3 +193,11 @@ async def get_current_user(
         role=str(data.get("role")),
         is_active=bool(data.get("is_active", True)),
     )
+
+
+def require_roles(*roles: str):
+    async def _check(current: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if current.role not in roles:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        return current
+    return _check

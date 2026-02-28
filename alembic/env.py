@@ -20,10 +20,10 @@ def _get_settings():
 def _get_metadata():
     load_dotenv()
     from app.core.base import Base
-    from app.modules.iam.infra.models import UserModel  # noqa: F401
+    from app.modules.iam.infra.models import UserModel, UserAddressModel  # noqa: F401
     from app.modules.pets.infra.models import PetModel, PetWeightEntryModel  # noqa: F401
     from app.modules.commerce.infra.models import PriceRuleModel, ServiceModel  # noqa: F401
-    from app.modules.booking.infra.models import HoldModel  # noqa: F401
+    from app.modules.booking.infra.models import HoldModel, AvailabilitySlotModel  # noqa: F401
     from app.modules.orders.infra.models import OrderModel  # noqa: F401
     from app.modules.notifications.infra.models import NotificationModel  # noqa: F401
     from app.modules.push.infra.models import DeviceTokenModel  # noqa: F401

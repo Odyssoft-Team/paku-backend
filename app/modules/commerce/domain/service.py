@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 
 # [TECH] Enum de tipo de servicio (base/addon). Define catálogo y reglas de addons.
@@ -30,4 +30,17 @@ class Service:
     species: Species
     allowed_breeds: Optional[List[str]]
     requires: Optional[List[UUID]]
+    is_active: bool
+
+
+@dataclass(frozen=True)
+class PriceRule:
+    id: UUID
+    service_id: UUID
+    species: Species
+    breed_category: str
+    weight_min: float
+    weight_max: Optional[float]
+    price: int
+    currency: str
     is_active: bool

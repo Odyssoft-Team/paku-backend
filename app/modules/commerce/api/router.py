@@ -4,10 +4,32 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import CurrentUser, get_current_user
+from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.db import engine, get_async_session
-from app.modules.commerce.api.schemas import QuoteOut, QuoteIn, ServiceAvailableOut, ServiceOut
-from app.modules.commerce.app.use_cases import Quote, ListAvailableServices, ListServices
+from app.modules.commerce.api.schemas import (
+    PriceRuleCreateIn,
+    PriceRuleOut,
+    PriceRuleUpdateIn,
+    QuoteIn,
+    QuoteOut,
+    ServiceAvailableOut,
+    ServiceCreateIn,
+    ServiceOut,
+    ServiceToggleIn,
+    ServiceUpdateIn,
+)
+from app.modules.commerce.app.use_cases import (
+    CreatePriceRule,
+    CreateService,
+    ListAllServices,
+    ListAvailableServices,
+    ListPriceRules,
+    ListServices,
+    Quote,
+    ToggleService,
+    UpdatePriceRule,
+    UpdateService,
+)
 from app.modules.commerce.domain.service import Species
 from app.modules.commerce.infra.postgres_commerce_repository import PostgresCommerceRepository
 from app.modules.pets.domain.pet import PetRepository
@@ -80,3 +102,109 @@ async def create_quote(
         total=result.total,
         currency=result.currency,
     )
+
+
+# ------------------------------------------------------------------
+# Admin — services
+# ------------------------------------------------------------------
+
+@router.get("/admin/services", response_model=List[ServiceOut])
+async def admin_list_services(
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresCommerceRepository = Depends(get_commerce_repo),
+) -> List[ServiceOut]:
+    services = await ListAllServices(repo=repo).execute()
+    return [ServiceOut(**s.__dict__) for s in services]
+
+
+@router.post("/admin/services", response_model=ServiceOut, status_code=201)
+async def admin_create_service(
+    payload: ServiceCreateIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresCommerceRepository = Depends(get_commerce_repo),
+) -> ServiceOut:
+    service = await CreateService(repo=repo).execute(
+        name=payload.name,
+        type=payload.type,
+        species=payload.species,
+        allowed_breeds=payload.allowed_breeds,
+        requires=payload.requires,
+        is_active=payload.is_active,
+    )
+    return ServiceOut(**service.__dict__)
+
+
+@router.patch("/admin/services/{service_id}", response_model=ServiceOut)
+async def admin_update_service(
+    service_id: UUID,
+    payload: ServiceUpdateIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresCommerceRepository = Depends(get_commerce_repo),
+) -> ServiceOut:
+    service = await UpdateService(repo=repo).execute(
+        service_id,
+        name=payload.name,
+        allowed_breeds=payload.allowed_breeds,
+        requires=payload.requires,
+    )
+    return ServiceOut(**service.__dict__)
+
+
+@router.post("/admin/services/{service_id}/toggle", response_model=ServiceOut)
+async def admin_toggle_service(
+    service_id: UUID,
+    payload: ServiceToggleIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresCommerceRepository = Depends(get_commerce_repo),
+) -> ServiceOut:
+    service = await ToggleService(repo=repo).execute(service_id, is_active=payload.is_active)
+    return ServiceOut(**service.__dict__)
+
+
+# ------------------------------------------------------------------
+# Admin — price rules
+# ------------------------------------------------------------------
+
+@router.get("/admin/services/{service_id}/price-rules", response_model=List[PriceRuleOut])
+async def admin_list_price_rules(
+    service_id: UUID,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresCommerceRepository = Depends(get_commerce_repo),
+) -> List[PriceRuleOut]:
+    rules = await ListPriceRules(repo=repo).execute(service_id)
+    return [PriceRuleOut(**r.__dict__) for r in rules]
+
+
+@router.post("/admin/price-rules", response_model=PriceRuleOut, status_code=201)
+async def admin_create_price_rule(
+    payload: PriceRuleCreateIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresCommerceRepository = Depends(get_commerce_repo),
+) -> PriceRuleOut:
+    rule = await CreatePriceRule(repo=repo).execute(
+        service_id=payload.service_id,
+        species=payload.species,
+        breed_category=payload.breed_category,
+        weight_min=payload.weight_min,
+        weight_max=payload.weight_max,
+        price=payload.price,
+        currency=payload.currency,
+    )
+    return PriceRuleOut(**rule.__dict__)
+
+
+@router.patch("/admin/price-rules/{rule_id}", response_model=PriceRuleOut)
+async def admin_update_price_rule(
+    rule_id: UUID,
+    payload: PriceRuleUpdateIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresCommerceRepository = Depends(get_commerce_repo),
+) -> PriceRuleOut:
+    rule = await UpdatePriceRule(repo=repo).execute(
+        rule_id,
+        price=payload.price,
+        weight_min=payload.weight_min,
+        weight_max=payload.weight_max,
+        is_active=payload.is_active,
+    )
+    return PriceRuleOut(**rule.__dict__)
