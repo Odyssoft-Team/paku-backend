@@ -1,6 +1,11 @@
 import os
 from typing import Optional
 
+from dotenv import load_dotenv
+
+load_dotenv(".env.local", override=True)  # local overrides — ignored if file absent
+load_dotenv()  # fallback: .env (Docker lo inyecta directamente, no necesita este archivo)
+
 
 class Settings:
     APP_NAME: str = os.getenv("APP_NAME", "Paku Backend")
