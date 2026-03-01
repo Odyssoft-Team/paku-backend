@@ -15,14 +15,18 @@ down_revision = 'e3f4a5b6c7d8'
 branch_labels = None
 depends_on = None
 
-# PostgreSQL native enum types
-cartstatus_enum = sa.Enum('active', 'checked_out', 'expired', 'cancelled', name='cartstatus')
-platform_enum = sa.Enum('android', 'ios', 'web', name='platform')
+# Para crear los tipos con checkfirst (no falla si ya existen)
+_cartstatus_create = sa.Enum('active', 'checked_out', 'expired', 'cancelled', name='cartstatus')
+_platform_create   = sa.Enum('android', 'ios', 'web', name='platform')
+
+# Para usar en create_table sin que SQLAlchemy intente crearlos de nuevo
+cartstatus_enum = sa.Enum('active', 'checked_out', 'expired', 'cancelled', name='cartstatus', create_type=False)
+platform_enum   = sa.Enum('android', 'ios', 'web', name='platform', create_type=False)
 
 
 def upgrade() -> None:
-    cartstatus_enum.create(op.get_bind(), checkfirst=True)
-    platform_enum.create(op.get_bind(), checkfirst=True)
+    _cartstatus_create.create(op.get_bind(), checkfirst=True)
+    _platform_create.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         'cart_sessions',
