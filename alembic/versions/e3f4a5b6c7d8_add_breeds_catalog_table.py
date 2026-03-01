@@ -1,7 +1,7 @@
 """add breeds catalog table
 
 Revision ID: e3f4a5b6c7d8
-Revises: d2f3a4b5c6d7
+Revises: f12c6b49c83e
 Create Date: 2026-02-28
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision = 'e3f4a5b6c7d8'
-down_revision = 'd2f3a4b5c6d7'
+down_revision = 'f12c6b49c83e'
 branch_labels = None
 depends_on = None
 
