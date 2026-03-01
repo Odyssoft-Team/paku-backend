@@ -15,24 +15,17 @@ down_revision = 'e3f4a5b6c7d8'
 branch_labels = None
 depends_on = None
 
-# Para crear los tipos con checkfirst (no falla si ya existen)
-_cartstatus_create = sa.Enum('active', 'checked_out', 'expired', 'cancelled', name='cartstatus')
-_platform_create   = sa.Enum('android', 'ios', 'web', name='platform')
-
-# Para usar en create_table sin que SQLAlchemy intente crearlos de nuevo
-cartstatus_enum = sa.Enum('active', 'checked_out', 'expired', 'cancelled', name='cartstatus', create_type=False)
-platform_enum   = sa.Enum('android', 'ios', 'web', name='platform', create_type=False)
-
 
 def upgrade() -> None:
-    _cartstatus_create.create(op.get_bind(), checkfirst=True)
-    _platform_create.create(op.get_bind(), checkfirst=True)
+    # Drop orphaned enum types if they exist (tables don't exist yet so it is safe)
+    op.execute("DROP TYPE IF EXISTS cartstatus")
+    op.execute("DROP TYPE IF EXISTS platform")
 
     op.create_table(
         'cart_sessions',
         sa.Column('id', sa.Uuid(), nullable=False),
         sa.Column('user_id', sa.Uuid(), nullable=False),
-        sa.Column('status', cartstatus_enum, nullable=False),
+        sa.Column('status', sa.Enum('active', 'checked_out', 'expired', 'cancelled', name='cartstatus'), nullable=False),
         sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
@@ -80,7 +73,7 @@ def upgrade() -> None:
         'device_tokens',
         sa.Column('id', sa.Uuid(), nullable=False),
         sa.Column('user_id', sa.Uuid(), nullable=False),
-        sa.Column('platform', platform_enum, nullable=False),
+        sa.Column('platform', sa.Enum('android', 'ios', 'web', name='platform'), nullable=False),
         sa.Column('token', sa.String(length=500), nullable=False),
         sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
@@ -122,5 +115,5 @@ def downgrade() -> None:
     op.drop_index('ix_cart_sessions_user_id', table_name='cart_sessions')
     op.drop_table('cart_sessions')
 
-    platform_enum.drop(op.get_bind(), checkfirst=True)
-    cartstatus_enum.drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS platform")
+    op.execute("DROP TYPE IF EXISTS cartstatus")
