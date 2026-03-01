@@ -198,7 +198,10 @@ class PostgresCommerceRepository:
                 ADDON_DESLANADO_ID,
                 ADDON_DESMOTADO_ID,
             }
-            existing = await self._session.execute(select(ServiceModel.id).where(ServiceModel.id.in_(ensure_ids)))
+            # no_autoflush evita que SQLAlchemy intente hacer flush de los add_all
+            # pendientes antes del SELECT, lo que causaría IntegrityError.
+            with self._session.no_autoflush:
+                existing = await self._session.execute(select(ServiceModel.id).where(ServiceModel.id.in_(ensure_ids)))
             existing_ids = set(existing.scalars().all())
             missing_ids = ensure_ids - existing_ids
 

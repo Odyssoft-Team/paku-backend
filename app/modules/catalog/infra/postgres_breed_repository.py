@@ -31,6 +31,12 @@ class PostgresBreedRepository:
         if _catalog_seeded:
             return
 
+        # Si ya hay razas en la tabla, no hacer nada (idempotente entre workers)
+        res = await self._session.execute(select(BreedModel.id).limit(1))
+        if res.first() is not None:
+            _catalog_seeded = True
+            return
+
         from app.modules.catalog.domain.breeds_data import BREEDS_CATALOG
 
         now = _utcnow()
@@ -49,16 +55,11 @@ class PostgresBreedRepository:
                     )
                 )
 
-        for row in rows:
-            try:
-                self._session.add(row)
-                await self._session.flush()
-            except IntegrityError:
-                await self._session.rollback()
-
+        self._session.add_all(rows)
         try:
             await self._session.commit()
         except IntegrityError:
+            # Otro worker llegó primero — la data ya está, rollback y continuar
             await self._session.rollback()
 
         _catalog_seeded = True
