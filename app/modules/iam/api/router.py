@@ -1,9 +1,10 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
-from app.core.auth import CurrentUser, create_access_token, decode_token
+from app.core.auth import CurrentUser, create_access_token, decode_token, require_roles
 from app.core.db import engine, get_async_session
 from app.modules.geo.infra.repository import PostgresDistrictRepository
 from app.modules.geo.use_cases.geo_service import GeoService
@@ -11,6 +12,7 @@ from app.modules.iam.api.schemas import (
     AddressCreateIn,
     AddressOutExtended,
     AddressUpdateIn,
+    AdminCreateUserIn,
     LoginIn,
     RefreshIn,
     RegisterIn,
@@ -44,6 +46,7 @@ from app.modules.iam.infra.postgres_user_repository import PostgresUserRepositor
 # También permite consultar y actualizar los datos del perfil del usuario autenticado.
 # Además incluye gestión de libreta de direcciones del usuario (/addresses).
 router = APIRouter(tags=["iam"])
+admin_router = APIRouter(tags=["iam-admin"])
 security = HTTPBearer()
 
 
@@ -378,3 +381,44 @@ async def set_default_address(
         if str(exc) == "address_not_found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found") from exc
         raise
+
+
+# ------------------------------------------------------------------
+# Admin — gestión de usuarios
+# ------------------------------------------------------------------
+
+@admin_router.get("/users", response_model=list[UserOut])
+async def admin_list_users(
+    role: Optional[str] = Query(None, description="Filtrar por rol: user|ally|admin"),
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> list[UserOut]:
+    """Lista todos los usuarios con filtro opcional por rol."""
+    users = await repo.list_by_role(role=role)
+    return [UserOut(**u.__dict__) for u in users]
+
+
+@admin_router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+async def admin_create_user(
+    payload: AdminCreateUserIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: UserRepository = Depends(get_user_repo),
+) -> UserOut:
+    """Crea un usuario con el rol especificado (user, ally o admin)."""
+    try:
+        user = await RegisterUser(repo=repo).execute(
+            email=payload.email,
+            password=payload.password,
+            phone=payload.phone,
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+            sex=Sex(payload.sex),
+            birth_date=payload.birth_date,
+            role=payload.role,
+            dni=payload.dni,
+            address=None,
+            profile_photo_url=payload.profile_photo_url,
+        )
+    except HTTPException:
+        raise
+    return UserOut(**user.__dict__)

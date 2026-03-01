@@ -181,3 +181,16 @@ class UpdateProfileIn(BaseModel):
     birth_date: Optional[date] = None
     dni: Optional[str] = None
     profile_photo_url: Optional[str] = None
+
+
+class AdminCreateUserIn(BaseModel):
+    email: str
+    password: str
+    phone: str
+    first_name: str
+    last_name: str
+    sex: Sex
+    birth_date: date
+    role: Role
+    dni: Optional[str] = None
+    profile_photo_url: Optional[str] = None

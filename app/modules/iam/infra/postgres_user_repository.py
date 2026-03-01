@@ -342,6 +342,14 @@ class PostgresUserRepository(UserRepository, AddressRepository):
 
         await self._session.commit()
 
+    async def list_by_role(self, *, role: Optional[str] = None) -> list[User]:
+        stmt = select(UserModel)
+        if role:
+            stmt = stmt.where(UserModel.role == role)
+        stmt = stmt.order_by(UserModel.created_at.desc())
+        res = await self._session.execute(stmt)
+        return [_to_domain(m) for m in res.scalars().all()]
+
     async def get_default_address(self, user_id: UUID) -> Optional[dict]:
 
         stmt = select(UserAddressModel).where(
