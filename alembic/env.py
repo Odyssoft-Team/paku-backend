@@ -24,7 +24,7 @@ def _get_metadata():
     from app.modules.pets.infra.models import PetModel, PetWeightEntryModel  # noqa: F401
     from app.modules.commerce.infra.models import PriceRuleModel, ServiceModel  # noqa: F401
     from app.modules.booking.infra.models import HoldModel, AvailabilitySlotModel  # noqa: F401
-    from app.modules.orders.infra.models import OrderModel  # noqa: F401
+    from app.modules.orders.infra.models import OrderModel, OrderAssignmentModel  # noqa: F401
     from app.modules.notifications.infra.models import NotificationModel  # noqa: F401
     from app.modules.push.infra.models import DeviceTokenModel  # noqa: F401
     from app.modules.cart.infra.models import CartSessionModel, CartItemModel  # noqa: F401

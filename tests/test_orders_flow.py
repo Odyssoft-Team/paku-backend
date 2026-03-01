@@ -122,5 +122,5 @@ def test_update_status_requires_admin_or_ally():
     assert r.status_code in (200, 201)
     order_id = r.json()["id"]
 
-    r = client.post(f"/orders/{order_id}/status", json={"status": "in_process"}, headers=headers)
+    r = client.post(f"/orders/{order_id}/status", json={"status": "on_the_way"}, headers=headers)
     assert r.status_code == 403

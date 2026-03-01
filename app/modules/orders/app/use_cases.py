@@ -8,6 +8,21 @@ from app.modules.orders.domain.order import Order, OrderStatus
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository
 
+# Re-exports de use cases de transición y admin
+from app.modules.orders.app.use_cases_impl.transitions import (  # noqa: F401
+    AcceptOrder,
+    ArriveOrder,
+    CancelOrder,
+    CompleteOrder,
+    DepartOrder,
+)
+from app.modules.orders.app.use_cases_impl.admin_orders import (  # noqa: F401
+    AssignOrder,
+    GetOrderAdmin,
+    ListAllyOrders,
+    ListOrdersAdmin,
+)
+
 
 def _snapshot_cart_items(items: list[Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
@@ -104,13 +119,17 @@ class GetOrder:
 
 
 def _status_message(status_value: str) -> tuple[str, str]:
-    if status_value == OrderStatus.in_process.value:
-        return ("Pedido en proceso", "Tu pedido está siendo preparado.")
+    if status_value == OrderStatus.accepted.value:
+        return ("Servicio aceptado", "Tu groomer aceptó el servicio.")
     if status_value == OrderStatus.on_the_way.value:
-        return ("Pedido en camino", "Tu pedido ya salió y está en camino.")
-    if status_value == OrderStatus.delivered.value:
-        return ("Pedido entregado", "Tu pedido fue entregado.")
-    return ("Estado de pedido actualizado", "Se actualizó el estado de tu pedido.")
+        return ("Groomer en camino", "Tu groomer está en camino a tu domicilio.")
+    if status_value == OrderStatus.in_service.value:
+        return ("¡El grooming comenzó!", "Tu mascota está siendo atendida por nuestro groomer.")
+    if status_value == OrderStatus.done.value:
+        return ("Servicio finalizado", "¡El servicio ha concluido!")
+    if status_value == OrderStatus.cancelled.value:
+        return ("Servicio cancelado", "Tu servicio ha sido cancelado.")
+    return ("Estado actualizado", "Se actualizó el estado de tu pedido.")
 
 
 @dataclass

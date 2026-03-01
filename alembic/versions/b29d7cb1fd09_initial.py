@@ -1,8 +1,8 @@
-"""initial_clean
+"""initial
 
-Revision ID: af53ad4199d6
+Revision ID: b29d7cb1fd09
 Revises: 
-Create Date: 2026-02-28 17:08:10.527302
+Create Date: 2026-02-28 20:33:39.893584
 
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'af53ad4199d6'
+revision = 'b29d7cb1fd09'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -58,10 +58,14 @@ def upgrade() -> None:
     sa.Column('total_snapshot', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('currency', sa.String(length=10), nullable=False),
     sa.Column('delivery_address_snapshot', sa.JSON(), nullable=True),
+    sa.Column('ally_id', sa.Uuid(), nullable=True),
+    sa.Column('scheduled_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('hold_id', sa.Uuid(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_orders_ally_id'), 'orders', ['ally_id'], unique=False)
     op.create_index(op.f('ix_orders_user_id'), 'orders', ['user_id'], unique=False)
     op.create_table('pets',
     sa.Column('id', sa.Uuid(), nullable=False),
@@ -142,6 +146,19 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_table('order_assignments',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('order_id', sa.Uuid(), nullable=False),
+    sa.Column('ally_id', sa.Uuid(), nullable=False),
+    sa.Column('scheduled_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('assigned_by', sa.Uuid(), nullable=False),
+    sa.Column('notes', sa.Text(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_order_assignments_ally_id'), 'order_assignments', ['ally_id'], unique=False)
+    op.create_index(op.f('ix_order_assignments_order_id'), 'order_assignments', ['order_id'], unique=False)
     op.create_table('pet_weight_entries',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('pet_id', sa.Uuid(), nullable=False),
@@ -184,6 +201,9 @@ def downgrade() -> None:
     op.drop_table('user_addresses')
     op.drop_index(op.f('ix_pet_weight_entries_pet_id'), table_name='pet_weight_entries')
     op.drop_table('pet_weight_entries')
+    op.drop_index(op.f('ix_order_assignments_order_id'), table_name='order_assignments')
+    op.drop_index(op.f('ix_order_assignments_ally_id'), table_name='order_assignments')
+    op.drop_table('order_assignments')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     op.drop_table('services')
@@ -192,6 +212,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_pets_owner_id'), table_name='pets')
     op.drop_table('pets')
     op.drop_index(op.f('ix_orders_user_id'), table_name='orders')
+    op.drop_index(op.f('ix_orders_ally_id'), table_name='orders')
     op.drop_table('orders')
     op.drop_index(op.f('ix_holds_user_id'), table_name='holds')
     op.drop_index(op.f('ix_holds_pet_id'), table_name='holds')
