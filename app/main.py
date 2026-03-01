@@ -18,7 +18,7 @@ from app.modules.pets.api.router import router as pets_router
 from app.modules.push.api.router import router as push_router
 from app.modules.wallet.api.router import router as wallet_router
 from app.media.router import router as media_router
-from app.modules.catalog.api.router import router as catalog_router
+from app.modules.catalog.api.router import router as catalog_router, admin_router as catalog_admin_router
 from app.modules.paku_spa.api.router import router as paku_spa_router
 
 
@@ -64,6 +64,7 @@ app.include_router(cart_router)
 app.include_router(push_router)
 app.include_router(orders_router)
 app.include_router(orders_admin_router, prefix="/admin")
+app.include_router(catalog_admin_router, prefix="/admin")
 app.include_router(media_router, prefix="/api/v1")
 
 
