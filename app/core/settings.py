@@ -11,7 +11,8 @@ class Settings:
     APP_NAME: str = os.getenv("APP_NAME", "Paku Backend")
     ENV: str = os.getenv("ENV", "development")
     DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
-    
+    ROOT_PATH: str = os.getenv("ROOT_PATH", "")
+
     # Database
     DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
     

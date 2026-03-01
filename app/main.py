@@ -35,6 +35,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG,
     lifespan=lifespan,
+    root_path=settings.ROOT_PATH,
 )
 
 # CORS configuration
