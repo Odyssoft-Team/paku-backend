@@ -88,6 +88,7 @@ class CreateProduct:
         *,
         category_id: UUID,
         name: str,
+        description: Optional[str] = None,
         species: Species,
         allowed_breeds: Optional[List[str]],
         is_active: bool = True,
@@ -98,6 +99,7 @@ class CreateProduct:
         return await self.repo.create_product(
             category_id=category_id,
             name=name,
+            description=description,
             species=species,
             allowed_breeds=allowed_breeds,
             is_active=is_active,
@@ -109,11 +111,13 @@ class UpdateProduct:
     repo: PostgresStoreRepository
 
     async def execute(
-        self, product_id: UUID, *, name: Optional[str] = None, allowed_breeds: Optional[List[str]] = None
+        self, product_id: UUID, *, name: Optional[str] = None, description: Optional[str] = None, allowed_breeds: Optional[List[str]] = None
     ) -> Product:
         patch = {}
         if name is not None:
             patch["name"] = name
+        if description is not None:
+            patch["description"] = description
         if allowed_breeds is not None:
             patch["allowed_breeds"] = allowed_breeds
         try:
@@ -158,6 +162,7 @@ class CreateAddon:
         *,
         product_id: UUID,
         name: str,
+        description: Optional[str] = None,
         species: Species,
         allowed_breeds: Optional[List[str]],
         is_active: bool = True,
@@ -168,6 +173,7 @@ class CreateAddon:
         return await self.repo.create_addon(
             product_id=product_id,
             name=name,
+            description=description,
             species=species,
             allowed_breeds=allowed_breeds,
             is_active=is_active,
@@ -179,11 +185,13 @@ class UpdateAddon:
     repo: PostgresStoreRepository
 
     async def execute(
-        self, addon_id: UUID, *, name: Optional[str] = None, allowed_breeds: Optional[List[str]] = None
+        self, addon_id: UUID, *, name: Optional[str] = None, description: Optional[str] = None, allowed_breeds: Optional[List[str]] = None
     ) -> Addon:
         patch = {}
         if name is not None:
             patch["name"] = name
+        if description is not None:
+            patch["description"] = description
         if allowed_breeds is not None:
             patch["allowed_breeds"] = allowed_breeds
         try:

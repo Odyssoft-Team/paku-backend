@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, Index, JSON, Numeric, String, ForeignKey
+from sqlalchemy import Boolean, DateTime, Float, Index, JSON, Numeric, String, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -33,6 +33,7 @@ class ProductModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     category_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("store_categories.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     species: Mapped[str] = mapped_column(String(20), nullable=False)
     allowed_breeds: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -46,6 +47,7 @@ class AddonModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     product_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("store_products.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     species: Mapped[str] = mapped_column(String(20), nullable=False)
     allowed_breeds: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

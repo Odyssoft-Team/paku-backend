@@ -10,19 +10,6 @@ from app.modules.store.domain.models import Species
 # Salida pública
 # ------------------------------------------------------------------
 
-class PriceRuleOut(BaseModel):
-    id: UUID
-    target_id: UUID
-    target_type: str
-    species: Species
-    breed_category: str
-    weight_min: float
-    weight_max: Optional[float]
-    price: int
-    currency: str
-    is_active: bool
-
-
 class CategoryOut(BaseModel):
     id: UUID
     name: str
@@ -35,20 +22,24 @@ class ProductOut(BaseModel):
     id: UUID
     category_id: UUID
     name: str
+    description: Optional[str]
     species: Species
     allowed_breeds: Optional[List[str]]
     is_active: bool
-    price_rules: List[PriceRuleOut] = []
+    price: Optional[int] = None
+    currency: str = "PEN"
 
 
 class AddonOut(BaseModel):
     id: UUID
     product_id: UUID
     name: str
+    description: Optional[str]
     species: Species
     allowed_breeds: Optional[List[str]]
     is_active: bool
-    price_rules: List[PriceRuleOut] = []
+    price: Optional[int] = None
+    currency: str = "PEN"
 
 
 class ProductDetailOut(ProductOut):
@@ -106,6 +97,7 @@ class ToggleIn(BaseModel):
 class ProductCreateIn(BaseModel):
     category_id: UUID
     name: str
+    description: Optional[str] = None
     species: Species
     allowed_breeds: Optional[List[str]] = None
     is_active: bool = True
@@ -113,6 +105,7 @@ class ProductCreateIn(BaseModel):
 
 class ProductUpdateIn(BaseModel):
     name: Optional[str] = None
+    description: Optional[str] = None
     allowed_breeds: Optional[List[str]] = None
 
 
@@ -123,6 +116,7 @@ class ProductUpdateIn(BaseModel):
 class AddonCreateIn(BaseModel):
     product_id: UUID
     name: str
+    description: Optional[str] = None
     species: Species
     allowed_breeds: Optional[List[str]] = None
     is_active: bool = True
@@ -130,12 +124,26 @@ class AddonCreateIn(BaseModel):
 
 class AddonUpdateIn(BaseModel):
     name: Optional[str] = None
+    description: Optional[str] = None
     allowed_breeds: Optional[List[str]] = None
 
 
 # ------------------------------------------------------------------
 # Admin — price rules
 # ------------------------------------------------------------------
+
+class PriceRuleOut(BaseModel):
+    id: UUID
+    target_id: UUID
+    target_type: str
+    species: Species
+    breed_category: str
+    weight_min: float
+    weight_max: Optional[float]
+    price: int
+    currency: str
+    is_active: bool
+
 
 class PriceRuleCreateIn(BaseModel):
     target_id: UUID

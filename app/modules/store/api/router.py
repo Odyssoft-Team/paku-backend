@@ -79,37 +79,29 @@ async def list_categories(
 @router.get("/categories/{slug}/products", response_model=List[ProductOut])
 async def list_products(
     slug: str,
+    pet_id: Optional[UUID] = Query(None),
     species: Optional[Species] = Query(None),
-    breed: Optional[str] = Query(None),
     repo: PostgresStoreRepository = Depends(get_store_repo),
+    pets_repo: PetRepository = Depends(get_pets_repo),
 ) -> List[ProductOut]:
-    items = await ListProducts(repo=repo).execute(category_slug=slug, species=species, breed=breed)
-    return [
-        ProductOut(
-            **p.product.__dict__,
-            price_rules=[PriceRuleOut(**r.__dict__) for r in p.price_rules],
-        )
-        for p in items
-    ]
+    items = await ListProducts(repo=repo, pets_repo=pets_repo).execute(
+        category_slug=slug, pet_id=pet_id, species=species
+    )
+    return [ProductOut(**rp.product.__dict__, price=rp.price) for rp in items]
 
 
 @router.get("/products/{id}", response_model=ProductDetailOut)
 async def get_product(
     id: UUID,
-    breed: Optional[str] = Query(None),
+    pet_id: Optional[UUID] = Query(None),
     repo: PostgresStoreRepository = Depends(get_store_repo),
+    pets_repo: PetRepository = Depends(get_pets_repo),
 ) -> ProductDetailOut:
-    product_wp, addons_wp = await GetProduct(repo=repo).execute(product_id=id, breed=breed)
+    rp, addons = await GetProduct(repo=repo, pets_repo=pets_repo).execute(product_id=id, pet_id=pet_id)
     return ProductDetailOut(
-        **product_wp.product.__dict__,
-        price_rules=[PriceRuleOut(**r.__dict__) for r in product_wp.price_rules],
-        available_addons=[
-            AddonOut(
-                **awp.addon.__dict__,
-                price_rules=[PriceRuleOut(**r.__dict__) for r in awp.price_rules],
-            )
-            for awp in addons_wp
-        ],
+        **rp.product.__dict__,
+        price=rp.price,
+        available_addons=[AddonOut(**ra.addon.__dict__, price=ra.price) for ra in addons],
     )
 
 
@@ -204,6 +196,7 @@ async def admin_create_product(
     product = await CreateProduct(repo=repo).execute(
         category_id=payload.category_id,
         name=payload.name,
+        description=payload.description,
         species=payload.species,
         allowed_breeds=payload.allowed_breeds,
         is_active=payload.is_active,
@@ -218,7 +211,9 @@ async def admin_update_product(
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> ProductOut:
-    product = await UpdateProduct(repo=repo).execute(id, name=payload.name, allowed_breeds=payload.allowed_breeds)
+    product = await UpdateProduct(repo=repo).execute(
+        id, name=payload.name, description=payload.description, allowed_breeds=payload.allowed_breeds
+    )
     return ProductOut(**product.__dict__)
 
 
@@ -256,6 +251,7 @@ async def admin_create_addon(
     addon = await CreateAddon(repo=repo).execute(
         product_id=payload.product_id,
         name=payload.name,
+        description=payload.description,
         species=payload.species,
         allowed_breeds=payload.allowed_breeds,
         is_active=payload.is_active,
@@ -270,7 +266,9 @@ async def admin_update_addon(
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> AddonOut:
-    addon = await UpdateAddon(repo=repo).execute(id, name=payload.name, allowed_breeds=payload.allowed_breeds)
+    addon = await UpdateAddon(repo=repo).execute(
+        id, name=payload.name, description=payload.description, allowed_breeds=payload.allowed_breeds
+    )
     return AddonOut(**addon.__dict__)
 
 
