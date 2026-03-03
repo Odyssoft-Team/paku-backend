@@ -1,9 +1,10 @@
 from dataclasses import dataclass
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
 
-from app.modules.push.domain.push import DeviceToken, DeviceTokenRepository, Platform
+from app.modules.push.domain.push import DeviceToken, DeviceTokenRepository, Platform, PushMessage
 
 
 def _raise_device_error(code: str) -> None:
@@ -37,3 +38,18 @@ class DeactivateDevice:
         except ValueError as exc:
             _raise_device_error(str(exc))
             raise
+
+
+@dataclass
+class BroadcastPush:
+    repo: DeviceTokenRepository
+
+    async def execute(self, *, title: str, body: str, data: Optional[dict[str, Any]] = None) -> int:
+        from app.core.settings import settings
+        from app.modules.push.infra.provider import ExpoPushProvider, MockPushProvider
+
+        tokens = await self.repo.get_all_active_tokens()
+        if tokens:
+            provider = ExpoPushProvider() if settings.ENV == "production" else MockPushProvider()
+            provider.send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
+        return len(tokens)

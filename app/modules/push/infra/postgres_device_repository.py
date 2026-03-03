@@ -110,3 +110,10 @@ class PostgresDeviceTokenRepository(DeviceTokenRepository):
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_all_active_tokens(self) -> list[str]:
+        from app.modules.push.infra.models import DeviceTokenModel
+
+        stmt = select(DeviceTokenModel.token).where(DeviceTokenModel.is_active.is_(True))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

@@ -1,12 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import CurrentUser, get_current_user
 from app.core.db import engine, get_async_session
-from app.modules.push.api.schemas import DeviceOut, DeviceRegisterIn
-from app.modules.push.app.use_cases import DeactivateDevice, ListDevices, RegisterDevice
+from app.modules.push.api.schemas import BroadcastIn, BroadcastOut, DeviceOut, DeviceRegisterIn
+from app.modules.push.app.use_cases import BroadcastPush, DeactivateDevice, ListDevices, RegisterDevice
 from app.modules.push.infra.postgres_device_repository import PostgresDeviceTokenRepository
 
 
@@ -44,3 +44,19 @@ async def deactivate_device(
 ) -> None:
     await DeactivateDevice(repo=repo).execute(user_id=current.id, device_id=id)
     return None
+
+
+@router.post("/broadcast", response_model=BroadcastOut)
+async def broadcast_push(
+    payload: BroadcastIn,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresDeviceTokenRepository = Depends(get_push_repo),
+) -> BroadcastOut:
+    if current.role not in ("admin", "ally"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    sent_to = await BroadcastPush(repo=repo).execute(
+        title=payload.title,
+        body=payload.body,
+        data=payload.data,
+    )
+    return BroadcastOut(sent_to=sent_to)

@@ -20,6 +20,7 @@ from app.modules.wallet.api.router import router as wallet_router
 from app.media.router import router as media_router
 from app.modules.catalog.api.router import router as catalog_router, admin_router as catalog_admin_router
 from app.modules.paku_spa.api.router import router as paku_spa_router
+from app.modules.store.api.router import router as store_router, admin_router as store_admin_router
 
 
 @asynccontextmanager
@@ -63,9 +64,11 @@ app.include_router(notifications_router)
 app.include_router(cart_router)
 app.include_router(push_router)
 app.include_router(orders_router)
+app.include_router(store_router)
 app.include_router(orders_admin_router, prefix="/admin")
 app.include_router(catalog_admin_router, prefix="/admin")
 app.include_router(iam_admin_router, prefix="/admin")
+app.include_router(store_admin_router, prefix="/admin")
 app.include_router(media_router, prefix="/api/v1")
 
 

@@ -78,3 +78,6 @@ class DeviceTokenRepository(Protocol):
 
     async def get_active_tokens(self, user_id: UUID) -> list[str]:
         ...
+
+    async def get_all_active_tokens(self) -> list[str]:
+        ...

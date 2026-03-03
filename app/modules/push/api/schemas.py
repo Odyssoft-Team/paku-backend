@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -28,3 +29,13 @@ class DeviceOut(BaseModel):
     token: str
     is_active: bool
     created_at: datetime
+
+
+class BroadcastIn(BaseModel):
+    title: str
+    body: str
+    data: Optional[dict[str, Any]] = None
+
+
+class BroadcastOut(BaseModel):
+    sent_to: int
