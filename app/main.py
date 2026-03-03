@@ -14,7 +14,7 @@ from app.modules.geo.api.router import router as geo_router
 from app.modules.iam.api.router import router as iam_router, admin_router as iam_admin_router
 from app.modules.notifications.api.router import router as notifications_router
 from app.modules.orders.api.router import router as orders_router, admin_router as orders_admin_router
-from app.modules.pets.api.router import router as pets_router
+from app.modules.pets.api.router import router as pets_router, admin_router as pets_admin_router
 from app.modules.push.api.router import router as push_router
 from app.modules.wallet.api.router import router as wallet_router
 from app.media.router import router as media_router
@@ -68,6 +68,7 @@ app.include_router(store_router)
 app.include_router(orders_admin_router, prefix="/admin")
 app.include_router(catalog_admin_router, prefix="/admin")
 app.include_router(iam_admin_router, prefix="/admin")
+app.include_router(pets_admin_router, prefix="/admin")
 app.include_router(store_admin_router, prefix="/admin")
 app.include_router(media_router, prefix="/api/v1")
 

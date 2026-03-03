@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import CurrentUser, get_current_user
+from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.db import engine, get_async_session
 from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, WeightEntryIn, WeightEntryOut, PatchPetOptionalIn
 from app.modules.pets.app.use_cases import CreatePet, GetPet, GetWeightHistory, ListPets, RecordWeight, UpdatePet, PatchPetOptional
@@ -11,6 +11,7 @@ from app.modules.pets.domain.pet import PetRepository
 from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 
 router = APIRouter(tags=["pets"])
+admin_router = APIRouter(tags=["pets-admin"])
 
 
 def get_pet_repo(session: AsyncSession = Depends(get_async_session)) -> PetRepository:
@@ -125,3 +126,17 @@ async def record_weight(
 async def get_weight_history(id: UUID, repo: PetRepository = Depends(get_pet_repo)) -> list[WeightEntryOut]:
     entries = await GetWeightHistory(repo=repo).execute(pet_id=id)
     return [WeightEntryOut(**e.__dict__) for e in entries]
+
+
+# ------------------------------------------------------------------
+# Admin
+# ------------------------------------------------------------------
+
+@admin_router.get("/users/{user_id}/pets", response_model=list[PetOut])
+async def admin_list_user_pets(
+    user_id: UUID,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PetRepository = Depends(get_pet_repo),
+) -> list[PetOut]:
+    pets = await ListPets(repo=repo).execute(owner_id=user_id, limit=100, offset=0)
+    return [PetOut(**pet.__dict__) for pet in pets]
