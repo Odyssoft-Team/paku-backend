@@ -20,7 +20,7 @@ def upgrade() -> None:
         'store_categories',
         sa.Column('id', UUID(as_uuid=True), primary_key=True),
         sa.Column('name', sa.String(200), nullable=False),
-        sa.Column('slug', sa.String(100), nullable=False, unique=True),
+        sa.Column('slug', sa.String(100), nullable=False),
         sa.Column('species', sa.String(20), nullable=True),
         sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
@@ -70,10 +70,20 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index('ix_store_price_rules_target_id', 'store_price_rules', ['target_id'])
+    op.create_index(
+        'ix_store_price_rules_lookup',
+        'store_price_rules',
+        ['target_id', 'target_type', 'species', 'breed_category'],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index('ix_store_price_rules_lookup', table_name='store_price_rules')
+    op.drop_index('ix_store_price_rules_target_id', table_name='store_price_rules')
     op.drop_table('store_price_rules')
+    op.drop_index('ix_store_addons_product_id', table_name='store_addons')
     op.drop_table('store_addons')
+    op.drop_index('ix_store_products_category_id', table_name='store_products')
     op.drop_table('store_products')
+    op.drop_index('ix_store_categories_slug', table_name='store_categories')
     op.drop_table('store_categories')

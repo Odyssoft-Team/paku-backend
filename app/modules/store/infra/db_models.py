@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, JSON, Numeric, String, ForeignKey
+from sqlalchemy import Boolean, DateTime, Float, Index, JSON, Numeric, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -62,8 +63,12 @@ class StorePriceRuleModel(Base):
     breed_category: Mapped[str] = mapped_column(String(30), nullable=False)
     weight_min: Mapped[float] = mapped_column(Float, nullable=False)
     weight_max: Mapped[float | None] = mapped_column(Float, nullable=True)
-    price: Mapped[int] = mapped_column(Numeric(12, 2), nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(10), nullable=False, default="PEN")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    __table_args__ = (
+        Index("ix_store_price_rules_lookup", "target_id", "target_type", "species", "breed_category"),
+    )

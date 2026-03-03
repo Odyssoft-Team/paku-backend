@@ -235,6 +235,12 @@ class CreatePriceRule:
         price: int,
         currency: str = "PEN",
     ) -> PriceRule:
+        _VALID_BREED_CATEGORIES = {"official", "otros", "mestizo"}
+        if breed_category not in _VALID_BREED_CATEGORIES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"breed_category_invalid: debe ser uno de {sorted(_VALID_BREED_CATEGORIES)}",
+            )
         if price < 0:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

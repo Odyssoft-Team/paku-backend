@@ -141,7 +141,7 @@ class PriceRuleCreateIn(BaseModel):
     species: Species
     breed_category: str
     weight_min: float = Field(ge=0)
-    weight_max: Optional[float] = None
+    weight_max: Optional[float] = Field(default=None, ge=0)
     price: int = Field(ge=0)
     currency: str = "PEN"
 
@@ -149,5 +149,5 @@ class PriceRuleCreateIn(BaseModel):
 class PriceRuleUpdateIn(BaseModel):
     price: Optional[int] = Field(default=None, ge=0)
     weight_min: Optional[float] = Field(default=None, ge=0)
-    weight_max: Optional[float] = None
+    weight_max: Optional[float] = Field(default=None, ge=0)
     is_active: Optional[bool] = None

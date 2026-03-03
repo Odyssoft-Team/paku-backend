@@ -66,7 +66,7 @@ class PostgresStoreRepository:
             breed_category=r.breed_category,
             weight_min=r.weight_min,
             weight_max=r.weight_max,
-            price=int(Decimal(str(r.price))),
+            price=int(r.price),
             currency=r.currency,
             is_active=r.is_active,
         )
@@ -407,4 +407,4 @@ class PostgresStoreRepository:
         if rule is None:
             return None
 
-        return int(Decimal(str(rule.price)))
+        return int(rule.price)
