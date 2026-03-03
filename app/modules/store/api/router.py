@@ -84,7 +84,13 @@ async def list_products(
     repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> List[ProductOut]:
     items = await ListProducts(repo=repo).execute(category_slug=slug, species=species, breed=breed)
-    return [ProductOut(**p.__dict__) for p in items]
+    return [
+        ProductOut(
+            **p.product.__dict__,
+            price_rules=[PriceRuleOut(**r.__dict__) for r in p.price_rules],
+        )
+        for p in items
+    ]
 
 
 @router.get("/products/{id}", response_model=ProductDetailOut)
@@ -93,10 +99,17 @@ async def get_product(
     breed: Optional[str] = Query(None),
     repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> ProductDetailOut:
-    product, addons = await GetProduct(repo=repo).execute(product_id=id, breed=breed)
+    product_wp, addons_wp = await GetProduct(repo=repo).execute(product_id=id, breed=breed)
     return ProductDetailOut(
-        **product.__dict__,
-        available_addons=[AddonOut(**a.__dict__) for a in addons],
+        **product_wp.product.__dict__,
+        price_rules=[PriceRuleOut(**r.__dict__) for r in product_wp.price_rules],
+        available_addons=[
+            AddonOut(
+                **awp.addon.__dict__,
+                price_rules=[PriceRuleOut(**r.__dict__) for r in awp.price_rules],
+            )
+            for awp in addons_wp
+        ],
     )
 
 

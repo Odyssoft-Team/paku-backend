@@ -10,6 +10,19 @@ from app.modules.store.domain.models import Species
 # Salida pública
 # ------------------------------------------------------------------
 
+class PriceRuleOut(BaseModel):
+    id: UUID
+    target_id: UUID
+    target_type: str
+    species: Species
+    breed_category: str
+    weight_min: float
+    weight_max: Optional[float]
+    price: int
+    currency: str
+    is_active: bool
+
+
 class CategoryOut(BaseModel):
     id: UUID
     name: str
@@ -25,6 +38,7 @@ class ProductOut(BaseModel):
     species: Species
     allowed_breeds: Optional[List[str]]
     is_active: bool
+    price_rules: List[PriceRuleOut] = []
 
 
 class AddonOut(BaseModel):
@@ -34,6 +48,7 @@ class AddonOut(BaseModel):
     species: Species
     allowed_breeds: Optional[List[str]]
     is_active: bool
+    price_rules: List[PriceRuleOut] = []
 
 
 class ProductDetailOut(ProductOut):
@@ -121,19 +136,6 @@ class AddonUpdateIn(BaseModel):
 # ------------------------------------------------------------------
 # Admin — price rules
 # ------------------------------------------------------------------
-
-class PriceRuleOut(BaseModel):
-    id: UUID
-    target_id: UUID
-    target_type: str
-    species: Species
-    breed_category: str
-    weight_min: float
-    weight_max: Optional[float]
-    price: int
-    currency: str
-    is_active: bool
-
 
 class PriceRuleCreateIn(BaseModel):
     target_id: UUID
