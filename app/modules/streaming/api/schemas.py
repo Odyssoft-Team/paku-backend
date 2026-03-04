@@ -54,6 +54,7 @@ class StreamSessionOut(BaseModel):
 
     # Connection info — ready to use, no extra calls needed
     ws_url: str             # full WebSocket URL: wss://.../ws?room={room_id}
+    stream_token: str       # token de acceso para el WebSocket
     ice_servers: list[IceServerOut]  # drop this into RTCPeerConnection({ iceServers })
 
     model_config = {"use_enum_values": True}

@@ -68,7 +68,7 @@ async def get_stream_session(
     La respuesta incluye `ws_url` lista para usar y `ice_servers` lista para
     pasarla directamente a `RTCPeerConnection`.
     """
-    session = await GetStreamSession(orders_repo=orders_repo).execute(
+    session, stream_token = await GetStreamSession(orders_repo=orders_repo).execute(
         order_id=order_id,
         requester_id=current.id,
         requester_role=current.role,
@@ -85,5 +85,6 @@ async def get_stream_session(
         order_status=session.order_status,
         role=session.role,
         ws_url=ws_url,
+        stream_token=stream_token,
         ice_servers=_build_ice_servers(),
     )
