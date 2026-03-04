@@ -38,6 +38,7 @@ class Settings:
     # Streaming / WebRTC
     # STREAMING_DEV: replace static TURN credentials with dynamic generation in production.
     STREAMING_SIGNALING_URL: str = os.getenv("STREAMING_SIGNALING_URL", "wss://stream.dev-qa.site/ws")
+    STREAMING_SECRET: str = os.getenv("STREAMING_SECRET", "streaming-secret-change-in-production")
     STREAMING_STUN_URL: str      = os.getenv("STREAMING_STUN_URL",      "stun:stun.l.google.com:19302")
     STREAMING_TURN_URLS: str     = os.getenv(
         "STREAMING_TURN_URLS",
