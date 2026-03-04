@@ -19,6 +19,7 @@ class CurrentUser:
     email: str
     role: str
     is_active: bool
+    profile_completed: bool = True
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
@@ -120,11 +121,13 @@ def create_access_token(
     role: Optional[str] = None,
     is_active: bool = True,
 ) -> str:
+    profile_completed: bool = True
     if user is not None:
         user_id = getattr(user, "id")
         email = getattr(user, "email")
         role = getattr(user, "role")
         is_active = bool(getattr(user, "is_active", True))
+        profile_completed = bool(getattr(user, "profile_completed", True))
 
     if user_id is None or email is None or role is None:
         raise ValueError("missing_user_fields")
@@ -135,6 +138,7 @@ def create_access_token(
         "email": email,
         "role": role,
         "is_active": is_active,
+        "profile_completed": profile_completed,
         "type": "access",
         "exp": exp.timestamp(),
     }
@@ -192,6 +196,7 @@ async def get_current_user(
         email=str(data.get("email")),
         role=str(data.get("role")),
         is_active=bool(data.get("is_active", True)),
+        profile_completed=bool(data.get("profile_completed", True)),
     )
 
 
@@ -199,5 +204,23 @@ def require_roles(*roles: str):
     async def _check(current: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if current.role not in roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        return current
+    return _check
+
+
+def require_profile_complete():
+    """Guard que rechaza requests de usuarios sociales con perfil incompleto.
+    Usar en endpoints que requieren phone/sex/birth_date (booking, órdenes, etc.).
+    """
+    async def _check(current: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if not current.profile_completed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "PROFILE_INCOMPLETE",
+                    "message": "Completa tu perfil antes de continuar.",
+                    "missing_fields": ["phone", "sex", "birth_date"],
+                },
+            )
         return current
     return _check

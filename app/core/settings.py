@@ -32,6 +32,9 @@ class Settings:
     except ValueError:
         GCS_SIGNED_URL_TTL_SECONDS: int = 300
 
+    # Firebase (social auth — Google, Apple, Facebook)
+    FIREBASE_CREDENTIALS_JSON: Optional[str] = os.getenv("FIREBASE_CREDENTIALS_JSON")
+
     # Streaming / WebRTC
     # STREAMING_DEV: replace static TURN credentials with dynamic generation in production.
     STREAMING_SIGNALING_URL: str = os.getenv("STREAMING_SIGNALING_URL", "wss://stream.dev-qa.site/ws")

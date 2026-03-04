@@ -22,16 +22,21 @@ class UserModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
 
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Nullable para usuarios sociales (Google/Apple/Facebook)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    phone: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Nullable para usuarios sociales — se completan después
+    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    sex: Mapped[str] = mapped_column(String(10), nullable=False)
-    birth_date: Mapped[date] = mapped_column(Date, nullable=False)
+    sex: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    profile_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     dni: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
@@ -52,27 +57,25 @@ class UserAddressModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     district_id: Mapped[str] = mapped_column(String(20), nullable=False)
-    
+
     address_line: Mapped[str] = mapped_column(String(255), nullable=False)
     reference: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     building_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     apartment_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    
+
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lng: Mapped[float] = mapped_column(Float, nullable=False)
-    
+
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
-    # Relationships
     user: Mapped[UserModel] = relationship(backref="addresses")
 
-    # Indexes
     __table_args__ = (
         Index("ix_user_addresses_user_id", "user_id"),
         Index("ix_user_addresses_user_default", "user_id", "is_default"),
@@ -80,7 +83,18 @@ class UserAddressModel(Base):
     )
 
 
-_iam_schema_ready = False
+class UserSocialIdentityModel(Base):
+    __tablename__ = "user_social_identities"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    firebase_uid: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (Index("ix_user_social_identities_user_id", "user_id"),)
 
 
 async def ensure_iam_schema(engine: AsyncEngine) -> None:

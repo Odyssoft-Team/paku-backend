@@ -1,3 +1,5 @@
+import json
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,6 +14,7 @@ from app.modules.clinical_history.api.router import router as clinical_history_r
 from app.modules.commerce.api.router import router as commerce_router
 from app.modules.geo.api.router import router as geo_router
 from app.modules.iam.api.router import router as iam_router, admin_router as iam_admin_router
+from app.modules.iam.api.social_router import router as iam_social_router
 from app.modules.notifications.api.router import router as notifications_router
 from app.modules.orders.api.router import router as orders_router, admin_router as orders_admin_router
 from app.modules.pets.api.router import router as pets_router, admin_router as pets_admin_router
@@ -24,8 +27,33 @@ from app.modules.store.api.router import router as store_router, admin_router as
 from app.modules.streaming.api.router import router as streaming_router
 
 
+def _init_firebase() -> None:
+    """Inicializa Firebase Admin SDK.
+
+    - Sin FIREBASE_CREDENTIALS_JSON → usa Application Default Credentials (ADC).
+      En GCP la VM usa automáticamente su service account. No requiere configuración extra.
+    - Con FIREBASE_CREDENTIALS_JSON → usa el JSON explícito (útil en local / CI).
+    """
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+
+        if not firebase_admin._apps:
+            if settings.FIREBASE_CREDENTIALS_JSON:
+                creds_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+                cred = credentials.Certificate(creds_dict)
+                firebase_admin.initialize_app(cred)
+                logging.info("Firebase Admin SDK initialized with service account JSON")
+            else:
+                firebase_admin.initialize_app()
+                logging.info("Firebase Admin SDK initialized with ADC (GCP VM identity)")
+    except Exception as exc:
+        logging.error(f"Failed to initialize Firebase Admin SDK: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _init_firebase()
     start_scheduler()
     try:
         yield
@@ -56,6 +84,7 @@ app.include_router(geo_router, prefix="/geo")
 app.include_router(catalog_router)
 app.include_router(paku_spa_router)
 app.include_router(iam_router)
+app.include_router(iam_social_router)
 app.include_router(pets_router)
 app.include_router(commerce_router)
 app.include_router(booking_router)

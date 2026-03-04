@@ -11,3 +11,4 @@ apscheduler
 google-cloud-storage>=2.16.0
 httpx
 exponent_server_sdk
+firebase-admin>=6.5.0

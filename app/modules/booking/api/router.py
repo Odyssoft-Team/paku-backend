@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import CurrentUser, get_current_user, require_roles
+from app.core.auth import CurrentUser, get_current_user, require_profile_complete, require_roles
 from app.core.db import engine, get_async_session
 from app.modules.booking.api.schemas import (
     AvailabilityOut,
@@ -45,7 +45,7 @@ def get_availability_repo(session: AsyncSession = Depends(get_async_session)) ->
 @router.post("/holds", response_model=HoldOut, status_code=status.HTTP_201_CREATED)
 async def create(
     payload: HoldCreateIn,
-    current: CurrentUser = Depends(get_current_user),
+    current: CurrentUser = Depends(require_profile_complete()),
     hold_repo: PostgresHoldRepository = Depends(get_hold_repo),
     availability_repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
 ) -> HoldOut:

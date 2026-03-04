@@ -35,8 +35,9 @@ def _to_domain(model: UserModel) -> User:
         phone=model.phone,
         first_name=model.first_name,
         last_name=model.last_name,
-        sex=Sex(model.sex),
+        sex=Sex(model.sex) if model.sex else None,
         birth_date=model.birth_date,
+        profile_completed=bool(model.profile_completed),
         dni=model.dni,
         address=address,
         profile_photo_url=model.profile_photo_url,
@@ -85,8 +86,9 @@ class PostgresUserRepository(UserRepository, AddressRepository):
             phone=user.phone,
             first_name=user.first_name,
             last_name=user.last_name,
-            sex=str(user.sex.value if hasattr(user.sex, "value") else user.sex),
+            sex=str(user.sex.value if hasattr(user.sex, "value") else user.sex) if user.sex else None,
             birth_date=user.birth_date,
+            profile_completed=bool(user.profile_completed),
             dni=user.dni,
             address_district_id=address_district_id,
             address_line=address_line,
@@ -108,10 +110,11 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         model.phone = user.phone
         model.first_name = user.first_name
         model.last_name = user.last_name
-        model.sex = str(user.sex.value if hasattr(user.sex, "value") else user.sex)
+        model.sex = str(user.sex.value if hasattr(user.sex, "value") else user.sex) if user.sex else None
         model.birth_date = user.birth_date
         model.dni = user.dni
         model.profile_photo_url = user.profile_photo_url
+        model.profile_completed = bool(user.profile_completed)
 
         if user.address is None:
             model.address_district_id = None
@@ -134,7 +137,7 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         stmt = select(UserAddressModel).where(UserAddressModel.user_id == user_id)
         if not include_deleted:
             stmt = stmt.where(UserAddressModel.deleted_at.is_(None))
-        
+
         stmt = stmt.order_by(UserAddressModel.is_default.desc(), UserAddressModel.created_at.desc())
         result = await self._session.execute(stmt)
         models = result.scalars().all()
@@ -169,7 +172,7 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        
+
         if model is None:
             return None
 
@@ -237,17 +240,16 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        
+
         if model is None:
             raise ValueError("address_not_found")
 
-        # Update fields
         for key, value in patch.items():
             if key == "is_default":
-                continue  # is_default se maneja solo por set_default_address
+                continue
             if hasattr(model, key) and key not in ["id", "user_id", "created_at", "deleted_at"]:
                 setattr(model, key, value)
-        
+
         model.updated_at = utcnow()
         await self._session.commit()
         await self._session.refresh(model)
@@ -272,7 +274,6 @@ class PostgresUserRepository(UserRepository, AddressRepository):
 
     async def soft_delete_address(self, user_id: UUID, address_id: UUID) -> None:
 
-        # Get address to delete
         stmt = select(UserAddressModel).where(
             UserAddressModel.user_id == user_id,
             UserAddressModel.id == address_id,
@@ -280,28 +281,26 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        
+
         if model is None:
             raise ValueError("address_not_found")
 
         was_default = model.is_default
-        
-        # Soft delete
+
         model.deleted_at = utcnow()
         model.is_default = False
         model.updated_at = utcnow()
 
-        # If it was default, assign new default
         if was_default:
             new_default_stmt = select(UserAddressModel).where(
                 UserAddressModel.user_id == user_id,
                 UserAddressModel.deleted_at.is_(None),
                 UserAddressModel.id != address_id
             ).order_by(UserAddressModel.created_at.desc()).limit(1)
-            
+
             new_default_result = await self._session.execute(new_default_stmt)
             new_default_model = new_default_result.scalar_one_or_none()
-            
+
             if new_default_model:
                 new_default_model.is_default = True
                 new_default_model.updated_at = utcnow()
@@ -312,7 +311,6 @@ class PostgresUserRepository(UserRepository, AddressRepository):
 
     async def set_default_address(self, user_id: UUID, address_id: UUID) -> None:
 
-        # Verify address exists and is not deleted
         stmt = select(UserAddressModel).where(
             UserAddressModel.user_id == user_id,
             UserAddressModel.id == address_id,
@@ -320,11 +318,10 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        
+
         if model is None:
             raise ValueError("address_not_found")
 
-        # Set all other addresses to non-default
         from sqlalchemy import update
         await self._session.execute(
             update(UserAddressModel)
@@ -336,7 +333,6 @@ class PostgresUserRepository(UserRepository, AddressRepository):
             .values(is_default=False, updated_at=utcnow())
         )
 
-        # Set this address as default
         model.is_default = True
         model.updated_at = utcnow()
 
@@ -359,7 +355,7 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
-        
+
         if model is None:
             return None
 
