@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
+from datetime import datetime, timedelta, timezone
 
+import jwt
 from fastapi import HTTPException, status
 
+from app.core.settings import settings
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.streaming.domain.session import StreamSession, resolve_stream_session
 
@@ -36,7 +39,7 @@ class GetStreamSession:
         order_id: UUID,
         requester_id: UUID,
         requester_role: str,   # "user" | "ally" | "admin"  — extraído del JWT
-    ) -> StreamSession:
+    ) -> tuple[StreamSession, str]:
 
         # Buscar la orden sin restricción de user_id para que admin y ally
         # también puedan consultarla.
@@ -67,4 +70,23 @@ class GetStreamSession:
                 detail=str(exc),
             )
 
-        return session
+        # Generación del JWT para el signaling server
+        now = datetime.now(timezone.utc)
+
+        token_payload = {
+            "sub": str(requester_id),
+            "role": session.role.value,
+            "room": str(session.channel_id),
+            "iss": "main-backend",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "jti": str(uuid4()),
+        }
+
+        stream_token = jwt.encode(
+            token_payload,
+            settings.STREAMING_SECRET,
+            algorithm="HS256",
+        )
+
+        return session, stream_token
