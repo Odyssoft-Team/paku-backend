@@ -32,5 +32,16 @@ class Settings:
     except ValueError:
         GCS_SIGNED_URL_TTL_SECONDS: int = 300
 
+    # Streaming / WebRTC
+    # STREAMING_DEV: replace static TURN credentials with dynamic generation in production.
+    STREAMING_SIGNALING_URL: str = os.getenv("STREAMING_SIGNALING_URL", "wss://stream.dev-qa.site/ws")
+    STREAMING_STUN_URL: str      = os.getenv("STREAMING_STUN_URL",      "stun:stun.l.google.com:19302")
+    STREAMING_TURN_URLS: str     = os.getenv(
+        "STREAMING_TURN_URLS",
+        "turn:stream.dev-qa.site:3478?transport=udp,turn:stream.dev-qa.site:3478?transport=tcp",
+    )
+    STREAMING_TURN_USERNAME: str = os.getenv("STREAMING_TURN_USERNAME", "webrtc")
+    STREAMING_TURN_CREDENTIAL: str = os.getenv("STREAMING_TURN_CREDENTIAL", "webrtc123")
+
 
 settings = Settings()
