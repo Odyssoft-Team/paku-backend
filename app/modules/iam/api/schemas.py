@@ -138,3 +138,33 @@ class CompleteProfileIn(BaseModel):
     sex: Sex
     birth_date: date
     dni: Optional[str] = None
+
+
+# ------------------------------------------------------------------
+# Account linking
+# ------------------------------------------------------------------
+
+class ChangeRoleIn(BaseModel):
+    """Cambia el rol de un usuario (solo admin)."""
+    role: Role
+
+
+class SetPasswordIn(BaseModel):
+    """Agrega o cambia la contraseña del usuario autenticado.
+    - Sin contraseña previa (cuenta social): solo new_password.
+    - Con contraseña previa: también current_password.
+    """
+    new_password: str
+    current_password: Optional[str] = None
+
+
+class LinkSocialIn(BaseModel):
+    """Vincula una identidad social (Firebase) a la cuenta actual."""
+    id_token: str
+
+
+class LinkedIdentityOut(BaseModel):
+    """Identidad social vinculada."""
+    id: UUID
+    provider: str
+    created_at: datetime

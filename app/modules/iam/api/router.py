@@ -13,6 +13,7 @@ from app.modules.iam.api.schemas import (
     AddressOutExtended,
     AddressUpdateIn,
     AdminCreateUserIn,
+    ChangeRoleIn,
     LoginIn,
     RefreshIn,
     RegisterIn,
@@ -20,7 +21,7 @@ from app.modules.iam.api.schemas import (
     UpdateProfileIn,
     UserOut,
 )
-from app.modules.iam.app.use_cases import GetMe, LoginUser, RegisterUser, UpdateProfile
+from app.modules.iam.app.use_cases import ChangeUserRole, GetMe, LoginUser, RegisterUser, UpdateProfile
 from app.modules.iam.domain.user import Sex
 from app.modules.iam.domain.user import UserRepository
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
@@ -396,6 +397,18 @@ async def admin_list_users(
     """Lista todos los usuarios con filtro opcional por rol."""
     users = await repo.list_by_role(role=role)
     return [UserOut(**u.__dict__) for u in users]
+
+
+@admin_router.patch("/users/{user_id}/role", response_model=UserOut)
+async def admin_change_role(
+    user_id: UUID,
+    payload: ChangeRoleIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> UserOut:
+    """Cambia el rol de un usuario (user ↔ ally ↔ admin)."""
+    user = await ChangeUserRole(repo=repo).execute(user_id=user_id, role=payload.role)
+    return UserOut(**user.__dict__)
 
 
 @admin_router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
