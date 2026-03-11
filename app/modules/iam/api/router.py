@@ -112,7 +112,7 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
         role=payload.role,
         dni=payload.dni,
         address=None,
-        profile_photo_url=payload.profile_photo_url,
+        profile_photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
     )
 
     result = user.__dict__.copy()
@@ -177,12 +177,6 @@ async def update_me(
     current: CurrentUser = Depends(get_current_user_db),
     repo: UserRepository = Depends(get_user_repo),
 ) -> UserOut:
-    if payload.address is not None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Profile address is deprecated. Use /addresses endpoints.",
-        )
-
     user = await UpdateProfile(repo=repo).execute(
         user_id=current.id,
         phone=payload.phone,
@@ -192,7 +186,7 @@ async def update_me(
         birth_date=payload.birth_date,
         dni=payload.dni,
         address=None,
-        profile_photo_url=payload.profile_photo_url,
+        profile_photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
     )
 
     result = user.__dict__.copy()
@@ -430,7 +424,7 @@ async def admin_create_user(
             role=payload.role,
             dni=payload.dni,
             address=None,
-            profile_photo_url=payload.profile_photo_url,
+            profile_photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
         )
     except HTTPException:
         raise

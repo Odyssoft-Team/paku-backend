@@ -56,6 +56,23 @@ def validate_object_name(object_name: str) -> None:
         raise ValueError("Invalid object_name")
 
 
+def parse_object_name(object_name: str) -> tuple[str, UUID]:
+    """
+    Parsea un object_name ya validado y devuelve (prefix, entity_id).
+    prefix es 'users' o 'pets'.
+    Lanza ValueError si el formato no es reconocido.
+    """
+    validate_object_name(object_name)
+    parts = object_name.split("/")
+    # Formato garantizado: {prefix}/{uuid}/profile_...
+    prefix = parts[0]
+    try:
+        entity_id = UUID(parts[1])
+    except (IndexError, ValueError) as exc:
+        raise ValueError("Invalid object_name: cannot extract entity_id") from exc
+    return prefix, entity_id
+
+
 def generate_signed_upload_url(object_name: str, content_type: str, expires_in: int) -> str:
     client = storage.Client()
     bucket = client.bucket(get_bucket_name())

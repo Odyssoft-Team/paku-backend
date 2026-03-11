@@ -11,6 +11,7 @@ from app.media.gcs import (
     generate_signed_read_url,
     generate_signed_upload_url,
     get_ttl_seconds,
+    parse_object_name,
     validate_object_name,
 )
 from app.media.schemas import (
@@ -23,6 +24,7 @@ from app.media.schemas import (
     ConfirmProfilePhotoResponse,
 )
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
+from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 
 router = APIRouter(tags=["media"])
 
@@ -31,14 +33,34 @@ router = APIRouter(tags=["media"])
 async def create_signed_upload(
     payload: SignedUploadRequest,
     current: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
 ) -> SignedUploadResponse:
-    # (Si ya cambiaste schemas.py a Literal, esto casi nunca fallará,
-    #  pero lo dejo por seguridad y claridad.)
     if payload.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported content_type")
 
-    # TODO: if entity_type=user -> entity_id must match current_user.id
-    # TODO: if entity_type=pet -> validate in DB that pet_id belongs to current_user
+    # --- Ownership validation ---
+    try:
+        current_id = UUID(str(current.id))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid current user id") from exc
+
+    if payload.entity_type == MediaEntityType.user:
+        if current_id != payload.entity_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot upload media for another user",
+            )
+    else:
+        # entity_type == pet: la mascota debe existir y pertenecer al current_user
+        pet_repo = PostgresPetRepository(session=session, engine=engine)
+        pet = await pet_repo.get_by_id(payload.entity_id)
+        if pet is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
+        if pet.owner_id != current_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot upload media for a pet you do not own",
+            )
 
     try:
         object_name = build_object_name(
@@ -72,19 +94,45 @@ async def create_signed_upload(
 async def create_signed_read(
     payload: SignedReadRequest,
     current: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
 ) -> SignedReadResponse:
-    # TODO: validate object_name ownership (user/pet) against current_user
-    # Recomendación futura: NO aceptar object_name libre; leerlo desde BD (user/pet)
-
+    # Validar formato antes de hacer cualquier consulta
     try:
         validate_object_name(payload.object_name)
+        prefix, entity_id = parse_object_name(payload.object_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    # --- Ownership validation ---
+    try:
+        current_id = UUID(str(current.id))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid current user id") from exc
+
+    if prefix == "users":
+        if current_id != entity_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot read media for another user",
+            )
+    else:
+        # prefix == "pets": verificar que la mascota existe y pertenece al current_user
+        pet_repo = PostgresPetRepository(session=session, engine=engine)
+        pet = await pet_repo.get_by_id(entity_id)
+        if pet is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
+        if pet.owner_id != current_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot read media for a pet you do not own",
+            )
+
+    try:
         expires_in = get_ttl_seconds()
         read_url = generate_signed_read_url(
             object_name=payload.object_name,
             expires_in=expires_in,
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -103,9 +151,8 @@ async def confirm_profile_photo(
     """
     Confirma una foto ya subida a GCS y la asocia a la entidad.
 
-    MVP:
     - user: guarda object_name en users.profile_photo_url
-    - pet: pendiente (ownership + persistencia en tabla pets)
+    - pet: guarda object_name en pets.photo_url
     """
     # Validación básica de object_name
     try:
@@ -137,10 +184,26 @@ async def confirm_profile_photo(
         await repo.update(user)
 
     else:
-        # TODO: Implementar para pets:
-        # - validar en DB que pet_id pertenece al current_user
-        # - guardar object_name en el modelo Pet
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Pet profile photo not implemented yet")
+        # entity_type == pet
+        try:
+            current_id = UUID(str(current.id))
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid current user id") from exc
+
+        pet_repo = PostgresPetRepository(session=session, engine=engine)
+        pet = await pet_repo.get_by_id(payload.entity_id)
+        if pet is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
+
+        if pet.owner_id != current_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot set profile photo for a pet you do not own",
+            )
+
+        # Guardamos object_name en pets.photo_url
+        pet.photo_url = payload.object_name
+        await pet_repo.update(pet)
 
     # Devolver read_url listo para mostrar en frontend
     expires_in = get_ttl_seconds()

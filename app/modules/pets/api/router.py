@@ -102,7 +102,7 @@ async def update_pet(
         sex=payload.sex,
         birth_date=payload.birth_date,
         notes=payload.notes,
-        photo_url=payload.photo_url,
+        photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
     )
     return PetOut(**pet.__dict__)
 

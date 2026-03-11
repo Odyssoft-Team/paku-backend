@@ -48,12 +48,13 @@ def test_update_pet_editable_fields_ok():
     token = _register_and_login("test_pets_extended_update_ok_" + __import__("uuid").uuid4().hex + "@example.com")
     pet = _create_pet(token=token, name="Firulais", species="dog")
 
-    payload = {"name": "Firulais 2", "photo_url": "https://example.com/pets/1.jpg"}
+    # photo_url ya no se acepta como input libre (gestionado por el módulo media).
+    # Solo verificamos que los campos de negocio se actualicen correctamente.
+    payload = {"name": "Firulais 2"}
     r = client.put(f"/pets/{pet['id']}", json=payload, headers=_auth_headers(token))
     assert r.status_code == 200
     data = r.json()
     assert data.get("name") == payload["name"]
-    assert data.get("photo_url") == payload["photo_url"]
 
 
 def test_update_pet_cannot_change_species():

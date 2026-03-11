@@ -70,7 +70,7 @@ class UpdatePetIn(BaseModel):
     sex: Optional[Sex] = None
     birth_date: Optional[date] = None
     notes: Optional[str] = None
-    photo_url: Optional[str] = None
+    # photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
 
 
 class WeightEntryIn(BaseModel):

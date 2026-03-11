@@ -57,7 +57,7 @@ class RegisterIn(BaseModel):
     birth_date: date
     role: Role = "user"
     dni: Optional[str] = None
-    profile_photo_url: Optional[str] = None
+    # profile_photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
 
 
 class LoginIn(BaseModel):
@@ -99,7 +99,7 @@ class UpdateProfileIn(BaseModel):
     sex: Optional[Sex] = None
     birth_date: Optional[date] = None
     dni: Optional[str] = None
-    profile_photo_url: Optional[str] = None
+    # profile_photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
 
 
 class AdminCreateUserIn(BaseModel):
@@ -112,7 +112,7 @@ class AdminCreateUserIn(BaseModel):
     birth_date: date
     role: Role
     dni: Optional[str] = None
-    profile_photo_url: Optional[str] = None
+    # profile_photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
 
 
 # ------------------------------------------------------------------
