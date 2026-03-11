@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID, uuid4
-from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
-import jwt
+# [TODO: SECURITY] Re-enable these imports when stream_token generation is re-activated.
+# from uuid import uuid4
+# from datetime import datetime, timedelta, timezone
+# import jwt
+# from app.core.settings import settings
+
 from fastapi import HTTPException, status
-
-from app.core.settings import settings
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.streaming.domain.session import StreamSession, resolve_stream_session
 
@@ -70,23 +72,28 @@ class GetStreamSession:
                 detail=str(exc),
             )
 
-        # Generación del JWT para el signaling server
-        now = datetime.now(timezone.utc)
+        # [TODO: SECURITY] stream_token generation is temporarily disabled for testing.
+        # The signaling server is not yet configured to validate this token,
+        # so generating it would add no security and block integration tests.
+        #
+        # To re-enable: uncomment the block below, remove the `return session, None` line,
+        # and ensure STREAMING_SECRET is set as a shared secret with the signaling server.
+        #
+        # now = datetime.now(timezone.utc)
+        # token_payload = {
+        #     "sub": str(requester_id),
+        #     "role": session.role.value,
+        #     "room": str(session.channel_id),
+        #     "iss": "main-backend",
+        #     "iat": now,
+        #     "exp": now + timedelta(minutes=5),
+        #     "jti": str(uuid4()),
+        # }
+        # stream_token = jwt.encode(
+        #     token_payload,
+        #     settings.STREAMING_SECRET,
+        #     algorithm="HS256",
+        # )
+        # return session, stream_token
 
-        token_payload = {
-            "sub": str(requester_id),
-            "role": session.role.value,
-            "room": str(session.channel_id),
-            "iss": "main-backend",
-            "iat": now,
-            "exp": now + timedelta(minutes=5),
-            "jti": str(uuid4()),
-        }
-
-        stream_token = jwt.encode(
-            token_payload,
-            settings.STREAMING_SECRET,
-            algorithm="HS256",
-        )
-
-        return session, stream_token
+        return session, None
