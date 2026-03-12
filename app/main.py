@@ -101,7 +101,7 @@ app.include_router(catalog_admin_router, prefix="/admin")
 app.include_router(iam_admin_router, prefix="/admin")
 app.include_router(pets_admin_router, prefix="/admin")
 app.include_router(store_admin_router, prefix="/admin")
-app.include_router(media_router, prefix="/api/v1")
+app.include_router(media_router)
 
 
 @app.get("/health")
