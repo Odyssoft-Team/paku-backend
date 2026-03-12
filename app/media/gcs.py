@@ -114,7 +114,7 @@ def _get_signing_credentials():
     signer = google.auth.iam.Signer(
         request=request,
         credentials=credentials,
-        service_account=service_account_email,
+        service_account_email=service_account_email,
     )
     signing_credentials = _sa.Credentials(
         signer=signer,
