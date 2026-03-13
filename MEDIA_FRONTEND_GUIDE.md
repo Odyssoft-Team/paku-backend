@@ -1,7 +1,7 @@
 # 📸 Guía de Integración Frontend — Fotos de Perfil (Users & Pets)
 
-> **Fecha:** 11 de marzo de 2026  
-> **Base URL:** `https://<tu-dominio>/api/v1`  
+> **Fecha:** 13 de marzo de 2026  
+> **Base URL:** `https://<tu-dominio>` (sin prefijo `/api/v1`)  
 > **Autenticación:** `Authorization: Bearer <access_token>` en todos los endpoints.
 
 ---
@@ -37,7 +37,7 @@ Las imágenes viven en **Google Cloud Storage (GCS)**. El bucket es **privado** 
 ### Paso 1 — Pedir signed URL de subida
 
 ```http
-POST /api/v1/media/signed-upload
+POST /media/signed-upload
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -79,7 +79,7 @@ Body: <binary file data>
 ### Paso 3 — Confirmar la foto al backend
 
 ```http
-POST /api/v1/media/confirm-profile-photo
+POST /media/confirm-profile-photo
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -111,7 +111,7 @@ Idéntico al de usuario, cambiando `entity_type` y `entity_id`:
 ### Paso 1 — Pedir signed URL de subida
 
 ```http
-POST /api/v1/media/signed-upload
+POST /media/signed-upload
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -143,7 +143,7 @@ Body: <binary>
 ### Paso 3 — Confirmar
 
 ```http
-POST /api/v1/media/confirm-profile-photo
+POST /media/confirm-profile-photo
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -172,7 +172,7 @@ Cuando el backend devuelve `profile_photo_url` (usuario) o `photo_url` (mascota)
 Para renderizarla debes pedir una signed read URL:
 
 ```http
-POST /api/v1/media/signed-read
+POST /media/signed-read
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -207,7 +207,7 @@ const asset = result.assets[0];
 const contentType = asset.mimeType ?? 'image/jpeg'; // 'image/jpeg' | 'image/png' | 'image/webp'
 
 // 2. Pedir signed upload URL al backend
-const signedRes = await fetch(`${BASE_URL}/api/v1/media/signed-upload`, {
+const signedRes = await fetch(`${BASE_URL}/media/signed-upload`, {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`,
@@ -232,7 +232,7 @@ const uploadRes = await fetch(upload_url, {
 if (!uploadRes.ok) throw new Error('Failed to upload to GCS');
 
 // 4. Confirmar al backend
-const confirmRes = await fetch(`${BASE_URL}/api/v1/media/confirm-profile-photo`, {
+const confirmRes = await fetch(`${BASE_URL}/media/confirm-profile-photo`, {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`,
@@ -241,7 +241,7 @@ const confirmRes = await fetch(`${BASE_URL}/api/v1/media/confirm-profile-photo`,
   body: JSON.stringify({
     entity_type: 'user',        // o 'pet'
     entity_id: currentUser.id,  // o pet.id
-    object_name,                // el que devolvió el paso 2
+    object_name,                // el que devolvió el paso 2 — NO modificar
   }),
 });
 if (!confirmRes.ok) throw new Error('Failed to confirm photo');
@@ -259,7 +259,7 @@ setProfilePhotoUri(read_url);
 async function loadProfilePhoto(objectName: string | null): Promise<string | null> {
   if (!objectName) return null;
 
-  const res = await fetch(`${BASE_URL}/api/v1/media/signed-read`, {
+  const res = await fetch(`${BASE_URL}/media/signed-read`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -273,11 +273,11 @@ async function loadProfilePhoto(objectName: string | null): Promise<string | nul
 }
 
 // Uso:
-const user = await getMe(); // GET /api/v1/users/me → devuelve profile_photo_url (object_name o null)
+const user = await getMe(); // GET /users/me → devuelve profile_photo_url (object_name o null)
 const photoUri = await loadProfilePhoto(user.profile_photo_url);
 
 // Para mascota:
-const pet = await getPet(petId); // GET /api/v1/pets/{id} → devuelve photo_url (object_name o null)
+const pet = await getPet(petId); // GET /pets/{id} → devuelve photo_url (object_name o null)
 const petPhotoUri = await loadProfilePhoto(pet.photo_url);
 ```
 
@@ -301,9 +301,9 @@ const petPhotoUri = await loadProfilePhoto(pet.photo_url);
 
 | Endpoint | Método | Requiere auth | Para qué |
 |---|---|---|---|
-| `/api/v1/media/signed-upload` | `POST` | ✅ | Obtener URL firmada para subir imagen a GCS |
-| `/api/v1/media/confirm-profile-photo` | `POST` | ✅ | Confirmar subida y persistir en BD |
-| `/api/v1/media/signed-read` | `POST` | ✅ | Obtener URL firmada para mostrar imagen |
+| `/media/signed-upload` | `POST` | ✅ | Obtener URL firmada para subir imagen a GCS |
+| `/media/confirm-profile-photo` | `POST` | ✅ | Confirmar subida y persistir en BD |
+| `/media/signed-read` | `POST` | ✅ | Obtener URL firmada para mostrar imagen |
 
 ---
 
