@@ -157,8 +157,17 @@ async def confirm_profile_photo(
     # Validación básica de object_name
     try:
         validate_object_name(payload.object_name)
+        obj_prefix, obj_entity_id = parse_object_name(payload.object_name)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    # Verificar que el object_name pertenece realmente a la entidad declarada
+    expected_prefix = "users" if payload.entity_type == MediaEntityType.user else "pets"
+    if obj_prefix != expected_prefix or obj_entity_id != payload.entity_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="object_name does not belong to the specified entity",
+        )
 
     # Ownership mínimo + persistencia
     if payload.entity_type == MediaEntityType.user:
@@ -179,9 +188,26 @@ async def confirm_profile_photo(
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-        # Guardamos object_name (aunque el campo se llame profile_photo_url)
-        user.profile_photo_url = payload.object_name
-        await repo.update(user)
+        # User es frozen dataclass: construir nueva instancia con el campo actualizado
+        from app.modules.iam.domain.user import User
+        updated_user = User(
+            id=user.id,
+            email=user.email,
+            password_hash=user.password_hash,
+            role=user.role,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            phone=user.phone,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            sex=user.sex,
+            birth_date=user.birth_date,
+            profile_completed=user.profile_completed,
+            dni=user.dni,
+            address=user.address,
+            profile_photo_url=payload.object_name,  # único campo que cambia
+        )
+        await repo.update(updated_user)
 
     else:
         # entity_type == pet
@@ -201,9 +227,37 @@ async def confirm_profile_photo(
                 detail="Cannot set profile photo for a pet you do not own",
             )
 
-        # Guardamos object_name en pets.photo_url
-        pet.photo_url = payload.object_name
-        await pet_repo.update(pet)
+        # Pet es frozen dataclass: construir nueva instancia con el campo actualizado
+        from app.modules.pets.domain.pet import Pet
+        updated_pet = Pet(
+            id=pet.id,
+            owner_id=pet.owner_id,
+            name=pet.name,
+            species=pet.species,
+            breed=pet.breed,
+            sex=pet.sex,
+            birth_date=pet.birth_date,
+            notes=pet.notes,
+            created_at=pet.created_at,
+            photo_url=payload.object_name,  # único campo que cambia
+            weight_kg=pet.weight_kg,
+            updated_at=pet.updated_at,
+            sterilized=pet.sterilized,
+            size=pet.size,
+            activity_level=pet.activity_level,
+            coat_type=pet.coat_type,
+            skin_sensitivity=pet.skin_sensitivity,
+            bath_behavior=pet.bath_behavior,
+            tolerates_drying=pet.tolerates_drying,
+            tolerates_nail_clipping=pet.tolerates_nail_clipping,
+            vaccines_up_to_date=pet.vaccines_up_to_date,
+            grooming_frequency=pet.grooming_frequency,
+            receive_reminders=pet.receive_reminders,
+            antiparasitic=pet.antiparasitic,
+            antiparasitic_interval=pet.antiparasitic_interval,
+            special_shampoo=pet.special_shampoo,
+        )
+        await pet_repo.update(updated_pet)
 
     # Devolver read_url listo para mostrar en frontend
     expires_in = get_ttl_seconds()
