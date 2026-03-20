@@ -47,5 +47,10 @@ class Settings:
     STREAMING_TURN_USERNAME: str = os.getenv("STREAMING_TURN_USERNAME", "webrtc")
     STREAMING_TURN_CREDENTIAL: str = os.getenv("STREAMING_TURN_CREDENTIAL", "webrtc123")
 
+    # Tracking — Google Routes API
+    # Dejar vacío para deshabilitar el endpoint GET /tracking/orders/{id}/route.
+    # Obtener en: https://console.cloud.google.com/apis/credentials
+    GOOGLE_ROUTES_API_KEY: Optional[str] = os.getenv("GOOGLE_ROUTES_API_KEY")
+
 
 settings = Settings()

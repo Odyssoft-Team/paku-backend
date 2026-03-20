@@ -25,6 +25,7 @@ from app.modules.catalog.api.router import router as catalog_router, admin_route
 from app.modules.paku_spa.api.router import router as paku_spa_router
 from app.modules.store.api.router import router as store_router, admin_router as store_admin_router
 from app.modules.streaming.api.router import router as streaming_router
+from app.modules.tracking.api.router import router as tracking_router
 
 
 def _init_firebase() -> None:
@@ -96,6 +97,7 @@ app.include_router(push_router)
 app.include_router(orders_router)
 app.include_router(store_router)
 app.include_router(streaming_router)
+app.include_router(tracking_router)
 app.include_router(orders_admin_router, prefix="/admin")
 app.include_router(catalog_admin_router, prefix="/admin")
 app.include_router(iam_admin_router, prefix="/admin")
