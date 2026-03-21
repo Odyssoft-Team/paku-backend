@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -12,6 +12,8 @@ from pydantic import BaseModel
 class BreedItemOut(BaseModel):
     id: str
     name: str
+    coat_group: Optional[str] = None
+    coat_type: Optional[str] = None
 
 
 class BreedsBySpeciesOut(BaseModel):
@@ -28,6 +30,8 @@ class BreedOut(BaseModel):
     name: str
     species: str
     is_active: bool
+    coat_group: Optional[str] = None
+    coat_type: Optional[str] = None
 
 
 class BreedCreateIn(BaseModel):

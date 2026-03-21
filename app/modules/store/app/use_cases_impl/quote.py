@@ -11,12 +11,18 @@ from app.modules.store.infra.postgres_store_repository import PostgresStoreRepos
 from app.modules.pets.domain.pet import PetRepository
 
 
-def _breed_category(breed: Optional[str]) -> str:
+def _breed_category(breed: Optional[str]) -> Optional[str]:
+    """Devuelve el coat_type de la raza consultando el catálogo hardcodeado.
+    Retorna None si la raza no tiene coat_type asignado aún."""
     if not breed or not str(breed).strip():
-        return "mestizo"
-    if str(breed).strip().lower() in {"husky", "labrador"}:
-        return "official"
-    return "otros"
+        return None
+    breed_id = str(breed).strip().lower()
+    from app.modules.catalog.domain.breeds_data import BREEDS_CATALOG
+    for group in BREEDS_CATALOG:
+        for b in group["breeds"]:
+            if b["id"] == breed_id:
+                return b.get("coat_type")
+    return None
 
 
 @dataclass

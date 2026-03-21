@@ -50,6 +50,8 @@ class PostgresBreedRepository:
                         name=b["name"],
                         species=species,
                         is_active=True,
+                        coat_group=b.get("coat_group"),
+                        coat_type=b.get("coat_type"),
                         created_at=now,
                         updated_at=now,
                     )
@@ -69,7 +71,14 @@ class PostgresBreedRepository:
     # ------------------------------------------------------------------
 
     def _to_domain(self, m: BreedModel) -> Breed:
-        return Breed(id=m.id, name=m.name, species=m.species, is_active=m.is_active)
+        return Breed(
+            id=m.id,
+            name=m.name,
+            species=m.species,
+            is_active=m.is_active,
+            coat_group=m.coat_group,
+            coat_type=m.coat_type,
+        )
 
     async def list_active(self, *, species: Optional[str] = None) -> list[Breed]:
         await self.seed_if_empty()
