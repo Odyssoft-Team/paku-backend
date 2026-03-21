@@ -37,7 +37,7 @@ def _group_by_species(breeds) -> list[dict]:
     """Agrupa lista de Breed por species — mantiene el contrato de respuesta original."""
     groups: dict[str, list] = defaultdict(list)
     for b in breeds:
-        groups[b.species].append({"id": b.id, "name": b.name})
+        groups[b.species].append({"id": b.id, "name": b.name, "coat_group": b.coat_group, "coat_type": b.coat_type})
     # orden estable: dog primero, cat segundo
     order = ["dog", "cat"]
     result = []
@@ -77,7 +77,7 @@ async def admin_list_breeds(
 ):
     """Lista todas las razas (activas e inactivas)."""
     breeds = await ListBreedsAdmin(repo=repo).execute(species=species)
-    return [BreedOut(id=b.id, name=b.name, species=b.species, is_active=b.is_active) for b in breeds]
+    return [BreedOut(id=b.id, name=b.name, species=b.species, is_active=b.is_active, coat_group=b.coat_group, coat_type=b.coat_type) for b in breeds]
 
 
 @admin_router.post("/breeds", response_model=BreedOut, status_code=status.HTTP_201_CREATED)
