@@ -5,11 +5,14 @@ Use case that resolves a StreamSession for a given order and requester.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
+from datetime import datetime, timedelta, timezone
 
 import logging
+import jwt
 
 from fastapi import HTTPException, status
+from app.core.settings import settings
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.streaming.domain.session import StreamSession, resolve_stream_session
 
@@ -61,8 +64,24 @@ class GetStreamSession:
             logger.exception("streaming.get_stream_session unexpected_error order_id=%s requester_id=%s: %s", order_id, requester_id, exc)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="internal_error") from exc
 
-        # stream_token generation is intentionally disabled (TODO in codebase)
-        stream_token = None
+        # Generación del JWT para el signaling server
+        now = datetime.now(timezone.utc)
+
+        token_payload = {
+            "sub": str(requester_id),
+            "role": session.role.value,
+            "room": str(session.channel_id),
+            "iss": "main-backend",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "jti": str(uuid4()),
+        }
+
+        stream_token = jwt.encode(
+            token_payload,
+            settings.STREAMING_SECRET,
+            algorithm="HS256",
+        )
 
         logger.info("streaming.get_stream_session resolved order_id=%s channel_id=%s role=%s requester_id=%s", order_id, session.channel_id, session.role, requester_id)
 

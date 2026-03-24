@@ -57,7 +57,8 @@ class StreamSessionOut(BaseModel):
     # [TODO: SECURITY] stream_token is Optional for testing purposes.
     # Re-enable (set back to `str`) once the signaling server is configured
     # to validate it with the shared STREAMING_SECRET.
-    stream_token: Optional[str] = None  # token de acceso para el WebSocket (deshabilitado en testing)
+    #stream_token: Optional[str] = None  # token de acceso para el WebSocket (deshabilitado en testing)
+    stream_token: str       # token de acceso para el WebSocket
     ice_servers: list[IceServerOut]  # drop this into RTCPeerConnection({ iceServers })
 
     model_config = {"use_enum_values": True}
