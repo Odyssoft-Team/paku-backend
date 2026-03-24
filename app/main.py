@@ -1,9 +1,11 @@
 import json
 import logging
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.settings import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
@@ -80,6 +82,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Usar X-Request-ID si ya viene del cliente, sino generar uno
+        req_id = request.headers.get("X-Request-ID") or str(uuid4())
+        request.state.request_id = req_id
+        response = await call_next(request)
+        # Exponerlo en la respuesta para facilitar correlación en logs
+        response.headers["X-Request-ID"] = req_id
+        return response
+
+
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(geo_router, prefix="/geo")
 app.include_router(catalog_router)

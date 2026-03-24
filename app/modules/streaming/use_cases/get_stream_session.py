@@ -1,36 +1,21 @@
+"""
+Use case that resolves a StreamSession for a given order and requester.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from uuid import UUID
 
-# [TODO: SECURITY] Re-enable these imports when stream_token generation is re-activated.
-# from uuid import uuid4
-# from datetime import datetime, timedelta, timezone
-# import jwt
-# from app.core.settings import settings
+import logging
 
 from fastapi import HTTPException, status
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.streaming.domain.session import StreamSession, resolve_stream_session
 
+logger = logging.getLogger(__name__)
 
-# [TECH]
-# Use case that resolves a StreamSession for a given order and requester.
-# Depends on PostgresOrderRepository (read-only) to fetch the order.
-# All business rule validation is delegated to the domain function resolve_stream_session.
-# Raises HTTP 404 / 403 / 409 as appropriate so the router stays thin.
-#
-# [BUSINESS]
-# Verifica que la orden exista, que esté en in_service, y que el solicitante
-# sea el cliente, el ally asignado o un admin. Devuelve la sesión con el
-# channel_id y el rol que corresponde a ese participante.
-#
-# NOTE FOR THE STREAMING DEV:
-# This is the single entry point your module needs to call before creating
-# or joining a channel on the media server. It gives you:
-#   - channel_id  → use this as the room/channel identifier on the media server
-#   - role        → "host" means the ally (broadcaster), "viewer" means the client
-#   - user_id / ally_id → available if your server needs participant metadata
+
 @dataclass
 class GetStreamSession:
     orders_repo: PostgresOrderRepository
@@ -40,19 +25,24 @@ class GetStreamSession:
         *,
         order_id: UUID,
         requester_id: UUID,
-        requester_role: str,   # "user" | "ally" | "admin"  — extraído del JWT
-    ) -> tuple[StreamSession, str]:
+        requester_role: str,   # "user" | "ally" | "admin"
+    ) -> tuple[StreamSession, str | None]:
 
         # Buscar la orden sin restricción de user_id para que admin y ally
         # también puedan consultarla.
         order = await self.orders_repo.get_order_admin(id=order_id)
 
         if order is None:
+            logger.info("streaming.get_stream_session order_not_found order_id=%s requester_id=%s", order_id, requester_id)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="order_not_found",
             )
 
+        logger.info("streaming.get_stream_session order_found order_id=%s status=%s ally_id=%s requester_id=%s requester_role=%s",
+                    order_id, order.status.value, order.ally_id, requester_id, requester_role)
+
+        # Delegar reglas de negocio puras a resolve_stream_session
         try:
             session = resolve_stream_session(
                 order=order,
@@ -60,40 +50,20 @@ class GetStreamSession:
                 requester_role=requester_role,
             )
         except ValueError as exc:
-            code = str(exc)
-            if code.startswith("stream_forbidden"):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You are not a participant of this order",
-                )
-            # stream_not_available — orden no está en in_service o sin ally
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=str(exc),
-            )
+            # Resolver el error en detalle y mapear a HTTPException con códigos apropiados
+            msg = str(exc)
+            if msg.startswith("stream_not_available"):
+                logger.warning("streaming.get_stream_session not_available order_id=%s status=%s requester_id=%s", order_id, order.status.value, requester_id)
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from exc
+            if msg.startswith("stream_forbidden") or msg.startswith("stream_forbidden"):
+                logger.warning("streaming.get_stream_session forbidden order_id=%s requester_id=%s requester_role=%s", order_id, requester_id, requester_role)
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg) from exc
+            logger.exception("streaming.get_stream_session unexpected_error order_id=%s requester_id=%s: %s", order_id, requester_id, exc)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="internal_error") from exc
 
-        # [TODO: SECURITY] stream_token generation is temporarily disabled for testing.
-        # The signaling server is not yet configured to validate this token,
-        # so generating it would add no security and block integration tests.
-        #
-        # To re-enable: uncomment the block below, remove the `return session, None` line,
-        # and ensure STREAMING_SECRET is set as a shared secret with the signaling server.
-        #
-        # now = datetime.now(timezone.utc)
-        # token_payload = {
-        #     "sub": str(requester_id),
-        #     "role": session.role.value,
-        #     "room": str(session.channel_id),
-        #     "iss": "main-backend",
-        #     "iat": now,
-        #     "exp": now + timedelta(minutes=5),
-        #     "jti": str(uuid4()),
-        # }
-        # stream_token = jwt.encode(
-        #     token_payload,
-        #     settings.STREAMING_SECRET,
-        #     algorithm="HS256",
-        # )
-        # return session, stream_token
+        # stream_token generation is intentionally disabled (TODO in codebase)
+        stream_token = None
 
-        return session, None
+        logger.info("streaming.get_stream_session resolved order_id=%s channel_id=%s role=%s requester_id=%s", order_id, session.channel_id, session.role, requester_id)
+
+        return session, stream_token

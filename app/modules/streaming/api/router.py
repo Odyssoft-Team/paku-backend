@@ -1,7 +1,9 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+
+import logging
 
 from app.core.auth import CurrentUser, get_current_user
 from app.core.db import engine, get_async_session
@@ -11,6 +13,8 @@ from app.modules.streaming.api.schemas import IceServerOut, StreamSessionOut
 from app.modules.streaming.use_cases.get_stream_session import GetStreamSession
 
 router = APIRouter(tags=["streaming"], prefix="/streaming")
+
+logger = logging.getLogger(__name__)
 
 
 def _get_orders_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresOrderRepository:
@@ -53,29 +57,43 @@ def _build_ice_servers() -> list[IceServerOut]:
 @router.get("/orders/{order_id}/session", response_model=StreamSessionOut)
 async def get_stream_session(
     order_id: UUID,
+    request: Request,
     current: CurrentUser = Depends(get_current_user),
     orders_repo: PostgresOrderRepository = Depends(_get_orders_repo),
 ) -> StreamSessionOut:
     """
     Resuelve la sesión de streaming para una orden activa.
-
-    - **Ally asignado** → `role: host` (abre el canal y transmite; genera el WebRTC offer).
-    - **Cliente dueño** → `role: viewer` (se une y ve la transmisión; espera el offer).
-    - **Admin**         → `role: viewer` (supervisión).
-
-    Solo disponible cuando `order_status == in_service`.
-
-    La respuesta incluye `ws_url` lista para usar y `ice_servers` lista para
-    pasarla directamente a `RTCPeerConnection`.
     """
-    session, stream_token = await GetStreamSession(orders_repo=orders_repo).execute(
-        order_id=order_id,
-        requester_id=current.id,
-        requester_role=current.role,
+    # Información de correlación
+    request_id = getattr(request.state, "request_id", None)
+    client_ip = request.client.host if request and request.client else None
+
+    logger.info(
+        "streaming.request_session received order_id=%s requester_id=%s requester_role=%s request_id=%s client_ip=%s",
+        order_id, current.id, current.role, request_id, client_ip,
     )
 
+    try:
+        session, stream_token = await GetStreamSession(orders_repo=orders_repo).execute(
+            order_id=order_id,
+            requester_id=current.id,
+            requester_role=current.role,
+        )
+    except Exception as exc:
+        # Log la excepción con correlación y re-raise para que FastAPI la gestione
+        logger.exception(
+            "streaming.request_session failed order_id=%s requester_id=%s request_id=%s: %s",
+            order_id, current.id, request_id, exc,
+        )
+        raise
+
     room_id = str(session.channel_id)
-    ws_url  = f"{settings.STREAMING_SIGNALING_URL}?room={room_id}"
+    ws_url = f"{settings.STREAMING_SIGNALING_URL}?room={room_id}"
+
+    logger.info(
+        "streaming.session_resolved order_id=%s channel_id=%s role=%s stream_token_present=%s request_id=%s",
+        order_id, session.channel_id, session.role, bool(stream_token), request_id,
+    )
 
     return StreamSessionOut(
         room_id=room_id,
