@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Protocol
-from uuid import UUID, uuid4
+from uuid import UUID
 
 
 class Species(str, Enum):
@@ -51,7 +51,7 @@ class PriceRule:
     breed_category: str
     weight_min: float
     weight_max: Optional[float]
-    price: int
+    price: float          # soles con decimales, ej: 120.00 (NO centavos)
     currency: str
     is_active: bool
 
@@ -81,6 +81,6 @@ class StoreRepository(Protocol):
 
     # --- price rules ---
     async def list_price_rules(self, *, target_id: UUID) -> List[PriceRule]: ...
-    async def create_price_rule(self, *, target_id: UUID, target_type: str, species: Species, breed_category: str, weight_min: float, weight_max: Optional[float], price: int, currency: str) -> PriceRule: ...
+    async def create_price_rule(self, *, target_id: UUID, target_type: str, species: Species, breed_category: str, weight_min: float, weight_max: Optional[float], price: float, currency: str) -> PriceRule: ...
     async def update_price_rule(self, rule_id: UUID, patch: dict) -> PriceRule: ...
-    async def price_for(self, *, target_id: UUID, target_type: str, species: Species, breed_category: str, weight: float) -> Optional[int]: ...
+    async def price_for(self, *, target_id: UUID, target_type: str, species: Species, breed_category: str, weight: float) -> Optional[float]: ...

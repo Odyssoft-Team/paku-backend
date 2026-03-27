@@ -29,7 +29,7 @@ def _breed_category(breed: Optional[str]) -> Optional[str]:
 class QuoteLine:
     target_id: UUID
     name: str
-    price: int
+    price: float   # soles con decimales, ej: 120.0
 
 
 @dataclass
@@ -37,7 +37,7 @@ class QuoteResult:
     pet_id: UUID
     product: QuoteLine
     addons: List[QuoteLine] = field(default_factory=list)
-    total: int = 0
+    total: float = 0.0   # soles con decimales
     currency: str = "PEN"
 
 

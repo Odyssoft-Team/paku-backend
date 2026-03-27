@@ -26,7 +26,7 @@ class ProductOut(BaseModel):
     species: Species
     allowed_breeds: Optional[List[str]]
     is_active: bool
-    price: Optional[int] = None
+    price: Optional[float] = None   # soles con decimales, ej: 120.0
     currency: str = "PEN"
 
 
@@ -38,7 +38,7 @@ class AddonOut(BaseModel):
     species: Species
     allowed_breeds: Optional[List[str]]
     is_active: bool
-    price: Optional[int] = None
+    price: Optional[float] = None   # soles con decimales, ej: 15.0
     currency: str = "PEN"
 
 
@@ -49,14 +49,14 @@ class ProductDetailOut(ProductOut):
 class QuoteLineOut(BaseModel):
     target_id: UUID
     name: str
-    price: int
+    price: float   # soles con decimales, ej: 120.0
 
 
 class QuoteOut(BaseModel):
     pet_id: UUID
     product: QuoteLineOut
     addons: List[QuoteLineOut]
-    total: int
+    total: float   # soles con decimales
     currency: str = "PEN"
 
 
@@ -140,7 +140,7 @@ class PriceRuleOut(BaseModel):
     breed_category: str
     weight_min: float
     weight_max: Optional[float]
-    price: int
+    price: float   # soles con decimales, ej: 120.0
     currency: str
     is_active: bool
 
@@ -152,12 +152,12 @@ class PriceRuleCreateIn(BaseModel):
     breed_category: str
     weight_min: float = Field(ge=0)
     weight_max: Optional[float] = Field(default=None, ge=0)
-    price: int = Field(ge=0)
+    price: float = Field(ge=0)   # soles con decimales, ej: 120.0
     currency: str = "PEN"
 
 
 class PriceRuleUpdateIn(BaseModel):
-    price: Optional[int] = Field(default=None, ge=0)
+    price: Optional[float] = Field(default=None, ge=0)   # soles con decimales
     weight_min: Optional[float] = Field(default=None, ge=0)
     weight_max: Optional[float] = Field(default=None, ge=0)
     is_active: Optional[bool] = None

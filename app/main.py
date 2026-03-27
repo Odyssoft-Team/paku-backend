@@ -13,7 +13,6 @@ from app.core.scheduler import start_scheduler, stop_scheduler
 from app.modules.booking.api.router import router as booking_router
 from app.modules.cart.api.router import router as cart_router
 from app.modules.clinical_history.api.router import router as clinical_history_router
-from app.modules.commerce.api.router import router as commerce_router
 from app.modules.geo.api.router import router as geo_router
 from app.modules.iam.api.router import router as iam_router, admin_router as iam_admin_router
 from app.modules.iam.api.social_router import router as iam_social_router
@@ -24,7 +23,6 @@ from app.modules.push.api.router import router as push_router
 from app.modules.wallet.api.router import router as wallet_router
 from app.media.router import router as media_router
 from app.modules.catalog.api.router import router as catalog_router, admin_router as catalog_admin_router
-from app.modules.paku_spa.api.router import router as paku_spa_router
 from app.modules.store.api.router import router as store_router, admin_router as store_admin_router
 from app.modules.streaming.api.router import router as streaming_router
 from app.modules.tracking.api.router import router as tracking_router
@@ -99,11 +97,9 @@ app.add_middleware(RequestIDMiddleware)
 
 app.include_router(geo_router, prefix="/geo")
 app.include_router(catalog_router)
-app.include_router(paku_spa_router)
 app.include_router(iam_router)
 app.include_router(iam_social_router)
 app.include_router(pets_router)
-app.include_router(commerce_router)
 app.include_router(booking_router)
 app.include_router(clinical_history_router)
 app.include_router(wallet_router)

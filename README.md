@@ -8,9 +8,6 @@
 - **[CART_IMPLEMENTATION_SUMMARY.md](./CART_IMPLEMENTATION_SUMMARY.md)** - Resumen de implementación
 - **[FRONTEND_INTEGRATION_GUIDE.md](./FRONTEND_INTEGRATION_GUIDE.md)** - Guía de integración para frontend
 
-### **📱 Flujos de la App**
-- **[FLUJO_PAKU_SPA.md](./FLUJO_PAKU_SPA.md)** - Flujo completo frontend → backend
-
 ---
 
 ## 🧑‍💻 LOCAL (sin Docker, con venv)

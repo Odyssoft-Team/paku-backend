@@ -240,7 +240,7 @@ class CreatePriceRule:
         breed_category: str,
         weight_min: float,
         weight_max: Optional[float],
-        price: int,
+        price: float,
         currency: str = "PEN",
     ) -> PriceRule:
         _VALID_BREED_CATEGORIES = {"official", "otros", "mestizo"}
@@ -284,7 +284,7 @@ class UpdatePriceRule:
         self,
         rule_id: UUID,
         *,
-        price: Optional[int] = None,
+        price: Optional[float] = None,
         weight_min: Optional[float] = None,
         weight_max: Optional[float] = None,
         is_active: Optional[bool] = None,

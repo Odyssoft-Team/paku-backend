@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import List, Optional
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.store.domain.models import Addon, Category, PriceRule, Product, Species
@@ -68,7 +68,7 @@ class PostgresStoreRepository:
             breed_category=r.breed_category,
             weight_min=r.weight_min,
             weight_max=r.weight_max,
-            price=int(r.price),
+            price=float(r.price),   # Decimal("120.00") → 120.0 (soles)
             currency=r.currency,
             is_active=r.is_active,
         )
@@ -336,7 +336,7 @@ class PostgresStoreRepository:
         breed_category: str,
         weight_min: float,
         weight_max: Optional[float],
-        price: int,
+        price: float,   # soles con decimales, ej: 120.0
         currency: str = "PEN",
     ) -> PriceRule:
         from app.modules.store.infra.db_models import StorePriceRuleModel, _utcnow
@@ -349,7 +349,7 @@ class PostgresStoreRepository:
             breed_category=breed_category,
             weight_min=weight_min,
             weight_max=weight_max,
-            price=Decimal(price),
+            price=Decimal(str(round(price, 2))),   # str() evita imprecisión de float → Decimal
             currency=currency,
             is_active=True,
             created_at=now,
@@ -368,7 +368,7 @@ class PostgresStoreRepository:
             raise ValueError("price_rule_not_found")
         for key, value in patch.items():
             if key == "price":
-                row.price = Decimal(value)
+                row.price = Decimal(str(round(value, 2)))   # str() evita imprecisión de float → Decimal
             else:
                 setattr(row, key, value)
         row.updated_at = _utcnow()
@@ -384,7 +384,7 @@ class PostgresStoreRepository:
         species: Species,
         breed_category: str,
         weight: float,
-    ) -> Optional[int]:
+    ) -> Optional[float]:
         from app.modules.store.infra.db_models import StorePriceRuleModel
 
         async def _find(cat: str) -> Optional[StorePriceRuleModel]:
@@ -413,4 +413,4 @@ class PostgresStoreRepository:
         if rule is None:
             return None
 
-        return int(rule.price)
+        return float(rule.price)   # Decimal("120.00") → 120.0 (soles)
