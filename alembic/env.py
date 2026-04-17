@@ -28,7 +28,12 @@ def _get_metadata():
     from app.modules.push.infra.models import DeviceTokenModel  # noqa: F401
     from app.modules.cart.infra.models import CartSessionModel, CartItemModel  # noqa: F401
     from app.modules.catalog.infra.models import BreedModel  # noqa: F401
-    from app.modules.store.infra.db_models import CategoryModel, ProductModel, AddonModel, StorePriceRuleModel  # noqa: F401
+    from app.modules.store.infra.db_models import (
+        CategoryModel,
+        ProductModel,
+        AddonModel,
+        StorePriceRuleModel,
+    )  # noqa: F401
 
     return Base.metadata
 
@@ -51,37 +56,30 @@ def get_url() -> str:
     return settings.DATABASE_URL
 
 
-config.set_main_option("sqlalchemy.url", get_url())
-
-
 def run_migrations_offline() -> None:
     context.configure(
-        url=config.get_main_option("sqlalchemy.url"),
+        url=get_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
-
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_migrations_online() -> None:
     connectable: AsyncEngine = create_async_engine(
-        config.get_main_option("sqlalchemy.url"),
+        get_url(),  # directo, sin pasar por config
         poolclass=pool.NullPool,
     )
-
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
-
     await connectable.dispose()
 
 

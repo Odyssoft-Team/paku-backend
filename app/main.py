@@ -14,16 +14,31 @@ from app.modules.booking.api.router import router as booking_router
 from app.modules.cart.api.router import router as cart_router
 from app.modules.clinical_history.api.router import router as clinical_history_router
 from app.modules.geo.api.router import router as geo_router
-from app.modules.iam.api.router import router as iam_router, admin_router as iam_admin_router
+from app.modules.iam.api.router import (
+    router as iam_router,
+    admin_router as iam_admin_router,
+)
 from app.modules.iam.api.social_router import router as iam_social_router
 from app.modules.notifications.api.router import router as notifications_router
-from app.modules.orders.api.router import router as orders_router, admin_router as orders_admin_router
-from app.modules.pets.api.router import router as pets_router, admin_router as pets_admin_router
+from app.modules.orders.api.router import (
+    router as orders_router,
+    admin_router as orders_admin_router,
+)
+from app.modules.pets.api.router import (
+    router as pets_router,
+    admin_router as pets_admin_router,
+)
 from app.modules.push.api.router import router as push_router
 from app.modules.wallet.api.router import router as wallet_router
 from app.media.router import router as media_router
-from app.modules.catalog.api.router import router as catalog_router, admin_router as catalog_admin_router
-from app.modules.store.api.router import router as store_router, admin_router as store_admin_router
+from app.modules.catalog.api.router import (
+    router as catalog_router,
+    admin_router as catalog_admin_router,
+)
+from app.modules.store.api.router import (
+    router as store_router,
+    admin_router as store_admin_router,
+)
 from app.modules.streaming.api.router import router as streaming_router
 from app.modules.tracking.api.router import router as tracking_router
 
@@ -47,7 +62,9 @@ def _init_firebase() -> None:
                 logging.info("Firebase Admin SDK initialized with service account JSON")
             else:
                 firebase_admin.initialize_app()
-                logging.info("Firebase Admin SDK initialized with ADC (GCP VM identity)")
+                logging.info(
+                    "Firebase Admin SDK initialized with ADC (GCP VM identity)"
+                )
     except Exception as exc:
         logging.error(f"Failed to initialize Firebase Admin SDK: {exc}")
 
@@ -121,11 +138,7 @@ app.include_router(media_router)
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {
-        "status": "ok",
-        "app": settings.APP_NAME,
-        "environment": settings.ENV
-    }
+    return {"status": "ok", "app": settings.APP_NAME, "environment": settings.ENV}
 
 
 if __name__ == "__main__":
