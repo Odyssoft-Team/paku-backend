@@ -123,11 +123,25 @@ class ChangeUserRole:
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
             )
 
-        user.role = role
-
-        await self.repo.update(user)
-
-        return user
+        updated = User(
+            id=user.id,
+            email=user.email,
+            password_hash=user.password_hash,
+            role=role,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            phone=user.phone,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            sex=user.sex,
+            birth_date=user.birth_date,
+            profile_completed=user.profile_completed,
+            dni=user.dni,
+            address=user.address,
+            profile_photo_url=user.profile_photo_url,
+        )
+        await self.repo.update(updated)
+        return updated
 
 
 @dataclass

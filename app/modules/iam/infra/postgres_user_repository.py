@@ -107,6 +107,8 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         if model is None:
             raise ValueError("user_not_found")
 
+        model.role = str(user.role)
+        model.is_active = bool(user.is_active)
         model.phone = user.phone
         model.first_name = user.first_name
         model.last_name = user.last_name
