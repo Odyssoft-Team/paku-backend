@@ -59,7 +59,9 @@ class GetMe:
     async def execute(self, user_id: UUID) -> User:
         user = await self.repo.get_by_id(user_id)
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
         return user
 
 
@@ -81,7 +83,9 @@ class UpdateProfile:
     ) -> User:
         user = await self.repo.get_by_id(user_id)
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
 
         updated = User(
             id=user.id,
@@ -98,7 +102,9 @@ class UpdateProfile:
             profile_completed=user.profile_completed,  # preservar siempre
             dni=dni if dni is not None else user.dni,
             address=address if address is not None else user.address,
-            profile_photo_url=profile_photo_url if profile_photo_url is not None else user.profile_photo_url,
+            profile_photo_url=profile_photo_url
+            if profile_photo_url is not None
+            else user.profile_photo_url,
         )
         await self.repo.update(updated)
         return updated
@@ -113,27 +119,15 @@ class ChangeUserRole:
     async def execute(self, user_id: UUID, role: Role) -> User:
         user = await self.repo.get_by_id(user_id)
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
 
-        updated = User(
-            id=user.id,
-            email=user.email,
-            password_hash=user.password_hash,
-            role=role,
-            is_active=user.is_active,
-            created_at=user.created_at,
-            phone=user.phone,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            sex=user.sex,
-            birth_date=user.birth_date,
-            profile_completed=user.profile_completed,
-            dni=user.dni,
-            address=user.address,
-            profile_photo_url=user.profile_photo_url,
-        )
-        await self.repo.update(updated)
-        return updated
+        user.role = role
+
+        await self.repo.update(user)
+
+        return user
 
 
 @dataclass
@@ -141,6 +135,7 @@ class CompleteProfile:
     """Completa el perfil de un usuario social (Google/Apple/Facebook).
     Recibe los campos obligatorios que el proveedor no entregó y marca profile_completed=True.
     """
+
     repo: UserRepository
 
     async def execute(
@@ -153,7 +148,9 @@ class CompleteProfile:
     ) -> User:
         user = await self.repo.get_by_id(user_id)
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
 
         updated = User(
             id=user.id,
