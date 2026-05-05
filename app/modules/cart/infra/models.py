@@ -6,13 +6,10 @@ from uuid import UUID
 
 from sqlalchemy import JSON, DateTime, Enum, Index, Integer, Numeric, String, Uuid
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.base import Base
 from app.modules.cart.domain.cart import CartStatus
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 class CartSessionModel(Base):
@@ -35,7 +32,7 @@ class CartItemModel(Base):
     __tablename__ = "cart_items"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=lambda: UUID())
-    cart_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    cart_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     ref_id: Mapped[str] = mapped_column(String(200), nullable=False)
     name: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -45,7 +42,7 @@ class CartItemModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
-        Index("ix_cart_items_cart_id", "cart_id"),
+        Index("ix_cart_items_cart_id", "cart_id"),   # único índice sobre cart_id
         Index("ix_cart_items_kind_ref", "kind", "ref_id"),
     )
 

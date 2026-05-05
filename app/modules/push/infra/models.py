@@ -5,13 +5,10 @@ from uuid import UUID
 
 from sqlalchemy import Boolean, DateTime, Enum, Index, String, Uuid
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.base import Base
 from app.modules.push.domain.push import Platform
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 class DeviceTokenModel(Base):

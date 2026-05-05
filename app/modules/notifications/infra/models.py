@@ -6,11 +6,9 @@ from uuid import UUID
 
 from sqlalchemy import JSON, Boolean, DateTime, Index, String, Text, Uuid
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
-
-class Base(DeclarativeBase):
-    pass
+from app.core.base import Base
 
 
 class NotificationModel(Base):

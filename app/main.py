@@ -28,6 +28,7 @@ from app.modules.pets.api.router import (
     router as pets_router,
     admin_router as pets_admin_router,
 )
+from app.modules.pet_records.api.router import router as pet_records_router
 from app.modules.push.api.router import router as push_router
 from app.modules.wallet.api.router import router as wallet_router
 from app.media.router import router as media_router
@@ -117,6 +118,7 @@ app.include_router(catalog_router)
 app.include_router(iam_router)
 app.include_router(iam_social_router)
 app.include_router(pets_router)
+app.include_router(pet_records_router)
 app.include_router(booking_router)
 app.include_router(clinical_history_router)
 app.include_router(wallet_router)
