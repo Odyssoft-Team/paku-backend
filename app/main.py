@@ -12,7 +12,6 @@ from app.core.scheduler import start_scheduler, stop_scheduler
 
 from app.modules.booking.api.router import router as booking_router
 from app.modules.cart.api.router import router as cart_router
-from app.modules.clinical_history.api.router import router as clinical_history_router
 from app.modules.geo.api.router import router as geo_router
 from app.modules.iam.api.router import (
     router as iam_router,
@@ -120,7 +119,6 @@ app.include_router(iam_social_router)
 app.include_router(pets_router)
 app.include_router(pet_records_router)
 app.include_router(booking_router)
-app.include_router(clinical_history_router)
 app.include_router(wallet_router)
 app.include_router(notifications_router)
 app.include_router(cart_router)
