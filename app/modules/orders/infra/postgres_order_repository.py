@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.modules.orders.domain.order import Order, OrderStatus
+from app.modules.orders.domain.order import Order, OrderStatus, PaymentStatus
 
 
 class PostgresOrderRepository:
@@ -39,6 +39,8 @@ class PostgresOrderRepository:
             ally_id=r.ally_id,
             scheduled_at=r.scheduled_at,
             hold_id=r.hold_id,
+            payment_status=PaymentStatus(r.payment_status),
+            culqi_charge_id=r.culqi_charge_id,
         )
 
     # ------------------------------------------------------------------
@@ -59,6 +61,8 @@ class PostgresOrderRepository:
             ally_id=order.ally_id,
             scheduled_at=order.scheduled_at,
             hold_id=order.hold_id,
+            payment_status=order.payment_status.value,
+            culqi_charge_id=order.culqi_charge_id,
             created_at=order.created_at,
             updated_at=utcnow(),
         )
@@ -80,6 +84,8 @@ class PostgresOrderRepository:
             ally_id=order.ally_id,
             scheduled_at=order.scheduled_at,
             hold_id=order.hold_id,
+            payment_status=order.payment_status.value,
+            culqi_charge_id=order.culqi_charge_id,
             created_at=order.created_at,
             updated_at=utcnow(),
         )
@@ -112,6 +118,70 @@ class PostgresOrderRepository:
         if model is None:
             raise ValueError("order_not_found")
         model.status = status.value
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
+
+    async def confirm_payment(
+        self,
+        *,
+        id: UUID,
+        user_id: UUID,
+        culqi_charge_id: str,
+    ) -> Order:
+        """
+        Marca la orden como pagada guardando el charge_id de Culqi.
+        Solo puede aplicarse a órdenes en payment_status=pending.
+        El user_id se verifica para que solo el dueño de la orden pueda confirmar.
+        """
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        from app.modules.orders.domain.order import PaymentStatus
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None or model.user_id != user_id:
+            raise ValueError("order_not_found")
+        if model.payment_status != PaymentStatus.pending.value:
+            raise ValueError("payment_already_processed")
+        model.payment_status = PaymentStatus.paid.value
+        model.culqi_charge_id = culqi_charge_id
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
+
+    async def fail_payment(self, *, id: UUID, user_id: UUID) -> Order:
+        """
+        Marca la orden como pago fallido.
+        Permite que el frontend reintente el pago con otro token/tarjeta.
+        """
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        from app.modules.orders.domain.order import PaymentStatus
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None or model.user_id != user_id:
+            raise ValueError("order_not_found")
+        model.payment_status = PaymentStatus.failed.value
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
+
+    async def reset_payment_to_pending(self, *, id: UUID, user_id: UUID) -> Order:
+        """
+        Permite reintentar el pago cuando estaba en failed.
+        Solo se puede pasar de failed → pending (para un nuevo intento).
+        """
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        from app.modules.orders.domain.order import PaymentStatus
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None or model.user_id != user_id:
+            raise ValueError("order_not_found")
+        if model.payment_status != PaymentStatus.failed.value:
+            raise ValueError("payment_not_failed")
+        model.payment_status = PaymentStatus.pending.value
+        model.culqi_charge_id = None
         model.updated_at = utcnow()
         await self._session.commit()
         await self._session.refresh(model)

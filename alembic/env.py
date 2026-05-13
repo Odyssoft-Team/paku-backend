@@ -36,6 +36,7 @@ def _get_metadata():
     )  # noqa: F401
     from app.modules.pet_records.infra.models import PetRecordModel  # noqa: F401
     from app.modules.iam.infra.models import UserSocialIdentityModel  # noqa: F401
+    from app.modules.wallet.infra.models import WalletCardModel  # noqa: F401
 
     return Base.metadata
 

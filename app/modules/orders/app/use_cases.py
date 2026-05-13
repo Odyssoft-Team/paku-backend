@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
-from app.modules.orders.domain.order import Order, OrderStatus
+from app.modules.orders.domain.order import Order, OrderStatus, PaymentStatus
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository
 
@@ -235,3 +235,93 @@ class PatchOrder:
             logging.exception("Failed to create order status notification: %s", exc)
         
         return updated
+
+
+@dataclass
+class ConfirmOrderPayment:
+    """
+    Registra el cobro exitoso en la orden.
+
+    Flujo esperado:
+      1. Frontend llama a culqi-python POST /api/culqi/charges y obtiene culqi_charge_id.
+      2. Frontend llama a paku-backend POST /orders/{id}/confirm-payment con ese ID.
+      3. Este use case marca payment_status=paid y guarda culqi_charge_id.
+    """
+    orders_repo: PostgresOrderRepository
+
+    async def execute(self, *, order_id: UUID, user_id: UUID, culqi_charge_id: str) -> Order:
+        from app.core.db import engine
+        from app.modules.notifications.infra.postgres_notification_repository import PostgresNotificationRepository
+        from app.modules.notifications.app.use_cases import CreateNotification
+
+        try:
+            order = await self.orders_repo.confirm_payment(
+                id=order_id,
+                user_id=user_id,
+                culqi_charge_id=culqi_charge_id,
+            )
+        except ValueError as exc:
+            if str(exc) == "order_not_found":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found") from exc
+            if str(exc) == "payment_already_processed":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="El pago de esta orden ya fue procesado",
+                ) from exc
+            raise
+
+        # Notificar al usuario (best effort)
+        try:
+            notifications_repo = PostgresNotificationRepository(session=self.orders_repo._session, engine=engine)
+            await CreateNotification(repo=notifications_repo).execute(
+                user_id=user_id,
+                type="order_status",
+                title="Pago confirmado",
+                body="Tu pago fue procesado correctamente. Pronto asignaremos un groomer.",
+                data={"order_id": str(order.id), "payment_status": order.payment_status.value},
+            )
+        except Exception as exc:
+            import logging
+            logging.exception("Failed to create payment confirmation notification: %s", exc)
+
+        return order
+
+
+@dataclass
+class FailOrderPayment:
+    """
+    Registra que el cobro fue rechazado por Culqi.
+    La orden queda en payment_status=failed.
+    El frontend puede reintentar el pago con RetryOrderPayment.
+    """
+    orders_repo: PostgresOrderRepository
+
+    async def execute(self, *, order_id: UUID, user_id: UUID) -> Order:
+        try:
+            return await self.orders_repo.fail_payment(id=order_id, user_id=user_id)
+        except ValueError as exc:
+            if str(exc) == "order_not_found":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found") from exc
+            raise
+
+
+@dataclass
+class RetryOrderPayment:
+    """
+    Permite reintentar el pago de una orden en estado failed.
+    Vuelve a payment_status=pending para que el frontend intente con otro token/tarjeta.
+    """
+    orders_repo: PostgresOrderRepository
+
+    async def execute(self, *, order_id: UUID, user_id: UUID) -> Order:
+        try:
+            return await self.orders_repo.reset_payment_to_pending(id=order_id, user_id=user_id)
+        except ValueError as exc:
+            if str(exc) == "order_not_found":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found") from exc
+            if str(exc) == "payment_not_failed":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Solo se puede reintentar el pago si el estado es 'failed'",
+                ) from exc
+            raise

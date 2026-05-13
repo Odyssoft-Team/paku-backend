@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Union
 from uuid import UUID
+
+import bcrypt
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.settings import settings
@@ -22,7 +24,21 @@ class CurrentUser:
     profile_completed: bool = True
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    """Hashea la contraseña con bcrypt (work factor 12).
+    Seguro contra ataques de fuerza bruta por su costo computacional.
+    """
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def verify_password(plain: str, stored_hash: str) -> bool:
+    """Verifica una contraseña contra su hash almacenado.
+    Soporta hashes bcrypt (nuevos) y SHA-256 (legado — migración automática).
+    """
+    # Hash bcrypt empieza con $2b$ o $2a$
+    if stored_hash.startswith("$2"):
+        return bcrypt.checkpw(plain.encode("utf-8"), stored_hash.encode("utf-8"))
+    # Legado: SHA-256 puro — solo durante el periodo de migración
+    return hashlib.sha256(plain.encode("utf-8")).hexdigest() == stored_hash
 
 def _b64url_encode(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("utf-8")

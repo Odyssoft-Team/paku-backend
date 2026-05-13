@@ -115,6 +115,9 @@ class UserRepository(Protocol):
     async def update(self, user: User) -> None:
         ...
 
+    async def update_password(self, user_id: UUID, new_hash: str) -> None:
+        ...
+
 
 class AddressRepository(Protocol):
     async def list_addresses_by_user(self, user_id: UUID, include_deleted: bool = False) -> list[Any]:

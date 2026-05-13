@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
-from app.core.auth import hash_password
+from app.core.auth import hash_password, verify_password
 from app.modules.iam.domain.oauth_provider import OAuthProvider
 from app.modules.iam.domain.social_identity import SocialIdentity, SocialIdentityRepository
 from app.modules.iam.domain.user import User, UserRepository
@@ -40,7 +40,7 @@ class AddPassword:
                         "message": "Debes proporcionar tu contraseña actual para cambiarla.",
                     },
                 )
-            if hash_password(current_password) != user.password_hash:
+            if not verify_password(current_password, user.password_hash):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={

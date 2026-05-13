@@ -2,7 +2,8 @@ from datetime import date, datetime
 from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+import re
+from pydantic import BaseModel, EmailStr, field_validator
 
 Role = Literal["admin", "user", "ally"]
 Sex = Literal["male", "female"]
@@ -48,20 +49,46 @@ class AddressOutExtended(BaseModel):
 
 
 class RegisterIn(BaseModel):
-    email: str
+    email: EmailStr
     password: str
     phone: str
     first_name: str
     last_name: str
     sex: Sex
     birth_date: date
-    role: Role = "user"
     dni: Optional[str] = None
+    # role es siempre "user" en registro público — no se acepta del cliente
     # profile_photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("La contraseña debe contener al menos una letra mayúscula")
+        if not re.search(r"\d", v):
+            raise ValueError("La contraseña debe contener al menos un número")
+        return v
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("El nombre no puede estar vacío")
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def phone_format(cls, v: str) -> str:
+        if not re.fullmatch(r"\+?[0-9]{7,15}", v.strip()):
+            raise ValueError("Formato de teléfono inválido")
+        return v.strip()
 
 
 class LoginIn(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 
@@ -103,7 +130,7 @@ class UpdateProfileIn(BaseModel):
 
 
 class AdminCreateUserIn(BaseModel):
-    email: str
+    email: EmailStr
     password: str
     phone: str
     first_name: str
@@ -113,6 +140,32 @@ class AdminCreateUserIn(BaseModel):
     role: Role
     dni: Optional[str] = None
     # profile_photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("La contraseña debe contener al menos una letra mayúscula")
+        if not re.search(r"\d", v):
+            raise ValueError("La contraseña debe contener al menos un número")
+        return v
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("El nombre no puede estar vacío")
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def phone_format(cls, v: str) -> str:
+        if not re.fullmatch(r"\+?[0-9]{7,15}", v.strip()):
+            raise ValueError("Formato de teléfono inválido")
+        return v.strip()
 
 
 # ------------------------------------------------------------------
@@ -156,6 +209,17 @@ class SetPasswordIn(BaseModel):
     """
     new_password: str
     current_password: Optional[str] = None
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("La contraseña debe contener al menos una letra mayúscula")
+        if not re.search(r"\d", v):
+            raise ValueError("La contraseña debe contener al menos un número")
+        return v
 
 
 class LinkSocialIn(BaseModel):
