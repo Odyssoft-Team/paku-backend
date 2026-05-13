@@ -69,8 +69,22 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def include_object(obj, name, type_, reflected, compare_to):
+    # Aquí pones los nombres de las tablas externas que quieres ignorar
+    # O un prefijo, por ejemplo: if name.startswith("legacy_"): return False
+    ignored_tables = ["tabla_externa_1", "tabla_externa_2", "otra_db_tabla"]
+
+    if type_ == "table" and name in ignored_tables:
+        return False
+    return True
+
+
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=include_object,
+    )
     with context.begin_transaction():
         context.run_migrations()
 

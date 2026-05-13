@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  # Base de datos local para no tocar la de producción
+  paku-db-dev:
+    image: postgres:15-alpine
+    container_name: paku-db-dev
+    environment:
+      POSTGRES_USER: user_dev
+      POSTGRES_PASSWORD: password_dev
+      POSTGRES_DB: paku_dev
+    ports:
+      - "5436:5432" # Puerto diferente al estándar por si ya tienes un Postgres local
+    volumes:
+      - paku_dev_data:/var/lib/postgresql/data
+
+  # El Backend con recarga automática
+  paku-backend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile # Usa tu Dockerfile actual
+    container_name: paku-backend-dev
+    volumes:
+      - .:/src # Monta tu código local para que los cambios se vean al instante
+    ports:
+      - "8000:8080"
+    env_file:
+      - .env.dev # Usa un archivo de variables exclusivo para desarrollo
+    depends_on:
+      - paku-db-dev
+    # Sobrescribimos el comando para activar el modo reload
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"
+
+networks:
+  default:
+    name: paku-net-dev
+
+volumes:
+  paku_dev_data:

@@ -11,6 +11,7 @@ __pycache__/
 # Variables de entorno
 .env
 .env.local
+.env.dev
 
 # VS Code
 .vscode/
@@ -53,6 +54,7 @@ htmlcov/
 .DS_Store
 
 # Docker (opcional)
+.docker-compose.dev.yml
 #.dockerignore
 
 # Archivos temporales
