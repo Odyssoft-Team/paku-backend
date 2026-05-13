@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(.venv/Scripts/python.exe -m alembic heads)"
+      "Bash(.venv/Scripts/python.exe -m alembic heads)",
+      "WebFetch(domain:apidocs.culqi.com)",
+      "WebFetch(domain:docs.culqi.com)",
+      "WebFetch(domain:culqi.com)",
+      "WebSearch",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

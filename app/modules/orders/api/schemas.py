@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.modules.orders.domain.order import OrderStatus
+from app.modules.orders.domain.order import OrderStatus, PaymentStatus
 
 
 class CreateOrderIn(BaseModel):
@@ -34,6 +34,18 @@ class OrderOut(BaseModel):
     ally_id: Optional[UUID] = None
     scheduled_at: Optional[datetime] = None
     hold_id: Optional[UUID] = None
+    # Pago: pending hasta que el frontend confirme el cargo desde culqi-python
+    payment_status: PaymentStatus = PaymentStatus.pending
+    culqi_charge_id: Optional[str] = None  # chr_(test|live)_XXXXXXXXXXXXXXXX
+
+
+class ConfirmPaymentIn(BaseModel):
+    """
+    Payload que envía el frontend tras recibir el cargo exitoso de culqi-python.
+    El frontend llama a culqi-python (POST /api/culqi/charges), obtiene el charge_id
+    y luego llama a paku-backend (POST /orders/{id}/confirm-payment) para registrarlo.
+    """
+    culqi_charge_id: str  # chr_(test|live)_XXXXXXXXXXXXXXXX devuelto por culqi-python
 
 
 # ------------------------------------------------------------------

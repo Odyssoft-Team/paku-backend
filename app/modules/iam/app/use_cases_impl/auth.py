@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 
-from app.core.auth import create_access_token, create_refresh_token, hash_password
+from app.core.auth import create_access_token, create_refresh_token, verify_password
 from app.modules.iam.domain.user import UserRepository
 
 
@@ -35,7 +35,7 @@ class LoginUser:
         # Si el correo/contraseña no coinciden, rechaza el acceso.
         # Si la cuenta está inactiva, impide el inicio de sesión.
         user = await self.repo.get_by_email(email)
-        if not user or user.password_hash != hash_password(password):
+        if not user or not verify_password(password, user.password_hash or ""):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",

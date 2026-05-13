@@ -133,6 +133,16 @@ class PostgresUserRepository(UserRepository, AddressRepository):
 
         await self._session.commit()
 
+    async def update_password(self, user_id: UUID, new_hash: str) -> None:
+        from sqlalchemy import update as sa_update
+
+        await self._session.execute(
+            sa_update(UserModel)
+            .where(UserModel.id == user_id)
+            .values(password_hash=new_hash, updated_at=utcnow())
+        )
+        await self._session.commit()
+
     # AddressRepository methods
     async def list_addresses_by_user(self, user_id: UUID, include_deleted: bool = False) -> list[dict]:
 

@@ -1,11 +1,12 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
 from app.core.auth import CurrentUser, create_access_token, decode_token, require_roles
 from app.core.db import engine, get_async_session
+from app.core.rate_limiter import forgot_password_limiter, login_limiter
 from app.modules.geo.infra.repository import PostgresDistrictRepository
 from app.modules.geo.use_cases.geo_service import GeoService
 from app.modules.iam.api.schemas import (
@@ -17,11 +18,14 @@ from app.modules.iam.api.schemas import (
     LoginIn,
     RefreshIn,
     RegisterIn,
+    SetPasswordIn,
     TokenOut,
     UpdateProfileIn,
     UserOut,
 )
 from app.modules.iam.app.use_cases import ChangeUserRole, GetMe, LoginUser, RegisterUser, UpdateProfile
+from app.modules.iam.app.use_cases_impl.account_linking import AddPassword
+from app.modules.iam.app.use_cases_impl.password_reset import ForgotPassword, ResetPassword
 from app.modules.iam.domain.user import Sex
 from app.modules.iam.domain.user import UserRepository
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
@@ -109,7 +113,7 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
         last_name=payload.last_name,
         sex=Sex(payload.sex),
         birth_date=payload.birth_date,
-        role=payload.role,
+        role="user",  # siempre user en registro público
         dni=payload.dni,
         address=None,
         profile_photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
@@ -122,12 +126,90 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
 @router.post("/auth/login", response_model=TokenOut)
 # [TECH]
 # Authenticates user credentials and returns access/refresh tokens.
+# Rate limited: 5 failed attempts per IP per 15 minutes.
 #
 # [BUSINESS]
 # Permite iniciar sesión y obtener tokens de sesión.
-async def login(payload: LoginIn, repo: UserRepository = Depends(get_user_repo)) -> TokenOut:
-    tokens = await LoginUser(repo=repo).execute(email=payload.email, password=payload.password)
+async def login(request: Request, payload: LoginIn, repo: UserRepository = Depends(get_user_repo)) -> TokenOut:
+    ip = request.client.host if request.client else "unknown"
+    login_limiter.check(ip)
+    try:
+        tokens = await LoginUser(repo=repo).execute(email=payload.email, password=payload.password)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+            login_limiter.record_failure(ip)
+        raise
+    login_limiter.record_success(ip)
     return TokenOut(**tokens)
+
+
+@router.put("/auth/password", status_code=status.HTTP_204_NO_CONTENT)
+# [TECH]
+# Agrega o cambia la contraseña del usuario autenticado.
+# - Cuentas sociales sin contraseña: solo new_password.
+# - Cuentas con contraseña: requiere current_password para verificar.
+#
+# [BUSINESS]
+# Permite al usuario establecer o cambiar su contraseña.
+async def set_password(
+    payload: SetPasswordIn,
+    current: CurrentUser = Depends(get_current_user_db),
+    repo: UserRepository = Depends(get_user_repo),
+) -> None:
+    await AddPassword(repo=repo).execute(
+        user_id=current.id,
+        new_password=payload.new_password,
+        current_password=payload.current_password,
+    )
+
+
+class _ForgotPasswordIn:
+    pass
+
+
+from pydantic import BaseModel as _BaseModel, EmailStr as _EmailStr
+
+
+class ForgotPasswordIn(_BaseModel):
+    email: _EmailStr
+
+
+class ResetPasswordIn(_BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/auth/forgot-password", status_code=status.HTTP_200_OK)
+# [TECH]
+# Genera un token de reset de contraseña para el email dado.
+# Siempre responde 200 para no revelar si el email existe.
+# Rate limited: 3 intentos por IP por hora.
+#
+# [BUSINESS]
+# Inicia el flujo de recuperación de contraseña.
+async def forgot_password(
+    request: Request,
+    payload: ForgotPasswordIn,
+    repo: UserRepository = Depends(get_user_repo),
+) -> dict:
+    ip = request.client.host if request.client else "unknown"
+    forgot_password_limiter.check(ip)
+    forgot_password_limiter.record_failure(ip)  # cuenta el intento
+    await ForgotPassword(repo=repo).execute(email=payload.email)
+    return {"detail": "Si el email existe recibirás un enlace de recuperación"}
+
+
+@router.post("/auth/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+# [TECH]
+# Valida el token de reset y actualiza la contraseña.
+#
+# [BUSINESS]
+# Completa el flujo de recuperación de contraseña con el token recibido.
+async def reset_password(
+    payload: ResetPasswordIn,
+    repo: UserRepository = Depends(get_user_repo),
+) -> None:
+    await ResetPassword(repo=repo).execute(token=payload.token, new_password=payload.new_password)
 
 
 @router.post("/auth/refresh", response_model=TokenOut)

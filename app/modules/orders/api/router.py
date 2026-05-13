@@ -11,6 +11,7 @@ from app.modules.iam.infra.postgres_user_repository import PostgresUserRepositor
 from app.modules.orders.api.schemas import (
     AssignmentOut,
     AssignOrderIn,
+    ConfirmPaymentIn,
     CreateOrderIn,
     OrderOut,
     PatchOrderIn,
@@ -22,14 +23,17 @@ from app.modules.orders.app.use_cases import (
     AssignOrder,
     CancelOrder,
     CompleteOrder,
+    ConfirmOrderPayment,
     CreateOrderFromCart,
     DepartOrder,
+    FailOrderPayment,
     GetOrder,
     GetOrderAdmin,
     ListAllyOrders,
     ListOrders,
     ListOrdersAdmin,
     PatchOrder,
+    RetryOrderPayment,
     UpdateOrderStatus,
 )
 from app.modules.orders.domain.order import OrderStatus
@@ -284,4 +288,63 @@ async def admin_cancel_order(
 ) -> OrderOut:
     """Cancela una orden desde cualquier estado activo."""
     order = await CancelOrder(repo=repo).execute(order_id=id)
+    return _order_out(order)
+
+
+# ------------------------------------------------------------------
+# Endpoints de pago (Culqi)
+# ------------------------------------------------------------------
+
+@router.post("/{id}/confirm-payment", response_model=OrderOut)
+async def confirm_payment(
+    id: UUID,
+    payload: ConfirmPaymentIn,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+) -> OrderOut:
+    """
+    Confirma el pago de una orden.
+
+    El frontend llama a este endpoint tras recibir el `culqi_charge_id` (chr_...)
+    desde culqi-python. Solo puede ejecutarse una vez por orden (pending → paid).
+    """
+    order = await ConfirmOrderPayment(orders_repo=repo).execute(
+        order_id=id,
+        user_id=current.id,
+        culqi_charge_id=payload.culqi_charge_id,
+    )
+    return _order_out(order)
+
+
+@router.post("/{id}/fail-payment", response_model=OrderOut)
+async def fail_payment(
+    id: UUID,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+) -> OrderOut:
+    """
+    Registra que el cobro fue rechazado por Culqi.
+    La orden pasa a payment_status=failed. El usuario puede reintentar el pago.
+    """
+    order = await FailOrderPayment(orders_repo=repo).execute(
+        order_id=id,
+        user_id=current.id,
+    )
+    return _order_out(order)
+
+
+@router.post("/{id}/retry-payment", response_model=OrderOut)
+async def retry_payment(
+    id: UUID,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+) -> OrderOut:
+    """
+    Permite reintentar el pago de una orden en estado failed.
+    Vuelve a payment_status=pending para que el frontend tokenice con otro método.
+    """
+    order = await RetryOrderPayment(orders_repo=repo).execute(
+        order_id=id,
+        user_id=current.id,
+    )
     return _order_out(order)

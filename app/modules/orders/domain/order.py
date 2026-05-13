@@ -24,6 +24,21 @@ class OrderStatus(str, Enum):
 
 
 # [TECH]
+# Enum tracking the payment lifecycle independently from the service lifecycle.
+#
+# [NATURAL/BUSINESS]
+# Estado del cobro asociado a la orden. Es independiente del estado del servicio:
+# una orden puede estar "created" (servicio no iniciado) pero "paid" (ya cobrada).
+# pending  → orden creada, esperando confirmación de pago desde culqi-python
+# paid     → el frontend confirmó el cargo exitoso; culqi_charge_id queda guardado
+# failed   → el cobro fue rechazado por Culqi; la orden no debe procesarse
+class PaymentStatus(str, Enum):
+    pending = "pending"  # estado inicial; aún no se intentó o no se confirmó el pago
+    paid    = "paid"     # cobro confirmado; culqi_charge_id presente
+    failed  = "failed"   # cobro rechazado; la orden queda bloqueada
+
+
+# [TECH]
 # Ordinal mapping for forward-only transition validation.
 # cancelled no tiene ordinal: puede ocurrir desde cualquier estado activo.
 #
@@ -46,11 +61,13 @@ _CANCELLABLE_STATUSES: frozenset[OrderStatus] = frozenset({
 
 
 # [TECH]
-# Immutable order entity with ally assignment and scheduling fields.
+# Immutable order entity with ally assignment, scheduling, and payment fields.
 #
 # [NATURAL/BUSINESS]
 # Pedido de servicio a domicilio. Incluye quién lo hace (ally_id) y
 # cuándo está programado (scheduled_at), que se pueblan al asignar.
+# El pago se registra via payment_status y culqi_charge_id cuando el
+# frontend confirma el cargo exitoso desde culqi-python.
 @dataclass(frozen=True)
 class Order:
     id: UUID
@@ -65,6 +82,8 @@ class Order:
     ally_id: Optional[UUID] = None           # quién realiza el servicio
     scheduled_at: Optional[datetime] = None  # fecha/hora programada del servicio
     hold_id: Optional[UUID] = None           # reserva que originó esta orden
+    payment_status: PaymentStatus = PaymentStatus.pending  # estado del cobro en Culqi
+    culqi_charge_id: Optional[str] = None   # chr_(test|live)_XXXXXXXXXXXXXXXX de Culqi
 
     # [TECH]
     # Factory creating Order with created status and timestamps.
@@ -94,6 +113,8 @@ class Order:
             created_at=now,
             updated_at=now,
             hold_id=hold_id,
+            payment_status=PaymentStatus.pending,
+            culqi_charge_id=None,
         )
 
     # [TECH]

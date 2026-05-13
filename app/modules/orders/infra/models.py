@@ -38,6 +38,12 @@ class OrderModel(Base):
     # Reserva que originó esta orden (puede ser null si se crea sin hold)
     hold_id: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
 
+    # Pago: se actualiza cuando el frontend confirma el cargo desde culqi-python
+    # payment_status: pending → paid | failed
+    # culqi_charge_id: chr_(test|live)_XXXXXXXXXXXXXXXX — presente solo cuando paid
+    payment_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    culqi_charge_id: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
