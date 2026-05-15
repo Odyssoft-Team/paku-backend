@@ -39,6 +39,7 @@ from app.modules.store.api.router import (
     router as store_router,
     admin_router as store_admin_router,
 )
+from app.modules.chat.api.router import router as chat_router
 from app.modules.streaming.api.router import router as streaming_router
 from app.modules.tracking.api.router import router as tracking_router
 
@@ -126,6 +127,7 @@ app.include_router(push_router)
 app.include_router(orders_router)
 app.include_router(store_router)
 app.include_router(streaming_router)
+app.include_router(chat_router)
 app.include_router(tracking_router)
 app.include_router(orders_admin_router, prefix="/admin")
 app.include_router(catalog_admin_router, prefix="/admin")

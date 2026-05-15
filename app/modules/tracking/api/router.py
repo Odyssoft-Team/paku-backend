@@ -30,6 +30,7 @@ from app.modules.tracking.api.schemas import (
     ReportLocationOut,
     RouteOut,
 )
+from app.modules.tracking.infra.postgres_location_store import PostgresLocationStore
 from app.modules.tracking.use_cases.get_current import GetCurrent
 from app.modules.tracking.use_cases.get_route import GetRoute
 from app.modules.tracking.use_cases.report_location import ReportLocation
@@ -39,6 +40,10 @@ router = APIRouter(tags=["tracking"], prefix="/tracking")
 
 def _get_orders_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresOrderRepository:
     return PostgresOrderRepository(session=session, engine=engine)
+
+
+def _get_location_store(session: AsyncSession = Depends(get_async_session)) -> PostgresLocationStore:
+    return PostgresLocationStore(session=session)
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +61,7 @@ async def report_location(
     payload: ReportLocationIn,
     current: CurrentUser = Depends(require_roles("ally")),
     orders_repo: PostgresOrderRepository = Depends(_get_orders_repo),
+    location_store: PostgresLocationStore = Depends(_get_location_store),
 ) -> ReportLocationOut:
     """
     El ally/groomer envía su lat/lng actual mientras está en camino.
@@ -63,9 +69,10 @@ async def report_location(
     - Solo accesible con rol **ally**.
     - La orden debe estar en estado `on_the_way` o `in_service`.
     - El ally debe ser el asignado a la orden.
-    - La posición se almacena en memoria (no persiste en BD).
+    - La posición se persiste en PostgreSQL (compatible con múltiples instancias).
+    - Intervalo recomendado desde el app: cada 10 segundos.
     """
-    location = await ReportLocation(orders_repo=orders_repo).execute(
+    location = await ReportLocation(orders_repo=orders_repo, location_store=location_store).execute(
         order_id=order_id,
         ally_id=current.id,
         lat=payload.lat,
@@ -93,6 +100,7 @@ async def get_current(
     order_id: UUID,
     current: CurrentUser = Depends(get_current_user),
     orders_repo: PostgresOrderRepository = Depends(_get_orders_repo),
+    location_store: PostgresLocationStore = Depends(_get_location_store),
 ) -> CurrentLocationOut:
     """
     Devuelve la última posición reportada por el ally y las coordenadas
@@ -105,7 +113,7 @@ async def get_current(
 
     **Uso recomendado:** el frontend hace polling cada 5 segundos.
     """
-    data = await GetCurrent(orders_repo=orders_repo).execute(
+    data = await GetCurrent(orders_repo=orders_repo, location_store=location_store).execute(
         order_id=order_id,
         requester_id=current.id,
         requester_role=current.role,
@@ -144,6 +152,7 @@ async def get_route(
     order_id: UUID,
     current: CurrentUser = Depends(get_current_user),
     orders_repo: PostgresOrderRepository = Depends(_get_orders_repo),
+    location_store: PostgresLocationStore = Depends(_get_location_store),
 ) -> RouteOut:
     """
     Devuelve la polyline codificada y el tiempo estimado de llegada (ETA)
@@ -154,7 +163,7 @@ async def get_route(
     - Si el ally aún no reportó posición, devuelve el destino sin ruta
       (`eta_seconds`, `polyline` y `distance_meters` serán `null`).
     """
-    data = await GetRoute(orders_repo=orders_repo).execute(
+    data = await GetRoute(orders_repo=orders_repo, location_store=location_store).execute(
         order_id=order_id,
         requester_id=current.id,
         requester_role=current.role,

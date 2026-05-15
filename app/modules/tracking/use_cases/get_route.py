@@ -30,7 +30,7 @@ from app.modules.tracking.domain.location import (
     assert_can_read,
     assert_tracking_readable,
 )
-from app.modules.tracking.infra.location_store import location_store
+from app.modules.tracking.infra.postgres_location_store import PostgresLocationStore
 from app.modules.tracking.use_cases.get_current import _extract_destination
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,7 @@ async def _call_google_routes(
 @dataclass
 class GetRoute:
     orders_repo: PostgresOrderRepository
+    location_store: PostgresLocationStore
 
     async def execute(
         self,
@@ -145,8 +146,8 @@ class GetRoute:
         # 4. Destino
         destination = _extract_destination(order)
 
-        # 5. Posición del ally (puede ser None)
-        ally_location: AllyLocation | None = location_store.get(order_id)
+        # 5. Posición del ally desde PostgreSQL (puede ser None)
+        ally_location: AllyLocation | None = await self.location_store.get(order_id)
 
         # Sin origen conocido: devolvemos destino sin ruta
         if ally_location is None:

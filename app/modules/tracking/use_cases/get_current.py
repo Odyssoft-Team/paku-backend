@@ -27,7 +27,7 @@ from app.modules.tracking.domain.location import (
     assert_can_read,
     assert_tracking_readable,
 )
-from app.modules.tracking.infra.location_store import location_store
+from app.modules.tracking.infra.postgres_location_store import PostgresLocationStore
 
 
 def _extract_destination(order: Order) -> dict[str, Any]:
@@ -54,6 +54,7 @@ def _extract_destination(order: Order) -> dict[str, Any]:
 @dataclass
 class GetCurrent:
     orders_repo: PostgresOrderRepository
+    location_store: PostgresLocationStore
 
     async def execute(
         self,
@@ -93,8 +94,8 @@ class GetCurrent:
                 detail=str(exc),
             ) from exc
 
-        # 4. Última posición del ally (puede ser None)
-        ally_location: AllyLocation | None = location_store.get(order_id)
+        # 4. Última posición del ally desde PostgreSQL (puede ser None)
+        ally_location: AllyLocation | None = await self.location_store.get(order_id)
 
         # 5. Destino
         destination = _extract_destination(order)

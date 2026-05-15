@@ -23,12 +23,13 @@ from app.modules.tracking.domain.location import (
     assert_is_ally,
     assert_tracking_writable,
 )
-from app.modules.tracking.infra.location_store import location_store
+from app.modules.tracking.infra.postgres_location_store import PostgresLocationStore
 
 
 @dataclass
 class ReportLocation:
     orders_repo: PostgresOrderRepository
+    location_store: PostgresLocationStore
 
     async def execute(
         self,
@@ -65,7 +66,7 @@ class ReportLocation:
                 detail=str(exc),
             ) from exc
 
-        # 4. Guardar en memoria
+        # 4. Guardar en PostgreSQL (upsert por order_id)
         location = AllyLocation(
             order_id=order_id,
             ally_id=ally_id,
@@ -74,6 +75,6 @@ class ReportLocation:
             accuracy_m=accuracy_m,
             recorded_at=datetime.now(timezone.utc),
         )
-        location_store.upsert(location)
+        await self.location_store.upsert(location)
 
         return location
