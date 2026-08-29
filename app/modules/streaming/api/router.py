@@ -24,20 +24,27 @@ def _get_orders_repo(session: AsyncSession = Depends(get_async_session)) -> Post
 def _build_ice_servers() -> list[IceServerOut]:
     """
     Construye la lista de ICE servers lista para RTCPeerConnection({ iceServers }).
-    Los valores vienen de settings para que sean cambiables por variable de entorno
-    sin tocar código.
-
-    STREAMING DEV: cuando implementes credenciales TURN dinámicas, reemplaza
-    esta función por la lógica de generación y devuelve los mismos objetos IceServerOut.
+    Se devuelve la configuración de producción con STUN/TURN y fallback para redes
+    restrictivas. Al mantener la ruta del endpoint igual, el frontend no tiene que
+    cambiar su flujo ni recompilar.
     """
-    return [
-        IceServerOut(urls=[settings.STREAMING_STUN_URL]),
-        IceServerOut(
-            urls=settings.STREAMING_TURN_URLS.split(","),
-            username=settings.STREAMING_TURN_USERNAME,
-            credential=settings.STREAMING_TURN_CREDENTIAL,
-        ),
+    stun_urls = [url.strip() for url in settings.STREAMING_STUN_URL.split(",") if url.strip()]
+    turn_urls = [url.strip() for url in settings.STREAMING_TURN_URLS.split(",") if url.strip()]
+
+    ice_servers = [
+        IceServerOut(urls=stun_urls),
     ]
+
+    for turn_url in turn_urls:
+        ice_servers.append(
+            IceServerOut(
+                urls=[turn_url],
+                username=settings.STREAMING_TURN_USERNAME,
+                credential=settings.STREAMING_TURN_CREDENTIAL,
+            )
+        )
+
+    return ice_servers
 
 
 # ------------------------------------------------------------------
