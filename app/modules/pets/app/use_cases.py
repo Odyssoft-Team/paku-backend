@@ -79,6 +79,24 @@ class GetPet:
 
 
 @dataclass
+class DeletePet:
+    repo: PetRepository
+
+    async def execute(self, *, pet_id: UUID, user_id: UUID, role: str) -> None:
+        pet = await self.repo.get_by_id(pet_id)
+        if not pet:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
+        if role != "admin" and pet.owner_id != user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+        deleted = await self.repo.soft_delete(pet_id, datetime.now(timezone.utc))
+        if deleted is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
+        # NOTA: holds/cart NO se tocan (booking/cart desconectados del checkout).
+        return None
+
+
+@dataclass
 class PatchPetOptional:
     repo: PetRepository
 

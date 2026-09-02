@@ -62,6 +62,7 @@ class Pet:
     photo_url: Optional[str] = None
     weight_kg: Optional[float] = None
     updated_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
 
     # Nuevos campos
     sterilized: Optional[bool] = None
@@ -141,10 +142,13 @@ class PetRepository(Protocol):
     async def add(self, pet: Pet) -> None:
         ...
 
-    async def get_by_id(self, pet_id: UUID) -> Optional[Pet]:
+    async def get_by_id(self, pet_id: UUID, *, include_deleted: bool = False) -> Optional[Pet]:
         ...
 
     async def update(self, pet: Pet) -> None:
+        ...
+
+    async def soft_delete(self, pet_id: UUID, when: datetime) -> Optional[Pet]:
         ...
 
     async def add_weight_entry(self, entry: PetWeightEntry) -> None:

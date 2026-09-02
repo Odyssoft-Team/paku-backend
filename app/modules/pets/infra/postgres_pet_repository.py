@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -51,13 +52,15 @@ class PostgresPetRepository(PetRepository):
         self._session.add(model)
         await self._session.commit()
 
-    async def get_by_id(self, pet_id: UUID) -> Optional[Pet]:
+    async def get_by_id(self, pet_id: UUID, *, include_deleted: bool = False) -> Optional[Pet]:
         from app.modules.pets.infra.models import PetModel, ensure_pets_schema
 
         await ensure_pets_schema(self._engine)
 
         model = await self._session.get(PetModel, pet_id)
         if model is None:
+            return None
+        if model.deleted_at is not None and not include_deleted:
             return None
 
         sex = None
@@ -79,6 +82,7 @@ class PostgresPetRepository(PetRepository):
             photo_url=model.photo_url,
             weight_kg=model.weight_kg,
             updated_at=model.updated_at,
+            deleted_at=model.deleted_at,
             sterilized=model.sterilized,
             size=(Size(model.size) if model.size is not None else None),
             activity_level=(ActivityLevel(model.activity_level) if model.activity_level is not None else None),
@@ -94,6 +98,21 @@ class PostgresPetRepository(PetRepository):
             antiparasitic_interval=(AntiparasiticInterval(model.antiparasitic_interval) if model.antiparasitic_interval is not None else None),
             special_shampoo=model.special_shampoo,
         )
+
+    async def soft_delete(self, pet_id: UUID, when: datetime) -> Optional[Pet]:
+        from app.modules.pets.infra.models import PetModel, ensure_pets_schema
+
+        await ensure_pets_schema(self._engine)
+
+        model = await self._session.get(PetModel, pet_id)
+        if model is None or model.deleted_at is not None:
+            return None
+
+        model.deleted_at = when
+        model.updated_at = when
+        await self._session.commit()
+        await self._session.refresh(model)
+        return await self.get_by_id(pet_id, include_deleted=True)
 
     async def update(self, pet: Pet) -> None:
         from app.modules.pets.infra.models import PetModel, ensure_pets_schema, utcnow
@@ -180,7 +199,7 @@ class PostgresPetRepository(PetRepository):
 
         stmt = (
             select(PetModel)
-            .where(PetModel.owner_id == owner_id)
+            .where(PetModel.owner_id == owner_id, PetModel.deleted_at.is_(None))
             .order_by(desc(PetModel.created_at))
             .limit(limit)
             .offset(offset)
@@ -202,6 +221,7 @@ class PostgresPetRepository(PetRepository):
                 photo_url=model.photo_url,
                 weight_kg=model.weight_kg,
                 updated_at=model.updated_at,
+                deleted_at=model.deleted_at,
                 sterilized=model.sterilized,
                 size=(Size(model.size) if model.size is not None else None),
                 activity_level=(ActivityLevel(model.activity_level) if model.activity_level is not None else None),

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.db import engine, get_async_session
 from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, WeightEntryIn, WeightEntryOut, PatchPetOptionalIn
-from app.modules.pets.app.use_cases import CreatePet, GetPet, GetWeightHistory, ListPets, RecordWeight, UpdatePet, PatchPetOptional
+from app.modules.pets.app.use_cases import CreatePet, DeletePet, GetPet, GetWeightHistory, ListPets, RecordWeight, UpdatePet, PatchPetOptional
 from app.modules.pets.domain.pet import PetRepository
 from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 
@@ -120,6 +120,19 @@ async def record_weight(
         weight_kg=payload.weight_kg,
     )
     return WeightEntryOut(**entry.__dict__)
+
+
+@router.delete("/pets/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_pet(
+    id: UUID,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PetRepository = Depends(get_pet_repo),
+) -> None:
+    await DeletePet(repo=repo).execute(
+        pet_id=id,
+        user_id=current.id,
+        role=getattr(current, "role", "owner"),
+    )
 
 
 @router.get("/pets/{id}/weight-history", response_model=list[WeightEntryOut])

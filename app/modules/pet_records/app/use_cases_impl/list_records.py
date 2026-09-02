@@ -30,7 +30,7 @@ class ListRecords:
         limit: int = 20,
         offset: int = 0,
     ) -> List[PetRecord]:
-        pet = await self.pets_repo.get_by_id(pet_id)
+        pet = await self.pets_repo.get_by_id(pet_id, include_deleted=(role == "admin"))
         if not pet:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
 
