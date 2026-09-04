@@ -36,6 +36,7 @@ class ProductModel(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     species: Mapped[str] = mapped_column(String(20), nullable=False)
     allowed_breeds: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    included_items: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)

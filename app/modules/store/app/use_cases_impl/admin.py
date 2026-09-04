@@ -92,6 +92,7 @@ class CreateProduct:
         species: Species,
         allowed_breeds: Optional[List[str]],
         is_active: bool = True,
+        included_items: Optional[List[str]] = None,
     ) -> Product:
         category = await self.repo.get_category(category_id)
         if not category:
@@ -103,6 +104,7 @@ class CreateProduct:
             species=species,
             allowed_breeds=allowed_breeds,
             is_active=is_active,
+            included_items=included_items,
         )
 
 
@@ -111,7 +113,13 @@ class UpdateProduct:
     repo: PostgresStoreRepository
 
     async def execute(
-        self, product_id: UUID, *, name: Optional[str] = None, description: Optional[str] = None, allowed_breeds: Optional[List[str]] = None
+        self,
+        product_id: UUID,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        allowed_breeds: Optional[List[str]] = None,
+        included_items: Optional[List[str]] = None,
     ) -> Product:
         patch = {}
         if name is not None:
@@ -120,6 +128,8 @@ class UpdateProduct:
             patch["description"] = description
         if allowed_breeds is not None:
             patch["allowed_breeds"] = allowed_breeds
+        if included_items is not None:
+            patch["included_items"] = included_items
         try:
             return await self.repo.update_product(product_id, patch)
         except ValueError as exc:

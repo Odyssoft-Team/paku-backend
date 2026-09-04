@@ -200,6 +200,7 @@ async def admin_create_product(
         species=payload.species,
         allowed_breeds=payload.allowed_breeds,
         is_active=payload.is_active,
+        included_items=payload.included_items,
     )
     return ProductOut(**product.__dict__)
 
@@ -212,7 +213,11 @@ async def admin_update_product(
     repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> ProductOut:
     product = await UpdateProduct(repo=repo).execute(
-        id, name=payload.name, description=payload.description, allowed_breeds=payload.allowed_breeds
+        id,
+        name=payload.name,
+        description=payload.description,
+        allowed_breeds=payload.allowed_breeds,
+        included_items=payload.included_items,
     )
     return ProductOut(**product.__dict__)
 

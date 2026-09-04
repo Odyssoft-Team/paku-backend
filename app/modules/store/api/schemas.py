@@ -28,6 +28,7 @@ class ProductOut(BaseModel):
     is_active: bool
     price: Optional[float] = None   # soles con decimales, ej: 120.0
     currency: str = "PEN"
+    included_items: Optional[List[str]] = None
 
 
 class AddonOut(BaseModel):
@@ -101,12 +102,14 @@ class ProductCreateIn(BaseModel):
     species: Species
     allowed_breeds: Optional[List[str]] = None
     is_active: bool = True
+    included_items: Optional[List[str]] = None
 
 
 class ProductUpdateIn(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     allowed_breeds: Optional[List[str]] = None
+    included_items: Optional[List[str]] = None
 
 
 # ------------------------------------------------------------------

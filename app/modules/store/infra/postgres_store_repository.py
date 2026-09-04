@@ -46,6 +46,7 @@ class PostgresStoreRepository:
             species=Species(r.species),
             allowed_breeds=r.allowed_breeds,
             is_active=r.is_active,
+            included_items=r.included_items,
         )
 
     def _to_addon(self, r) -> Addon:
@@ -193,6 +194,7 @@ class PostgresStoreRepository:
         species: Species,
         allowed_breeds: Optional[List[str]],
         is_active: bool = True,
+        included_items: Optional[List[str]] = None,
     ) -> Product:
         from app.modules.store.infra.db_models import ProductModel, _utcnow
 
@@ -204,6 +206,7 @@ class PostgresStoreRepository:
             species=species.value,
             allowed_breeds=allowed_breeds or None,
             is_active=is_active,
+            included_items=included_items or None,
             created_at=now,
             updated_at=now,
         )
