@@ -26,7 +26,8 @@ from app.modules.iam.api.schemas import (
 from app.modules.iam.app.use_cases import ChangeUserRole, GetMe, LoginUser, RegisterUser, UpdateProfile
 from app.modules.iam.app.use_cases_impl.account_linking import AddPassword
 from app.modules.iam.app.use_cases_impl.password_reset import ForgotPassword, ResetPassword
-from app.modules.iam.domain.user import Sex
+from app.media.gcs import to_signed_read_url_or_none
+from app.modules.iam.domain.user import Sex, User
 from app.modules.iam.domain.user import UserRepository
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
 
@@ -66,6 +67,13 @@ def get_geo_service(session: AsyncSession = Depends(get_async_session)) -> GeoSe
     # [BUSINESS] Validación de distritos para direcciones.
     repo = PostgresDistrictRepository(session=session)
     return GeoService(district_repo=repo)
+
+
+def _user_to_out(user: User) -> UserOut:
+    """Construye UserOut resolviendo profile_photo_url (object key en BD) a una signed read URL fresca."""
+    data = user.__dict__.copy()
+    data["profile_photo_url"] = to_signed_read_url_or_none(user.profile_photo_url)
+    return UserOut(**data)
 
 
 async def get_current_user_db(
@@ -119,8 +127,7 @@ async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_
         profile_photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
     )
 
-    result = user.__dict__.copy()
-    return UserOut(**result)
+    return _user_to_out(user)
 
 
 @router.post("/auth/login", response_model=TokenOut)
@@ -242,9 +249,8 @@ async def me(
     repo: UserRepository = Depends(get_user_repo),
 ) -> UserOut:
     user = await GetMe(repo=repo).execute(user_id=current.id)
-    result = user.__dict__.copy()
     # Address book is now exclusively in /addresses
-    return UserOut(**result)
+    return _user_to_out(user)
 
 
 @router.put("/users/me", response_model=UserOut)
@@ -271,9 +277,8 @@ async def update_me(
         profile_photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
     )
 
-    result = user.__dict__.copy()
     # Address book is now exclusively in /addresses
-    return UserOut(**result)
+    return _user_to_out(user)
 
 
 # [TECH]
@@ -472,7 +477,7 @@ async def admin_list_users(
 ) -> list[UserOut]:
     """Lista todos los usuarios con filtro opcional por rol."""
     users = await repo.list_by_role(role=role)
-    return [UserOut(**u.__dict__) for u in users]
+    return [_user_to_out(u) for u in users]
 
 
 @admin_router.patch("/users/{user_id}/role", response_model=UserOut)
@@ -484,7 +489,7 @@ async def admin_change_role(
 ) -> UserOut:
     """Cambia el rol de un usuario (user ↔ ally ↔ admin)."""
     user = await ChangeUserRole(repo=repo).execute(user_id=user_id, role=payload.role)
-    return UserOut(**user.__dict__)
+    return _user_to_out(user)
 
 
 @admin_router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -510,4 +515,4 @@ async def admin_create_user(
         )
     except HTTPException:
         raise
-    return UserOut(**user.__dict__)
+    return _user_to_out(user)

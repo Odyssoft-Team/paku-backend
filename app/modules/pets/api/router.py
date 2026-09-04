@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.db import engine, get_async_session
+from app.media.gcs import to_signed_read_url_or_none
 from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, WeightEntryIn, WeightEntryOut, PatchPetOptionalIn
 from app.modules.pets.app.use_cases import CreatePet, DeletePet, GetPet, GetWeightHistory, ListPets, RecordWeight, UpdatePet, PatchPetOptional
-from app.modules.pets.domain.pet import PetRepository
+from app.modules.pets.domain.pet import Pet, PetRepository
 from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 
 router = APIRouter(tags=["pets"])
@@ -16,6 +17,13 @@ admin_router = APIRouter(tags=["pets-admin"])
 
 def get_pet_repo(session: AsyncSession = Depends(get_async_session)) -> PetRepository:
     return PostgresPetRepository(session=session, engine=engine)
+
+
+def _pet_to_out(pet: Pet) -> PetOut:
+    """Construye PetOut resolviendo photo_url (object key en BD) a una signed read URL fresca."""
+    data = pet.__dict__.copy()
+    data["photo_url"] = to_signed_read_url_or_none(pet.photo_url)
+    return PetOut(**data)
 
 
 @router.post("/pets", response_model=PetOut, status_code=status.HTTP_201_CREATED)
@@ -48,7 +56,7 @@ async def create_pet(
         antiparasitic_interval=payload.antiparasitic_interval,
         special_shampoo=payload.special_shampoo,
     )
-    return PetOut(**pet.__dict__)
+    return _pet_to_out(pet)
 
 
 @router.patch("/pets/{id}/optional", response_model=PetOut)
@@ -63,7 +71,7 @@ async def patch_pet_optional(
         owner_id=current.id,
         **{k: v for k, v in payload.dict().items() if v is not None},
     )
-    return PetOut(**pet.__dict__)
+    return _pet_to_out(pet)
 
 
 @router.get("/pets", response_model=list[PetOut])
@@ -78,13 +86,13 @@ async def list_pets(
         limit=limit,
         offset=offset,
     )
-    return [PetOut(**pet.__dict__) for pet in pets]
+    return [_pet_to_out(pet) for pet in pets]
 
 
 @router.get("/pets/{id}", response_model=PetOut)
 async def get_pet(id: UUID, repo: PetRepository = Depends(get_pet_repo)) -> PetOut:
     pet = await GetPet(repo=repo).execute(pet_id=id)
-    return PetOut(**pet.__dict__)
+    return _pet_to_out(pet)
 
 
 @router.put("/pets/{id}", response_model=PetOut)
@@ -104,7 +112,7 @@ async def update_pet(
         notes=payload.notes,
         photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
     )
-    return PetOut(**pet.__dict__)
+    return _pet_to_out(pet)
 
 
 @router.post("/pets/{id}/weight", response_model=WeightEntryOut, status_code=status.HTTP_201_CREATED)
@@ -152,4 +160,4 @@ async def admin_list_user_pets(
     repo: PetRepository = Depends(get_pet_repo),
 ) -> list[PetOut]:
     pets = await ListPets(repo=repo).execute(owner_id=user_id, limit=100, offset=0)
-    return [PetOut(**pet.__dict__) for pet in pets]
+    return [_pet_to_out(pet) for pet in pets]

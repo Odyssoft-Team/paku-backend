@@ -1,6 +1,7 @@
+import logging
 import re
 from datetime import datetime, timedelta
-from typing import Final
+from typing import Final, Optional
 from uuid import UUID
 
 import google.auth
@@ -10,6 +11,8 @@ from google.cloud import storage
 
 from app.core.settings import settings
 from app.media.schemas import MediaEntityType
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_CONTENT_TYPES: Final[dict[str, str]] = {
     "image/webp": "webp",
@@ -150,3 +153,20 @@ def generate_signed_read_url(object_name: str, expires_in: int) -> str:
         method="GET",
         credentials=signing_credentials,
     )
+
+
+def to_signed_read_url_or_none(object_name: Optional[str]) -> Optional[str]:
+    """
+    Convierte un object_name de GCS almacenado en BD a una signed read URL fresca.
+
+    Devuelve None solo cuando no hay object_name (nunca se subió foto). Si GCS/IAM
+    fallan al firmar, el error se loggea y se propaga: no se convierte en un
+    photo_url=null silencioso, ya que ocultaría un problema real de infraestructura.
+    """
+    if not object_name:
+        return None
+    try:
+        return generate_signed_read_url(object_name, expires_in=get_ttl_seconds())
+    except Exception:
+        logger.exception("Failed to generate signed read URL for object_name=%s", object_name)
+        raise
