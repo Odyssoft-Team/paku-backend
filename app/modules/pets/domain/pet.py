@@ -54,7 +54,8 @@ class Pet:
     owner_id: UUID
     name: str
     species: Species
-    breed: Optional[str]
+    breed_id: Optional[str]
+    breed_name: Optional[str]
     sex: Optional[Sex]
     birth_date: Optional[date]
     notes: Optional[str]
@@ -86,7 +87,8 @@ class Pet:
         owner_id: UUID,
         name: str,
         species: Species,
-        breed: Optional[str] = None,
+        breed_id: Optional[str] = None,
+        breed_name: Optional[str] = None,
         sex: Optional[Sex] = None,
         birth_date: Optional[date] = None,
         notes: Optional[str] = None,
@@ -113,7 +115,8 @@ class Pet:
             owner_id=owner_id,
             name=name,
             species=species,
-            breed=breed,
+            breed_id=breed_id,
+            breed_name=breed_name,
             sex=sex,
             birth_date=birth_date,
             notes=notes,

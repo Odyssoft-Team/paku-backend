@@ -5,6 +5,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import desc, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.pets.domain.pet import Pet, PetRepository, Sex, Species, Size, ActivityLevel, CoatType, BathBehavior, AntiparasiticInterval
@@ -26,7 +27,8 @@ class PostgresPetRepository(PetRepository):
             owner_id=pet.owner_id,
             name=pet.name,
             species=str(pet.species.value if hasattr(pet.species, "value") else pet.species),
-            breed=pet.breed,
+            breed_id=pet.breed_id,
+            breed_name=pet.breed_name,
             sex=(str(pet.sex.value) if pet.sex is not None else None),
             birth_date=pet.birth_date,
             notes=pet.notes,
@@ -50,7 +52,11 @@ class PostgresPetRepository(PetRepository):
             special_shampoo=pet.special_shampoo,
         )
         self._session.add(model)
-        await self._session.commit()
+        try:
+            await self._session.commit()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            raise ValueError("breed_id_invalid") from exc
 
     async def get_by_id(self, pet_id: UUID, *, include_deleted: bool = False) -> Optional[Pet]:
         from app.modules.pets.infra.models import PetModel, ensure_pets_schema
@@ -74,7 +80,8 @@ class PostgresPetRepository(PetRepository):
             owner_id=model.owner_id,
             name=model.name,
             species=species,
-            breed=model.breed,
+            breed_id=model.breed_id,
+            breed_name=model.breed_name,
             sex=sex,
             birth_date=model.birth_date,
             notes=model.notes,
@@ -125,7 +132,8 @@ class PostgresPetRepository(PetRepository):
 
         model.name = pet.name
         model.species = str(pet.species.value if hasattr(pet.species, "value") else pet.species)
-        model.breed = pet.breed
+        model.breed_id = pet.breed_id
+        model.breed_name = pet.breed_name
         model.sex = (str(pet.sex.value) if pet.sex is not None else None)
         model.birth_date = pet.birth_date
         model.notes = pet.notes
@@ -148,7 +156,11 @@ class PostgresPetRepository(PetRepository):
         model.antiparasitic_interval = (str(pet.antiparasitic_interval.value) if pet.antiparasitic_interval is not None else None)
         model.special_shampoo = pet.special_shampoo
 
-        await self._session.commit()
+        try:
+            await self._session.commit()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            raise ValueError("breed_id_invalid") from exc
 
     async def add_weight_entry(self, entry: PetWeightEntry) -> None:
         """ from app.modules.pets.infra.models import PetWeightEntryModel, ensure_pets_schema, utcnow """
@@ -213,7 +225,8 @@ class PostgresPetRepository(PetRepository):
                 owner_id=model.owner_id,
                 name=model.name,
                 species=Species(model.species),
-                breed=model.breed,
+                breed_id=model.breed_id,
+                breed_name=model.breed_name,
                 sex=(Sex(model.sex) if model.sex is not None else None),
                 birth_date=model.birth_date,
                 notes=model.notes,

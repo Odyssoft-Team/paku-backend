@@ -118,6 +118,6 @@ async def _resolve_pet(
     if not pet:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
     weight = float(pet.weight_kg) if pet.weight_kg else None
-    breed_cat = _breed_category(pet.breed) if weight is not None else None
+    breed_cat = _breed_category(pet.breed_id, pet.breed_name) if weight is not None else None
     raw_species = getattr(pet.species, "value", pet.species)
     return Species(str(raw_species)), breed_cat, weight

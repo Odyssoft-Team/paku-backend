@@ -10,19 +10,22 @@ from app.modules.store.domain.models import Species
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 from app.modules.pets.domain.pet import PetRepository
 
+_MIXED_BREED_SUFFIX = "_mixed"
 
-def _breed_category(breed: Optional[str]) -> Optional[str]:
-    """Devuelve el coat_type de la raza consultando el catálogo hardcodeado.
-    Retorna None si la raza no tiene coat_type asignado aún."""
-    if not breed or not str(breed).strip():
-        return None
-    breed_id = str(breed).strip().lower()
-    from app.modules.catalog.domain.breeds_data import BREEDS_CATALOG
-    for group in BREEDS_CATALOG:
-        for b in group["breeds"]:
-            if b["id"] == breed_id:
-                return b.get("coat_type")
-    return None
+
+def _breed_category(breed_id: Optional[str], breed_name: Optional[str]) -> str:
+    """Categoriza la raza de la mascota para el pricing.
+
+    breed_id viene validado por FK contra `breeds.id` (o es None si el usuario
+    escribió una raza que no está en el catálogo, o no seleccionó ninguna).
+
+    - "mestizo": sin breed_id ni breed_name, o breed_id mestizo (ej. "dog_mixed"/"cat_mixed")
+    - "official": breed_id apunta a una raza reconocida del catálogo
+    - "otros": hay breed_name pero no matcheó ninguna raza del catálogo (breed_id vacío)
+    """
+    if breed_id:
+        return "mestizo" if breed_id.strip().lower().endswith(_MIXED_BREED_SUFFIX) else "official"
+    return "otros" if breed_name and str(breed_name).strip() else "mestizo"
 
 
 @dataclass
@@ -66,8 +69,7 @@ class Quote:
 
         raw_species = getattr(pet.species, "value", pet.species)
         pet_species = Species(str(raw_species))
-        pet_breed = getattr(pet, "breed", None)
-        breed_cat = _breed_category(pet_breed)
+        breed_cat = _breed_category(getattr(pet, "breed_id", None), getattr(pet, "breed_name", None))
         weight = float(pet_weight)
 
         product = await self.repo.get_product(product_id)

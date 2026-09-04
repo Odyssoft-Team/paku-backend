@@ -10,7 +10,7 @@ from app.modules.pets.domain.pet import Sex, Species, Size, ActivityLevel, CoatT
 class PetCreateIn(BaseModel):
     name: str
     species: Species
-    breed: Optional[str] = None
+    breed_id: Optional[str] = None  # id/slug de `breeds`; el backend deriva breed_name a partir de este
     sex: Optional[Sex] = None
     birth_date: Optional[date] = None
     notes: Optional[str] = None
@@ -38,7 +38,8 @@ class PetOut(BaseModel):
     owner_id: UUID
     name: str
     species: Species
-    breed: Optional[str]
+    breed_id: Optional[str]
+    breed_name: Optional[str]
     sex: Optional[Sex]
     birth_date: Optional[date]
     notes: Optional[str]
@@ -66,7 +67,7 @@ class PetOut(BaseModel):
 
 class UpdatePetIn(BaseModel):
     name: Optional[str] = None
-    breed: Optional[str] = None
+    breed_id: Optional[str] = None  # id/slug de `breeds`; el backend deriva breed_name a partir de este
     sex: Optional[Sex] = None
     birth_date: Optional[date] = None
     notes: Optional[str] = None

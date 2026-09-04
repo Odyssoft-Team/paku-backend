@@ -10,6 +10,7 @@ from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, Weigh
 from app.modules.pets.app.use_cases import CreatePet, DeletePet, GetPet, GetWeightHistory, ListPets, RecordWeight, UpdatePet, PatchPetOptional
 from app.modules.pets.domain.pet import Pet, PetRepository
 from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
+from app.modules.catalog.infra.postgres_breed_repository import PostgresBreedRepository
 
 router = APIRouter(tags=["pets"])
 admin_router = APIRouter(tags=["pets-admin"])
@@ -17,6 +18,10 @@ admin_router = APIRouter(tags=["pets-admin"])
 
 def get_pet_repo(session: AsyncSession = Depends(get_async_session)) -> PetRepository:
     return PostgresPetRepository(session=session, engine=engine)
+
+
+def get_breed_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresBreedRepository:
+    return PostgresBreedRepository(session=session, engine=engine)
 
 
 def _pet_to_out(pet: Pet) -> PetOut:
@@ -31,12 +36,13 @@ async def create_pet(
     payload: PetCreateIn,
     current: CurrentUser = Depends(get_current_user),
     repo: PetRepository = Depends(get_pet_repo),
+    breed_repo: PostgresBreedRepository = Depends(get_breed_repo),
 ) -> PetOut:
-    pet = await CreatePet(repo=repo).execute(
+    pet = await CreatePet(repo=repo, breed_repo=breed_repo).execute(
         owner_id=current.id,
         name=payload.name,
         species=payload.species,
-        breed=payload.breed,
+        breed_id=payload.breed_id,
         sex=payload.sex,
         birth_date=payload.birth_date,
         notes=payload.notes,
@@ -101,12 +107,13 @@ async def update_pet(
     payload: UpdatePetIn,
     current: CurrentUser = Depends(get_current_user),
     repo: PetRepository = Depends(get_pet_repo),
+    breed_repo: PostgresBreedRepository = Depends(get_breed_repo),
 ) -> PetOut:
-    pet = await UpdatePet(repo=repo).execute(
+    pet = await UpdatePet(repo=repo, breed_repo=breed_repo).execute(
         pet_id=id,
         owner_id=current.id,
         name=payload.name,
-        breed=payload.breed,
+        breed_id=payload.breed_id,
         sex=payload.sex,
         birth_date=payload.birth_date,
         notes=payload.notes,

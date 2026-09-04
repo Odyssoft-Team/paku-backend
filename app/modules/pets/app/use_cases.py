@@ -7,11 +7,26 @@ from fastapi import HTTPException, status
 
 from app.modules.pets.domain.pet import Pet, PetRepository, Sex, Size, ActivityLevel, CoatType, BathBehavior, AntiparasiticInterval
 from app.modules.pets.domain.weight_entry import PetWeightEntry
+from app.modules.catalog.infra.postgres_breed_repository import PostgresBreedRepository
+
+
+async def _resolve_breed_name(breed_repo: PostgresBreedRepository, breed_id: Optional[str]) -> Optional[str]:
+    """El front solo manda breed_id; el nombre a mostrar lo resuelve siempre el backend."""
+    if not breed_id:
+        return None
+    breed = await breed_repo.get(breed_id)
+    if breed is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="breed_id_invalid: no existe una raza con ese id",
+        )
+    return breed.name
 
 
 @dataclass
 class CreatePet:
     repo: PetRepository
+    breed_repo: PostgresBreedRepository
 
     async def execute(
         self,
@@ -19,7 +34,7 @@ class CreatePet:
         owner_id: UUID,
         name: str,
         species: str,
-        breed: Optional[str] = None,
+        breed_id: Optional[str] = None,
         sex: Optional[str] = None,
         birth_date: Optional[date] = None,
         notes: Optional[str] = None,
@@ -39,11 +54,13 @@ class CreatePet:
         antiparasitic_interval: Optional[AntiparasiticInterval] = None,
         special_shampoo: Optional[bool] = None,
     ) -> Pet:
+        breed_name = await _resolve_breed_name(self.breed_repo, breed_id)
         pet = Pet.new(
             owner_id=owner_id,
             name=name,
             species=species,
-            breed=breed,
+            breed_id=breed_id,
+            breed_name=breed_name,
             sex=sex,
             birth_date=birth_date,
             notes=notes,
@@ -63,7 +80,15 @@ class CreatePet:
             antiparasitic_interval=antiparasitic_interval,
             special_shampoo=special_shampoo,
         )
-        await self.repo.add(pet)
+        try:
+            await self.repo.add(pet)
+        except ValueError as exc:
+            if str(exc) == "breed_id_invalid":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="breed_id_invalid: no existe una raza con ese id",
+                ) from exc
+            raise
         return pet
 
 
@@ -113,7 +138,8 @@ class PatchPetOptional:
             owner_id=pet.owner_id,
             name=kwargs.get('name', pet.name),
             species=pet.species,
-            breed=kwargs.get('breed', pet.breed),
+            breed_id=kwargs.get('breed_id', pet.breed_id),
+            breed_name=kwargs.get('breed_name', pet.breed_name),
             sex=kwargs.get('sex', pet.sex),
             birth_date=kwargs.get('birth_date', pet.birth_date),
             notes=kwargs.get('notes', pet.notes),
@@ -136,13 +162,22 @@ class PatchPetOptional:
             antiparasitic_interval=kwargs.get('antiparasitic_interval', pet.antiparasitic_interval),
             special_shampoo=kwargs.get('special_shampoo', pet.special_shampoo),
         )
-        await self.repo.update(updated)
+        try:
+            await self.repo.update(updated)
+        except ValueError as exc:
+            if str(exc) == "breed_id_invalid":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="breed_id_invalid: no existe una raza con ese id",
+                ) from exc
+            raise
         return updated
 
 
 @dataclass
 class UpdatePet:
     repo: PetRepository
+    breed_repo: PostgresBreedRepository
 
     async def execute(
         self,
@@ -150,7 +185,7 @@ class UpdatePet:
         pet_id: UUID,
         owner_id: UUID,
         name: Optional[str] = None,
-        breed: Optional[str] = None,
+        breed_id: Optional[str] = None,
         sex: Optional[Sex] = None,
         birth_date: Optional[date] = None,
         notes: Optional[str] = None,
@@ -162,12 +197,14 @@ class UpdatePet:
         if pet.owner_id != owner_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
+        breed_name = await _resolve_breed_name(self.breed_repo, breed_id) if breed_id is not None else pet.breed_name
         updated = Pet(
             id=pet.id,
             owner_id=pet.owner_id,
             name=name if name is not None else pet.name,
             species=pet.species,
-            breed=breed if breed is not None else pet.breed,
+            breed_id=breed_id if breed_id is not None else pet.breed_id,
+            breed_name=breed_name,
             sex=sex if sex is not None else pet.sex,
             birth_date=birth_date if birth_date is not None else pet.birth_date,
             notes=notes if notes is not None else pet.notes,
@@ -176,7 +213,15 @@ class UpdatePet:
             weight_kg=pet.weight_kg,
             updated_at=datetime.now(timezone.utc),
         )
-        await self.repo.update(updated)
+        try:
+            await self.repo.update(updated)
+        except ValueError as exc:
+            if str(exc) == "breed_id_invalid":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="breed_id_invalid: no existe una raza con ese id",
+                ) from exc
+            raise
         return updated
 
 
@@ -199,7 +244,8 @@ class RecordWeight:
             owner_id=pet.owner_id,
             name=pet.name,
             species=pet.species,
-            breed=pet.breed,
+            breed_id=pet.breed_id,
+            breed_name=pet.breed_name,
             sex=pet.sex,
             birth_date=pet.birth_date,
             notes=pet.notes,

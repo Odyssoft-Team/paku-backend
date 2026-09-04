@@ -24,7 +24,10 @@ class PetModel(Base):
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     species: Mapped[str] = mapped_column(String(20), nullable=False)
-    breed: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    breed_id: Mapped[Optional[str]] = mapped_column(
+        String(100), ForeignKey("breeds.id", ondelete="SET NULL"), nullable=True
+    )
+    breed_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     sex: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
