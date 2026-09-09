@@ -74,22 +74,12 @@ class UpdatePetIn(BaseModel):
     # photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
 
 
-class WeightEntryIn(BaseModel):
-    weight_kg: float
-
-
-class WeightEntryOut(BaseModel):
-    id: UUID
-    pet_id: UUID
-    weight_kg: float
-    recorded_at: datetime
-
-
 # Nuevo esquema para actualizar campos opcionales posteriores al registro
 class PatchPetOptionalIn(BaseModel):
+    # weight_kg NO va aquí — el único camino para cambiar peso es
+    # POST /pets/{pet_id}/records (type=weight_record), para dejar historial.
     sterilized: Optional[bool] = None
     size: Optional[Size] = None
-    weight_kg: Optional[float] = None
     activity_level: Optional[ActivityLevel] = None
     coat_type: Optional[CoatType] = None
     skin_sensitivity: Optional[bool] = None

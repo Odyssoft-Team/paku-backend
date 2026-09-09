@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.modules.orders.domain.order import OrderStatus, PaymentStatus
+from app.modules.orders.domain.order import OrderStatus, PaymentMethod, PaymentStatus
 
 
 class CreateOrderIn(BaseModel):
@@ -34,18 +34,33 @@ class OrderOut(BaseModel):
     ally_id: Optional[UUID] = None
     scheduled_at: Optional[datetime] = None
     hold_id: Optional[UUID] = None
-    # Pago: pending hasta que el frontend confirme el cargo desde culqi-python
+    # Pago: pending → verifying → paid | failed (ver POST /orders/{id}/pay)
     payment_status: PaymentStatus = PaymentStatus.pending
     culqi_charge_id: Optional[str] = None  # chr_(test|live)_XXXXXXXXXXXXXXXX
+    payment_method: Optional[PaymentMethod] = None  # card | yape | cash
+    parent_order_id: Optional[UUID] = None  # presente solo en órdenes de ajuste
 
 
 class ConfirmPaymentIn(BaseModel):
     """
-    Payload que envía el frontend tras recibir el cargo exitoso de culqi-python.
-    El frontend llama a culqi-python (POST /api/culqi/charges), obtiene el charge_id
-    y luego llama a paku-backend (POST /orders/{id}/confirm-payment) para registrarlo.
+    Fallback manual: registra un charge_id ya confirmado por otra vía (soporte).
+    El camino principal es POST /orders/{id}/pay, que orquesta el cobro directamente.
     """
     culqi_charge_id: str  # chr_(test|live)_XXXXXXXXXXXXXXXX devuelto por culqi-python
+
+
+class CreateAdjustmentIn(BaseModel):
+    """Payload para POST /orders/{id}/create-adjustment — qué mascota disparó el recálculo."""
+    pet_id: UUID
+
+
+class PayOrderIn(BaseModel):
+    """
+    Payload para POST /orders/{id}/pay. Solo el token — el monto, moneda, order_id y
+    demás datos del cargo los arma paku-backend con lo que ya tiene guardado en la orden,
+    para que el cliente no pueda influir en cuánto se le cobra.
+    """
+    source_id: str  # tkn_(test|live)_..., ype_(test|live)_... o crd_(test|live)_...
 
 
 # ------------------------------------------------------------------

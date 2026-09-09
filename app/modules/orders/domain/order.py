@@ -29,13 +29,27 @@ class OrderStatus(str, Enum):
 # [NATURAL/BUSINESS]
 # Estado del cobro asociado a la orden. Es independiente del estado del servicio:
 # una orden puede estar "created" (servicio no iniciado) pero "paid" (ya cobrada).
-# pending  → orden creada, esperando confirmación de pago desde culqi-python
-# paid     → el frontend confirmó el cargo exitoso; culqi_charge_id queda guardado
-# failed   → el cobro fue rechazado por Culqi; la orden no debe procesarse
+# pending    → orden creada, aún no se intentó cobrar
+# verifying  → se intentó cobrar pero la respuesta (de culqi-python o de nuestra propia
+#              reconciliación) no llegó a tiempo; el cronjob de reconciliación sigue
+#              reintentando hasta resolver a paid/failed o escalar tras 15-20 minutos
+# paid       → cobro confirmado; culqi_charge_id presente (o payment_method=cash confirmado
+#              por el ally)
+# failed     → el cobro fue rechazado por Culqi; la orden no debe procesarse
 class PaymentStatus(str, Enum):
-    pending = "pending"  # estado inicial; aún no se intentó o no se confirmó el pago
-    paid    = "paid"     # cobro confirmado; culqi_charge_id presente
-    failed  = "failed"   # cobro rechazado; la orden queda bloqueada
+    pending   = "pending"
+    verifying = "verifying"
+    paid      = "paid"
+    failed    = "failed"
+
+
+# [NATURAL/BUSINESS]
+# Cómo se pagó la orden. "card"/"yape" pasan por Culqi (culqi_charge_id presente);
+# "cash" se confirma directo por el ally al momento de la entrega, sin pasar por Culqi.
+class PaymentMethod(str, Enum):
+    card = "card"
+    yape = "yape"
+    cash = "cash"
 
 
 # [TECH]
@@ -84,6 +98,8 @@ class Order:
     hold_id: Optional[UUID] = None           # reserva que originó esta orden
     payment_status: PaymentStatus = PaymentStatus.pending  # estado del cobro en Culqi
     culqi_charge_id: Optional[str] = None   # chr_(test|live)_XXXXXXXXXXXXXXXX de Culqi
+    payment_method: Optional[PaymentMethod] = None  # card | yape | cash; None hasta que se paga
+    parent_order_id: Optional[UUID] = None  # presente solo en "órdenes de ajuste" por recálculo
 
     # [TECH]
     # Factory creating Order with created status and timestamps.
@@ -100,12 +116,14 @@ class Order:
         currency: str = "PEN",
         delivery_address_snapshot: Optional[dict[str, Any]] = None,
         hold_id: Optional[UUID] = None,
+        parent_order_id: Optional[UUID] = None,
     ) -> "Order":
         now = datetime.now(timezone.utc)
         return Order(
             id=uuid4(),
             user_id=user_id,
             status=OrderStatus.created,
+            parent_order_id=parent_order_id,
             items_snapshot=items_snapshot,
             total_snapshot=total_snapshot,
             currency=currency,

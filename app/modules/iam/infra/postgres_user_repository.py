@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.iam.domain.user import Address, Sex, User, UserRepository, AddressRepository
@@ -357,6 +357,27 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         stmt = stmt.order_by(UserModel.created_at.desc())
         res = await self._session.execute(stmt)
         return [_to_domain(m) for m in res.scalars().all()]
+
+    async def search_by_name(self, *, query: str, role: Optional[str] = "user", limit: int = 20) -> list[User]:
+        """Búsqueda para el combobox de admin: ILIKE sobre first_name/last_name."""
+        pattern = f"%{query.strip()}%"
+        stmt = select(UserModel).where(
+            or_(UserModel.first_name.ilike(pattern), UserModel.last_name.ilike(pattern))
+        )
+        if role:
+            stmt = stmt.where(UserModel.role == role)
+        stmt = stmt.order_by(UserModel.first_name, UserModel.last_name).limit(limit)
+        res = await self._session.execute(stmt)
+        return [_to_domain(m) for m in res.scalars().all()]
+
+    async def get_names_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
+        """Resuelve nombres completos en batch — usado para enriquecer pet_records
+        con recorded_by_name sin hacer una consulta por cada registro."""
+        if not ids:
+            return {}
+        stmt = select(UserModel.id, UserModel.first_name, UserModel.last_name).where(UserModel.id.in_(ids))
+        res = await self._session.execute(stmt)
+        return {row.id: f"{row.first_name} {row.last_name}".strip() for row in res.all()}
 
     async def get_default_address(self, user_id: UUID) -> Optional[dict]:
 

@@ -55,20 +55,6 @@ class PetModel(Base):
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class PetWeightEntryModel(Base):
-    __tablename__ = "pet_weight_entries"
-
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
-    pet_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("pets.id", ondelete="CASCADE"),
-        index=True,
-        nullable=False,
-    )
-    weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
-    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
-
-
 _pets_schema_ready = False
 
 

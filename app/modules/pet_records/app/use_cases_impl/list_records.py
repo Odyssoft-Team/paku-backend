@@ -10,12 +10,14 @@ from fastapi import HTTPException, status
 from app.modules.pet_records.domain.record import PetRecord, RecordRole, RecordType
 from app.modules.pet_records.infra.postgres_pet_records_repository import PostgresPetRecordsRepository
 from app.modules.pets.domain.pet import PetRepository
+from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 
 
 @dataclass
 class ListRecords:
     records_repo: PostgresPetRecordsRepository
     pets_repo: PetRepository
+    orders_repo: PostgresOrderRepository
 
     async def execute(
         self,
@@ -34,7 +36,14 @@ class ListRecords:
         if not pet:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
 
-        if role != "admin" and pet.owner_id != user_id:
+        is_owner = pet.owner_id == user_id
+        if role == "admin" or is_owner:
+            pass
+        elif role == "ally":
+            assigned = await self.orders_repo.is_ally_assigned_to_pet(ally_id=user_id, pet_id=pet_id)
+            if not assigned:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        else:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
         limit = max(1, min(limit, 100))

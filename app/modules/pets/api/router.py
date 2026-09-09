@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.db import engine, get_async_session
 from app.media.gcs import to_signed_read_url_or_none
-from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, WeightEntryIn, WeightEntryOut, PatchPetOptionalIn
-from app.modules.pets.app.use_cases import CreatePet, DeletePet, GetPet, GetWeightHistory, ListPets, RecordWeight, UpdatePet, PatchPetOptional
+from app.modules.pets.api.schemas import PetCreateIn, PetOut, UpdatePetIn, PatchPetOptionalIn
+from app.modules.pets.app.use_cases import CreatePet, DeletePet, GetPet, ListPets, UpdatePet, PatchPetOptional
 from app.modules.pets.domain.pet import Pet, PetRepository
 from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 from app.modules.catalog.infra.postgres_breed_repository import PostgresBreedRepository
@@ -122,21 +122,6 @@ async def update_pet(
     return _pet_to_out(pet)
 
 
-@router.post("/pets/{id}/weight", response_model=WeightEntryOut, status_code=status.HTTP_201_CREATED)
-async def record_weight(
-    id: UUID,
-    payload: WeightEntryIn,
-    current: CurrentUser = Depends(get_current_user),
-    repo: PetRepository = Depends(get_pet_repo),
-) -> WeightEntryOut:
-    entry = await RecordWeight(repo=repo).execute(
-        pet_id=id,
-        owner_id=current.id,
-        weight_kg=payload.weight_kg,
-    )
-    return WeightEntryOut(**entry.__dict__)
-
-
 @router.delete("/pets/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_pet(
     id: UUID,
@@ -148,12 +133,6 @@ async def delete_pet(
         user_id=current.id,
         role=getattr(current, "role", "owner"),
     )
-
-
-@router.get("/pets/{id}/weight-history", response_model=list[WeightEntryOut])
-async def get_weight_history(id: UUID, repo: PetRepository = Depends(get_pet_repo)) -> list[WeightEntryOut]:
-    entries = await GetWeightHistory(repo=repo).execute(pet_id=id)
-    return [WeightEntryOut(**e.__dict__) for e in entries]
 
 
 # ------------------------------------------------------------------

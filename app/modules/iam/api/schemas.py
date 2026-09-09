@@ -102,6 +102,15 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
 
 
+class UserSearchResultOut(BaseModel):
+    """Resultado liviano para el combobox de búsqueda de admin (GET /admin/users/search)."""
+    id: UUID
+    first_name: str
+    last_name: str
+    phone: Optional[str] = None
+    email: str
+
+
 class UserOut(BaseModel):
     id: UUID
     email: str

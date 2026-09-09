@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 from typing import List, Optional
 from uuid import UUID
@@ -6,7 +6,6 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.modules.pets.domain.pet import Pet, PetRepository, Sex, Size, ActivityLevel, CoatType, BathBehavior, AntiparasiticInterval
-from app.modules.pets.domain.weight_entry import PetWeightEntry
 from app.modules.catalog.infra.postgres_breed_repository import PostgresBreedRepository
 
 
@@ -132,20 +131,20 @@ class PatchPetOptional:
         if pet.owner_id != owner_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
+        # weight_kg ya no se acepta aquí — el único camino para cambiar peso es
+        # POST /pets/{pet_id}/records (type=weight_record), para dejar historial.
+        kwargs.pop('weight_kg', None)
+
         # Construir objeto actualizado tomando valores existentes y reemplazando con kwargs cuando no sean None
-        updated = Pet(
-            id=pet.id,
-            owner_id=pet.owner_id,
+        updated = replace(
+            pet,
             name=kwargs.get('name', pet.name),
-            species=pet.species,
             breed_id=kwargs.get('breed_id', pet.breed_id),
             breed_name=kwargs.get('breed_name', pet.breed_name),
             sex=kwargs.get('sex', pet.sex),
             birth_date=kwargs.get('birth_date', pet.birth_date),
             notes=kwargs.get('notes', pet.notes),
-            created_at=pet.created_at,
             photo_url=kwargs.get('photo_url', pet.photo_url),
-            weight_kg=kwargs.get('weight_kg', pet.weight_kg),
             updated_at=datetime.now(timezone.utc),
             sterilized=kwargs.get('sterilized', pet.sterilized),
             size=kwargs.get('size', pet.size),
@@ -198,19 +197,17 @@ class UpdatePet:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
         breed_name = await _resolve_breed_name(self.breed_repo, breed_id) if breed_id is not None else pet.breed_name
-        updated = Pet(
-            id=pet.id,
-            owner_id=pet.owner_id,
+        # dataclasses.replace preserva TODO campo no mencionado aquí (incluidos los de detalle
+        # de /optional) — antes se reconstruía Pet(...) a mano y se perdían silenciosamente.
+        updated = replace(
+            pet,
             name=name if name is not None else pet.name,
-            species=pet.species,
             breed_id=breed_id if breed_id is not None else pet.breed_id,
             breed_name=breed_name,
             sex=sex if sex is not None else pet.sex,
             birth_date=birth_date if birth_date is not None else pet.birth_date,
             notes=notes if notes is not None else pet.notes,
-            created_at=pet.created_at,
             photo_url=photo_url if photo_url is not None else pet.photo_url,
-            weight_kg=pet.weight_kg,
             updated_at=datetime.now(timezone.utc),
         )
         try:
@@ -223,48 +220,6 @@ class UpdatePet:
                 ) from exc
             raise
         return updated
-
-
-@dataclass
-class RecordWeight:
-    repo: PetRepository
-
-    async def execute(self, *, pet_id: UUID, owner_id: UUID, weight_kg: float) -> PetWeightEntry:
-        pet = await self.repo.get_by_id(pet_id)
-        if not pet:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
-        if pet.owner_id != owner_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-        entry = PetWeightEntry.new(pet_id=pet_id, weight_kg=weight_kg)
-        await self.repo.add_weight_entry(entry)
-
-        updated_pet = Pet(
-            id=pet.id,
-            owner_id=pet.owner_id,
-            name=pet.name,
-            species=pet.species,
-            breed_id=pet.breed_id,
-            breed_name=pet.breed_name,
-            sex=pet.sex,
-            birth_date=pet.birth_date,
-            notes=pet.notes,
-            created_at=pet.created_at,
-            photo_url=pet.photo_url,
-            weight_kg=weight_kg,
-            updated_at=datetime.now(timezone.utc),
-        )
-        await self.repo.update(updated_pet)
-        return entry
-
-
-@dataclass
-class GetWeightHistory:
-    repo: PetRepository
-
-    async def execute(self, *, pet_id: UUID) -> List[PetWeightEntry]:
-        entries = await self.repo.get_weight_history(pet_id=pet_id)
-        return entries
 
 
 @dataclass

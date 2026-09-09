@@ -90,49 +90,51 @@ def test_update_pet_forbidden_if_not_owner():
     assert r.status_code == 403
 
 
-def test_add_weight_updates_current_weight_and_creates_history_entry():
+def _record_weight(*, token: str, pet_id: str, weight_kg: float) -> dict:
+    from datetime import timezone
+    r = client.post(
+        f"/pets/{pet_id}/records",
+        json={
+            "type": "weight_record",
+            "occurred_at": datetime.now(timezone.utc).isoformat(),
+            "data": {"weight_kg": weight_kg},
+        },
+        headers=_auth_headers(token),
+    )
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def test_add_weight_record_updates_current_weight():
+    # Centralizado en pet_records (type=weight_record) — reemplaza al viejo
+    # POST /pets/{id}/weight, eliminado junto con pet_weight_entries.
     token = _register_and_login("test_pets_extended_weight_add_" + __import__("uuid").uuid4().hex + "@example.com")
     pet = _create_pet(token=token, name="Firulais", species="dog")
 
-    r = client.post(
-        f"/pets/{pet['id']}/weight",
-        json={"weight_kg": 12.5},
-        headers=_auth_headers(token),
-    )
-    assert r.status_code in (200, 201)
-    entry = r.json()
-    assert entry.get("pet_id") == pet["id"]
-    assert entry.get("weight_kg") == 12.5
+    result = _record_weight(token=token, pet_id=pet["id"], weight_kg=12.5)
+    assert result["record"]["pet_id"] == pet["id"]
+    assert result["record"]["data"]["weight_kg"] == 12.5
+    # Sin orden pagada de por medio, no hay candidato a recálculo de precio.
+    assert result["price_check"] is None
 
     reread = client.get(f"/pets/{pet['id']}")
     assert reread.status_code == 200
     assert reread.json().get("weight_kg") == 12.5
 
 
-def test_weight_history_returns_entries_desc():
+def test_weight_records_list_returns_entries_desc():
     token = _register_and_login("test_pets_extended_weight_history_" + __import__("uuid").uuid4().hex + "@example.com")
     pet = _create_pet(token=token, name="Firulais", species="dog")
 
-    r1 = client.post(
-        f"/pets/{pet['id']}/weight",
-        json={"weight_kg": 10.0},
-        headers=_auth_headers(token),
-    )
-    assert r1.status_code in (200, 201)
+    _record_weight(token=token, pet_id=pet["id"], weight_kg=10.0)
+    _record_weight(token=token, pet_id=pet["id"], weight_kg=11.0)
 
-    r2 = client.post(
-        f"/pets/{pet['id']}/weight",
-        json={"weight_kg": 11.0},
-        headers=_auth_headers(token),
-    )
-    assert r2.status_code in (200, 201)
-
-    r = client.get(f"/pets/{pet['id']}/weight-history")
+    r = client.get(f"/pets/{pet['id']}/records", params={"type": "weight_record"}, headers=_auth_headers(token))
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
     assert len(data) == 2
 
-    t0 = _parse_dt(data[0]["recorded_at"])
-    t1 = _parse_dt(data[1]["recorded_at"])
+    t0 = _parse_dt(data[0]["occurred_at"])
+    t1 = _parse_dt(data[1]["occurred_at"])
     assert t0 >= t1

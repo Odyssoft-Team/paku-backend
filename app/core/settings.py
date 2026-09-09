@@ -55,5 +55,9 @@ class Settings:
     # Obtener en: https://console.cloud.google.com/apis/credentials
     GOOGLE_ROUTES_API_KEY: Optional[str] = os.getenv("GOOGLE_ROUTES_API_KEY")
 
+    # culqi-python — microservicio de pagos (server-to-server, ver POST /orders/{id}/pay)
+    CULQI_PYTHON_BASE_URL: str = os.getenv("CULQI_PYTHON_BASE_URL", "http://localhost:8001")
+    CULQI_PYTHON_SERVICE_API_KEY: str = os.getenv("CULQI_PYTHON_SERVICE_API_KEY", "")
+
 
 settings = Settings()

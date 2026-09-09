@@ -9,7 +9,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.pets.domain.pet import Pet, PetRepository, Sex, Species, Size, ActivityLevel, CoatType, BathBehavior, AntiparasiticInterval
-from app.modules.pets.domain.weight_entry import PetWeightEntry
 
 
 class PostgresPetRepository(PetRepository):
@@ -162,51 +161,14 @@ class PostgresPetRepository(PetRepository):
             await self._session.rollback()
             raise ValueError("breed_id_invalid") from exc
 
-    async def add_weight_entry(self, entry: PetWeightEntry) -> None:
-        """ from app.modules.pets.infra.models import PetWeightEntryModel, ensure_pets_schema, utcnow """
-        from app.modules.pets.infra.models import PetWeightEntryModel, ensure_pets_schema
-
-        await ensure_pets_schema(self._engine)
-
-        model = PetWeightEntryModel(
-            id=entry.id,
-            pet_id=entry.pet_id,
-            weight_kg=entry.weight_kg,
-            recorded_at=entry.recorded_at,
-        )
-        self._session.add(model)
-        await self._session.commit()
-
-    async def get_weight_history(self, pet_id: UUID) -> List[PetWeightEntry]:
-        from app.modules.pets.infra.models import PetWeightEntryModel, ensure_pets_schema
-
-        await ensure_pets_schema(self._engine)
-
-        stmt = (
-            select(PetWeightEntryModel)
-            .where(PetWeightEntryModel.pet_id == pet_id)
-            .order_by(desc(PetWeightEntryModel.recorded_at))
-        )
-        result = await self._session.execute(stmt)
-        models = result.scalars().all()
-
-        return [
-            PetWeightEntry(
-                id=model.id,
-                pet_id=model.pet_id,
-                weight_kg=model.weight_kg,
-                recorded_at=model.recorded_at,
-            )
-            for model in models
-        ]
-
     async def list_by_owner(self, owner_id: UUID, limit: int = 7, offset: int = 0) -> List[Pet]:
         from app.modules.pets.infra.models import PetModel, ensure_pets_schema
 
         await ensure_pets_schema(self._engine)
 
-        # Apply limits: max 14, default 7
-        limit = min(max(limit, 1), 14)
+        # El endpoint público (GET /pets) ya restringe a max 14 vía Query(le=14) en el router;
+        # este tope de 100 es solo un límite defensivo para el uso admin (limit=100 explícito).
+        limit = min(max(limit, 1), 100)
         offset = max(offset, 0)
 
         stmt = (

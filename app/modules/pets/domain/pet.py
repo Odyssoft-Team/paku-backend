@@ -6,8 +6,6 @@ from enum import Enum
 from typing import Optional, Protocol
 from uuid import UUID, uuid4
 
-from app.modules.pets.domain.weight_entry import PetWeightEntry
-
 
 class Species(str, Enum):
     dog = "dog"
@@ -152,12 +150,6 @@ class PetRepository(Protocol):
         ...
 
     async def soft_delete(self, pet_id: UUID, when: datetime) -> Optional[Pet]:
-        ...
-
-    async def add_weight_entry(self, entry: PetWeightEntry) -> None:
-        ...
-
-    async def get_weight_history(self, pet_id: UUID) -> list[PetWeightEntry]:
         ...
 
     async def list_by_owner(self, owner_id: UUID, limit: int = 7, offset: int = 0) -> list[Pet]:

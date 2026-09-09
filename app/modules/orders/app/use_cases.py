@@ -22,6 +22,11 @@ from app.modules.orders.app.use_cases_impl.admin_orders import (  # noqa: F401
     ListAllyOrders,
     ListOrdersAdmin,
 )
+from app.modules.orders.app.use_cases_impl.payment import (  # noqa: F401
+    ConfirmCashPayment,
+    PayOrder,
+)
+from app.modules.orders.app.use_cases_impl.adjustment import CreateAdjustmentOrder  # noqa: F401
 
 
 def _snapshot_cart_items(items: list[Any]) -> list[dict[str, Any]]:
@@ -40,6 +45,21 @@ def _snapshot_cart_items(items: list[Any]) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _extract_pet_ids(items_snapshot: list[dict[str, Any]]) -> list[UUID]:
+    """Extrae los pet_id únicos (item.meta.pet_id) para poblar la tabla puente order_pets."""
+    pet_ids: list[UUID] = []
+    for item in items_snapshot:
+        meta = item.get("meta") or {}
+        raw = meta.get("pet_id")
+        if not raw:
+            continue
+        try:
+            pet_ids.append(UUID(str(raw)))
+        except ValueError:
+            continue
+    return pet_ids
 
 
 def _calc_total(items: list[Any]) -> float:
@@ -79,6 +99,15 @@ class CreateOrderFromCart:
             delivery_address_snapshot=delivery_address_snapshot,
         )
         created = await self.orders_repo.create_order(order)
+
+        # Poblar order_pets (best effort): necesario para el recálculo de precio por peso.
+        try:
+            pet_ids = _extract_pet_ids(items_snapshot)
+            if pet_ids:
+                await self.orders_repo.add_order_pets(order_id=created.id, pet_ids=pet_ids)
+        except Exception:
+            import logging
+            logging.exception("Failed to populate order_pets for order %s", created.id)
 
         # Crear notificación (best effort, no bloquea la orden)
         try:

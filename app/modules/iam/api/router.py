@@ -22,6 +22,7 @@ from app.modules.iam.api.schemas import (
     TokenOut,
     UpdateProfileIn,
     UserOut,
+    UserSearchResultOut,
 )
 from app.modules.iam.app.use_cases import ChangeUserRole, GetMe, LoginUser, RegisterUser, UpdateProfile
 from app.modules.iam.app.use_cases_impl.account_linking import AddPassword
@@ -478,6 +479,27 @@ async def admin_list_users(
     """Lista todos los usuarios con filtro opcional por rol."""
     users = await repo.list_by_role(role=role)
     return [_user_to_out(u) for u in users]
+
+
+@admin_router.get("/users/search", response_model=list[UserSearchResultOut])
+async def admin_search_users(
+    q: str = Query(..., min_length=3, description="Busca por nombre o apellido"),
+    role: Optional[str] = Query("user", description="Filtrar por rol: user|ally|admin"),
+    limit: int = Query(default=20, ge=1, le=50),
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresUserRepository = Depends(get_user_repo),
+) -> list[UserSearchResultOut]:
+    """
+    Combobox de búsqueda de dueños (para la pantalla de historial clínico): busca por
+    first_name/last_name, enfocado en clientes (role=user por defecto).
+    """
+    users = await repo.search_by_name(query=q, role=role, limit=limit)
+    return [
+        UserSearchResultOut(
+            id=u.id, first_name=u.first_name, last_name=u.last_name, phone=u.phone, email=u.email,
+        )
+        for u in users
+    ]
 
 
 @admin_router.patch("/users/{user_id}/role", response_model=UserOut)

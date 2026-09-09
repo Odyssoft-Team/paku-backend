@@ -12,9 +12,11 @@ from app.modules.orders.api.schemas import (
     AssignmentOut,
     AssignOrderIn,
     ConfirmPaymentIn,
+    CreateAdjustmentIn,
     CreateOrderIn,
     OrderOut,
     PatchOrderIn,
+    PayOrderIn,
     UpdateStatusIn,
 )
 from app.modules.orders.app.use_cases import (
@@ -23,7 +25,9 @@ from app.modules.orders.app.use_cases import (
     AssignOrder,
     CancelOrder,
     CompleteOrder,
+    ConfirmCashPayment,
     ConfirmOrderPayment,
+    CreateAdjustmentOrder,
     CreateOrderFromCart,
     DepartOrder,
     FailOrderPayment,
@@ -33,13 +37,18 @@ from app.modules.orders.app.use_cases import (
     ListOrders,
     ListOrdersAdmin,
     PatchOrder,
+    PayOrder,
     RetryOrderPayment,
     UpdateOrderStatus,
 )
 from app.modules.orders.domain.order import OrderStatus
+from app.modules.orders.infra.culqi_client import CulqiPythonClient
 from app.modules.orders.infra.postgres_order_assignment_repository import PostgresOrderAssignmentRepository
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository
+from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
+from app.modules.pets.domain.pet import PetRepository
+from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 
 router = APIRouter(tags=["orders"], prefix="/orders")
 admin_router = APIRouter(tags=["orders-admin"])
@@ -55,6 +64,14 @@ def get_orders_repo(session: AsyncSession = Depends(get_async_session)) -> Postg
 
 def get_assignments_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresOrderAssignmentRepository:
     return PostgresOrderAssignmentRepository(session=session, engine=engine)
+
+
+def get_pets_repo(session: AsyncSession = Depends(get_async_session)) -> PetRepository:
+    return PostgresPetRepository(session=session, engine=engine)
+
+
+def get_store_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresStoreRepository:
+    return PostgresStoreRepository(session=session, engine=engine)
 
 
 def _order_out(order) -> OrderOut:
@@ -292,8 +309,74 @@ async def admin_cancel_order(
 
 
 # ------------------------------------------------------------------
+# Recálculo de precio por peso (orden de ajuste)
+# ------------------------------------------------------------------
+
+@router.post("/{id}/create-adjustment", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
+async def create_adjustment_order(
+    id: UUID,
+    payload: CreateAdjustmentIn,
+    _: CurrentUser = Depends(require_roles("admin", "ally")),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+    pets_repo: PetRepository = Depends(get_pets_repo),
+    store_repo: PostgresStoreRepository = Depends(get_store_repo),
+) -> OrderOut:
+    """
+    Crea la orden de ajuste (parent_order_id={id}) por la diferencia de precio detectada
+    tras registrar un peso real distinto al declarado. El precio se recalcula aquí de
+    nuevo del lado del servidor (no se confía en ningún monto que mande el front) —
+    requiere confirmación explícita de admin/ally, no se genera automáticamente.
+    """
+    adjustment = await CreateAdjustmentOrder(
+        orders_repo=repo, pets_repo=pets_repo, store_repo=store_repo,
+    ).execute(order_id=id, pet_id=payload.pet_id)
+    return _order_out(adjustment)
+
+
+# ------------------------------------------------------------------
 # Endpoints de pago (Culqi)
 # ------------------------------------------------------------------
+
+@router.post("/{id}/pay", response_model=OrderOut)
+async def pay_order(
+    id: UUID,
+    payload: PayOrderIn,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+) -> OrderOut:
+    """
+    Camino principal de pago: paku-backend orquesta el cobro contra culqi-python
+    servidor-a-servidor (el frontend solo manda el token, ya tokenizado con Culqi.js).
+
+    Puede devolver la orden en payment_status=paid, failed o verifying (cuando el
+    resultado no pudo confirmarse a tiempo — el cronjob de reconciliación sigue
+    intentando en segundo plano, ver app/core/scheduler.py).
+    """
+    order = await PayOrder(orders_repo=repo, culqi_client=CulqiPythonClient()).execute(
+        order_id=id,
+        user_id=current.id,
+        email=current.email,
+        source_id=payload.source_id,
+    )
+    return _order_out(order)
+
+
+@router.post("/{id}/confirm-cash-payment", response_model=OrderOut)
+async def confirm_cash_payment(
+    id: UUID,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+) -> OrderOut:
+    """
+    Confirma el pago en efectivo de una orden. Solo puede ejecutarlo el ally
+    asignado a esa orden, al momento de la entrega — no pasa por Culqi.
+    """
+    order = await ConfirmCashPayment(orders_repo=repo).execute(
+        order_id=id,
+        ally_id=current.id,
+    )
+    return _order_out(order)
+
 
 @router.post("/{id}/confirm-payment", response_model=OrderOut)
 async def confirm_payment(
@@ -303,10 +386,10 @@ async def confirm_payment(
     repo: PostgresOrderRepository = Depends(get_orders_repo),
 ) -> OrderOut:
     """
-    Confirma el pago de una orden.
+    Fallback manual (ej. soporte) — el camino principal es POST /{id}/pay.
 
-    El frontend llama a este endpoint tras recibir el `culqi_charge_id` (chr_...)
-    desde culqi-python. Solo puede ejecutarse una vez por orden (pending → paid).
+    Confirma el pago de una orden a partir de un `culqi_charge_id` (chr_...) ya
+    obtenido por otra vía. Solo puede ejecutarse una vez por orden (pending → paid).
     """
     order = await ConfirmOrderPayment(orders_repo=repo).execute(
         order_id=id,

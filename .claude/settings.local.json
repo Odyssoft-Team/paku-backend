@@ -6,7 +6,13 @@
       "WebFetch(domain:docs.culqi.com)",
       "WebFetch(domain:culqi.com)",
       "WebSearch",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(python -c ' *)",
+      "Bash(DATABASE_URL=postgresql+asyncpg://u:p@localhost/db ./.venv/Scripts/python.exe -c ' *)",
+      "Bash(cd e:/PROYECTOS/culqi-python && ls .venv/Scripts/python.exe 2>/dev/null && echo \"venv found\" || echo \"no venv\")",
+      "Read(//e/PROYECTOS/culqi-python/**)",
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(DATABASE_URL=\"postgresql+asyncpg://u:p@localhost/db\" ./.venv/Scripts/python.exe -m alembic heads)"
     ]
   }
 }
