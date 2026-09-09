@@ -56,7 +56,9 @@ class Settings:
     GOOGLE_ROUTES_API_KEY: Optional[str] = os.getenv("GOOGLE_ROUTES_API_KEY")
 
     # culqi-python — microservicio de pagos (server-to-server, ver POST /orders/{id}/pay)
-    CULQI_PYTHON_BASE_URL: str = os.getenv("CULQI_PYTHON_BASE_URL", "http://localhost:8001")
+    # Producción: nombre del servicio en docker-compose.yml (platform/) + su puerto INTERNO
+    # de contenedor (no el publicado al host para nginx) — ver servicio "culqi-backend".
+    CULQI_PYTHON_BASE_URL: str = os.getenv("CULQI_PYTHON_BASE_URL", "http://culqi-backend:8080")
     CULQI_PYTHON_SERVICE_API_KEY: str = os.getenv("CULQI_PYTHON_SERVICE_API_KEY", "")
 
 
