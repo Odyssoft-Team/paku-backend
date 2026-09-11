@@ -12,6 +12,8 @@ from app.modules.booking.domain.hold import AvailabilitySlot, Hold, HoldStatus
 from app.modules.booking.infra.postgres_availability_repository import PostgresAvailabilityRepository
 from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepository
 
+_MAX_BULK_RANGE_DAYS = 90
+
 
 @dataclass
 class CreateAvailabilitySlot:
@@ -36,6 +38,56 @@ class CreateAvailabilitySlot:
             capacity=capacity,
             is_active=is_active,
         )
+
+
+@dataclass
+class CreateAvailabilitySlotsBulk:
+    repo: PostgresAvailabilityRepository
+
+    async def execute(
+        self,
+        *,
+        service_id: UUID,
+        date_from: date_type,
+        date_to: Optional[date_type],
+        capacity: int,
+        is_active: bool = True,
+    ) -> tuple[List[AvailabilitySlot], List[date_type]]:
+        if capacity <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="capacity_invalid: debe ser mayor que 0",
+            )
+        end = date_to or date_from
+        if end < date_from:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="date_range_invalid: date_to no puede ser anterior a date_from",
+            )
+        if (end - date_from).days + 1 > _MAX_BULK_RANGE_DAYS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"date_range_too_large: el rango no puede superar {_MAX_BULK_RANGE_DAYS} días",
+            )
+
+        created: List[AvailabilitySlot] = []
+        skipped: List[date_type] = []
+        current = date_from
+        while current <= end:
+            existing = await self.repo.get_slot_for_date(service_id, current)
+            if existing is not None:
+                skipped.append(current)
+            else:
+                slot = await self.repo.create_slot(
+                    service_id=service_id,
+                    date=current,
+                    capacity=capacity,
+                    is_active=is_active,
+                )
+                created.append(slot)
+            current += timedelta(days=1)
+
+        return created, skipped
 
 
 @dataclass

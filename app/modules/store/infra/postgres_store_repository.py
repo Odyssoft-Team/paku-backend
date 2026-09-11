@@ -185,6 +185,15 @@ class PostgresStoreRepository:
         row = await self._session.get(ProductModel, product_id)
         return self._to_product(row) if row else None
 
+    async def get_product_names_by_ids(self, ids: List[UUID]) -> dict[UUID, str]:
+        from app.modules.store.infra.db_models import ProductModel
+
+        if not ids:
+            return {}
+        stmt = select(ProductModel.id, ProductModel.name).where(ProductModel.id.in_(ids))
+        result = await self._session.execute(stmt)
+        return {row.id: row.name for row in result.all()}
+
     async def create_product(
         self,
         *,

@@ -11,6 +11,7 @@ backwards compatibility with existing tests that don't use availability.
 from app.modules.booking.app.use_cases_impl.availability import (
     CancelHold,
     CreateAvailabilitySlot,
+    CreateAvailabilitySlotsBulk,
     CreateHold,
     ListAvailability,
     ToggleAvailabilitySlot,
@@ -22,6 +23,7 @@ __all__ = [
     "CancelHold",
     "ConfirmHold",
     "CreateAvailabilitySlot",
+    "CreateAvailabilitySlotsBulk",
     "CreateHold",
     "ListAvailability",
     "ToggleAvailabilitySlot",

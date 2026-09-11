@@ -27,6 +27,7 @@ class HoldOut(BaseModel):
 class AvailabilityOut(BaseModel):
     id: UUID
     service_id: UUID
+    service_name: Optional[str] = None
     date: date
     capacity: int
     booked: int
@@ -51,3 +52,16 @@ class AvailabilitySlotUpdateIn(BaseModel):
 
 class AvailabilitySlotToggleIn(BaseModel):
     is_active: bool
+
+
+class AvailabilitySlotBulkCreateIn(BaseModel):
+    service_id: UUID
+    date_from: date
+    date_to: Optional[date] = None
+    capacity: int = Field(gt=0)
+    is_active: bool = True
+
+
+class AvailabilitySlotBulkOut(BaseModel):
+    created: list[AvailabilityOut]
+    skipped: list[date]
