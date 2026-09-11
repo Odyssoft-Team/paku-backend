@@ -74,6 +74,14 @@ def get_store_repo(session: AsyncSession = Depends(get_async_session)) -> Postgr
     return PostgresStoreRepository(session=session, engine=engine)
 
 
+def get_users_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresUserRepository:
+    return PostgresUserRepository(session=session, engine=engine)
+
+
+def get_districts_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresDistrictRepository:
+    return PostgresDistrictRepository(session)
+
+
 def _order_out(order) -> OrderOut:
     return OrderOut(**order.__dict__)
 
@@ -343,16 +351,26 @@ async def pay_order(
     payload: PayOrderIn,
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresOrderRepository = Depends(get_orders_repo),
+    users_repo: PostgresUserRepository = Depends(get_users_repo),
+    districts_repo: PostgresDistrictRepository = Depends(get_districts_repo),
 ) -> OrderOut:
     """
     Camino principal de pago: paku-backend orquesta el cobro contra culqi-python
     servidor-a-servidor (el frontend solo manda el token, ya tokenizado con Culqi.js).
 
+    antifraud_details se arma acá del lado del servidor (perfil del usuario + dirección
+    de entrega de la orden) — el frontend no lo manda.
+
     Puede devolver la orden en payment_status=paid, failed o verifying (cuando el
     resultado no pudo confirmarse a tiempo — el cronjob de reconciliación sigue
     intentando en segundo plano, ver app/core/scheduler.py).
     """
-    order = await PayOrder(orders_repo=repo, culqi_client=CulqiPythonClient()).execute(
+    order = await PayOrder(
+        orders_repo=repo,
+        culqi_client=CulqiPythonClient(),
+        users_repo=users_repo,
+        districts_repo=districts_repo,
+    ).execute(
         order_id=id,
         user_id=current.id,
         email=current.email,

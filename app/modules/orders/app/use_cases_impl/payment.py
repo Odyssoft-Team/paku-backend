@@ -8,6 +8,7 @@ ante caídas (estado "verifying" + cronjob de reconciliación en app/core/schedu
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -19,6 +20,51 @@ from app.modules.orders.infra.culqi_client import (
     CulqiResultAmbiguous,
 )
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
+from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
+from app.modules.geo.infra.repository import PostgresDistrictRepository
+
+
+async def _build_antifraud_details(
+    *,
+    users_repo: PostgresUserRepository,
+    districts_repo: PostgresDistrictRepository,
+    user_id: UUID,
+    delivery_address_snapshot: Optional[dict],
+) -> Optional[dict[str, str]]:
+    """
+    Arma antifraud_details para Culqi (reduce el fraud_score) a partir de datos que
+    paku-backend ya tiene — el perfil del usuario y la dirección de entrega de la orden.
+    El frontend ya no necesita mandar nada de esto (antes lo armaba él mismo para
+    POST /api/culqi/charges).
+
+    Best-effort: si falta algún dato requerido (perfil incompleto, sin dirección, etc.)
+    devuelve None y el cobro sigue igual, solo sin esa señal — nunca bloquea el pago.
+    """
+    try:
+        user = await users_repo.get_by_id(user_id)
+        if user is None or not user.first_name or not user.last_name or not user.phone:
+            return None
+        if not delivery_address_snapshot:
+            return None
+        address_line = delivery_address_snapshot.get("address_line")
+        district_id = delivery_address_snapshot.get("district_id")
+        if not address_line or not district_id:
+            return None
+        district = await districts_repo.get_district(district_id)
+        address_city = district.get("province_name") if district else None
+        if not address_city:
+            return None
+        return {
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "address": address_line,
+            "address_city": address_city,
+            "phone_number": user.phone,
+        }
+    except Exception:
+        import logging
+        logging.exception("Failed to build antifraud_details for user %s", user_id)
+        return None
 
 
 def _payment_method_from_source_type(source_type: str) -> PaymentMethod:
@@ -56,6 +102,8 @@ def _source_type_from_source_id(source_id: str) -> str:
 class PayOrder:
     orders_repo: PostgresOrderRepository
     culqi_client: CulqiPythonClient
+    users_repo: PostgresUserRepository
+    districts_repo: PostgresDistrictRepository
 
     async def execute(self, *, order_id: UUID, user_id: UUID, email: str, source_id: str) -> Order:
         try:
@@ -74,6 +122,13 @@ class PayOrder:
         source_type = _source_type_from_source_id(source_id)
         payment_method = _payment_method_from_source_type(source_type)
 
+        antifraud_details = await _build_antifraud_details(
+            users_repo=self.users_repo,
+            districts_repo=self.districts_repo,
+            user_id=user_id,
+            delivery_address_snapshot=order.delivery_address_snapshot,
+        )
+
         try:
             response = await self.culqi_client.create_charge(
                 order_id=str(order.id),
@@ -82,6 +137,7 @@ class PayOrder:
                 email=email,
                 source_id=source_id,
                 metadata={"user_id": str(user_id)},
+                antifraud_details=antifraud_details,
             )
         except CulqiChargeRejected:
             return await self.orders_repo.fail_payment(id=order_id, user_id=user_id)

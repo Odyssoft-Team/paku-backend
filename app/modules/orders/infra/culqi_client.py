@@ -45,18 +45,24 @@ class CulqiPythonClient:
         email: str,
         source_id: str,
         metadata: Optional[dict[str, str]] = None,
+        antifraud_details: Optional[dict[str, str]] = None,
         timeout: float = 15.0,
     ) -> dict[str, Any]:
         """
         Ejecuta el cobro. Devuelve el response de Culqi (incluye `id` = culqi_charge_id)
         si fue exitoso.
 
+        `antifraud_details` (first_name, last_name, address, address_city, phone_number,
+        country_code) reduce el fraud_score de Culqi — PayOrder los arma del lado del
+        servidor a partir del perfil del usuario y la dirección de entrega de la orden,
+        el frontend ya no necesita mandarlos.
+
         Lanza CulqiChargeRejected si Culqi respondió con un rechazo definitivo.
         Lanza CulqiResultAmbiguous si no se pudo confirmar el resultado a tiempo — el
         llamador (PayOrder) debe reconciliar con find_payment antes de decidir el estado
         final de la orden.
         """
-        payload = {
+        payload: dict[str, Any] = {
             "amount": amount,
             "currency_code": currency_code,
             "email": email,
@@ -64,6 +70,8 @@ class CulqiPythonClient:
             "order_id": order_id,
             "metadata": metadata or {},
         }
+        if antifraud_details:
+            payload["antifraud_details"] = antifraud_details
         idempotency_key = f"order-{order_id}-payment"
 
         try:
