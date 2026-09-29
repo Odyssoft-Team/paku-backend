@@ -42,7 +42,7 @@ from app.modules.orders.app.use_cases import (
     UpdateOrderStatus,
 )
 from app.modules.orders.domain.order import OrderStatus
-from app.modules.orders.infra.culqi_client import CulqiPythonClient
+from app.core.culqi_client import CulqiPythonClient
 from app.modules.orders.infra.postgres_order_assignment_repository import PostgresOrderAssignmentRepository
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository

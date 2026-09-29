@@ -4,9 +4,14 @@ from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.wallet.domain.card import Card
+
+
+class CardAlreadyLinkedError(Exception):
+    """El ID de tarjeta del proveedor ya pertenece a otro usuario Paku."""
 
 
 class PostgresCardRepository:
@@ -56,7 +61,23 @@ class PostgresCardRepository:
             created_at=card.created_at,
         )
         self._session.add(model)
-        await self._session.commit()
+        try:
+            await self._session.commit()
+        except IntegrityError:
+            await self._session.rollback()
+            if card.culqi_card_id:
+                result = await self._session.execute(
+                    select(WalletCardModel).where(
+                        WalletCardModel.provider == card.provider,
+                        WalletCardModel.culqi_card_id == card.culqi_card_id,
+                    )
+                )
+                existing = result.scalar_one_or_none()
+                if existing is not None:
+                    if existing.user_id == card.user_id:
+                        return self._row_to_card(existing)
+                    raise CardAlreadyLinkedError()
+            raise
         return card
 
     async def remove_card(self, card_id: UUID, user_id: UUID) -> bool:

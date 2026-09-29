@@ -23,7 +23,7 @@ El slug es corto y en kebab-case: `0007-culqi-checkout`.
 
 | # | Feature | Repo(s) | Estado |
 |---|---------|---------|--------|
-| — | (ninguna todavía) | | |
+| 0001 | `wallet-culqi-customer` | paku-backend | in-progress |
 
 ## Cross-repo
 

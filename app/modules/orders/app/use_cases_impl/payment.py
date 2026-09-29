@@ -13,12 +13,12 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
-from app.modules.orders.domain.order import Order, PaymentMethod
-from app.modules.orders.infra.culqi_client import (
+from app.core.culqi_client import (
     CulqiChargeRejected,
     CulqiPythonClient,
     CulqiResultAmbiguous,
 )
+from app.modules.orders.domain.order import Order, PaymentMethod
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
 from app.modules.geo.infra.repository import PostgresDistrictRepository
@@ -98,6 +98,38 @@ def _source_type_from_source_id(source_id: str) -> str:
     return "card"
 
 
+def _resolve_payment_records(
+    payments: Optional[list[dict]],
+) -> tuple[str, Optional[dict]]:
+    """Resuelve registros sin tratar un `failed` legado como rechazo probado.
+
+    culqi-python actualmente guarda `status=failed` también para errores ambiguos,
+    y su PaymentOut no devuelve `outcome`. Solo se considera definitivo si cada
+    intento fallido trae explícitamente `outcome=rejected`.
+    """
+    if not payments:
+        return "verifying", None
+
+    successful = next(
+        (
+            payment
+            for payment in payments
+            if payment.get("status") == "success" and payment.get("culqi_charge_id")
+        ),
+        None,
+    )
+    if successful is not None:
+        return "paid", successful
+
+    if all(
+        payment.get("status") == "failed" and payment.get("outcome") == "rejected"
+        for payment in payments
+    ):
+        return "failed", payments[0]
+
+    return "verifying", None
+
+
 @dataclass
 class PayOrder:
     orders_repo: PostgresOrderRepository
@@ -163,20 +195,19 @@ class PayOrder:
         cronjob de reconciliación siga intentando en segundo plano.
         """
         payments = await self.culqi_client.find_payments(order_id=str(order_id))
-        if payments:
-            latest = payments[0]  # ya viene ordenado por created_at desc
-            if latest["status"] == "success":
-                payment_method = _payment_method_from_source_type(latest["source_type"])
-                paid_order = await self.orders_repo.confirm_payment(
-                    id=order_id,
-                    user_id=user_id,
-                    culqi_charge_id=latest["culqi_charge_id"] or "",
-                    payment_method=payment_method,
-                )
-                await _notify_payment_confirmed(self.orders_repo, paid_order)
-                return paid_order
-            if latest["status"] == "failed":
-                return await self.orders_repo.fail_payment(id=order_id, user_id=user_id)
+        resolution, payment = _resolve_payment_records(payments)
+        if resolution == "paid" and payment is not None:
+            payment_method = _payment_method_from_source_type(payment.get("source_type", "card"))
+            paid_order = await self.orders_repo.confirm_payment(
+                id=order_id,
+                user_id=user_id,
+                culqi_charge_id=payment["culqi_charge_id"],
+                payment_method=payment_method,
+            )
+            await _notify_payment_confirmed(self.orders_repo, paid_order)
+            return paid_order
+        if resolution == "failed":
+            return await self.orders_repo.fail_payment(id=order_id, user_id=user_id)
 
         return await self.orders_repo.set_verifying(id=order_id, user_id=user_id)
 

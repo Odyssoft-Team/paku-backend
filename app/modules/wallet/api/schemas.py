@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # [TECH]
@@ -11,15 +11,9 @@ from pydantic import BaseModel
 # [NATURAL/BUSINESS]
 # Datos para agregar una tarjeta al wallet del usuario.
 class CardIn(BaseModel):
-    provider: str
-    payment_method_id: str
-    brand: str
-    last4: str
-    exp_month: int
-    exp_year: int
-    # IDs de Culqi para One-click: se envían solo cuando la tarjeta ya fue registrada en Culqi
-    culqi_customer_id: Optional[str] = None
-    culqi_card_id: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    token_id: str = Field(pattern=r"^tkn_(test|live)_[A-Za-z0-9]{16}$")
 
 
 # [TECH]
@@ -37,7 +31,4 @@ class CardOut(BaseModel):
     exp_month: int
     exp_year: int
     is_default: bool
-    created_at: datetime
-    culqi_customer_id: Optional[str] = None
-    culqi_card_id: Optional[str] = None
     created_at: datetime

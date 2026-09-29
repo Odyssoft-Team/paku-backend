@@ -56,10 +56,11 @@ async def _reconcile_verifying_payments_job() -> None:
     try:
         async with AsyncSessionLocal() as session:
             from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
-            from app.modules.orders.infra.culqi_client import CulqiPythonClient
+            from app.core.culqi_client import CulqiPythonClient
             from app.modules.orders.app.use_cases_impl.payment import (
                 _notify_payment_confirmed,
                 _payment_method_from_source_type,
+                _resolve_payment_records,
             )
             from app.modules.notifications.infra.postgres_notification_repository import PostgresNotificationRepository
             from app.modules.notifications.app.use_cases import CreateNotification
@@ -73,42 +74,40 @@ async def _reconcile_verifying_payments_job() -> None:
 
             for order in verifying_orders:
                 payments = await culqi_client.find_payments(order_id=str(order.id))
+                resolution, payment = _resolve_payment_records(payments)
 
-                if payments:
-                    latest = payments[0]  # ya viene ordenado por created_at desc
+                if resolution == "paid" and payment is not None:
+                    payment_method = _payment_method_from_source_type(payment.get("source_type", "card"))
+                    paid_order = await orders_repo.confirm_payment(
+                        id=order.id,
+                        user_id=order.user_id,
+                        culqi_charge_id=payment["culqi_charge_id"],
+                        payment_method=payment_method,
+                    )
+                    await _notify_payment_confirmed(orders_repo, paid_order)
+                    resolved += 1
+                    continue
 
-                    if latest["status"] == "success":
-                        payment_method = _payment_method_from_source_type(latest["source_type"])
-                        paid_order = await orders_repo.confirm_payment(
-                            id=order.id,
+                if resolution == "failed":
+                    await orders_repo.fail_payment(id=order.id, user_id=order.user_id)
+                    try:
+                        notifications_repo = PostgresNotificationRepository(session=session, engine=engine)
+                        await CreateNotification(repo=notifications_repo).execute(
                             user_id=order.user_id,
-                            culqi_charge_id=latest["culqi_charge_id"] or "",
-                            payment_method=payment_method,
+                            type="order_status",
+                            title="No se pudo procesar tu pago",
+                            body=(
+                                "Hubo un problema con tu método de pago y no se realizó "
+                                "ningún cobro. Por favor, intenta reservar de nuevo."
+                            ),
+                            data={"order_id": str(order.id), "payment_status": "failed"},
                         )
-                        await _notify_payment_confirmed(orders_repo, paid_order)
-                        resolved += 1
-                        continue
-
-                    if latest["status"] == "failed":
-                        await orders_repo.fail_payment(id=order.id, user_id=order.user_id)
-                        try:
-                            notifications_repo = PostgresNotificationRepository(session=session, engine=engine)
-                            await CreateNotification(repo=notifications_repo).execute(
-                                user_id=order.user_id,
-                                type="order_status",
-                                title="No se pudo procesar tu pago",
-                                body=(
-                                    "Hubo un problema con tu método de pago y no se realizó "
-                                    "ningún cobro. Por favor, intenta reservar de nuevo."
-                                ),
-                                data={"order_id": str(order.id), "payment_status": "failed"},
-                            )
-                        except Exception:
-                            logger.exception(
-                                "Failed to notify payment failure for order %s", order.id
-                            )
-                        resolved += 1
-                        continue
+                    except Exception:
+                        logger.exception(
+                            "Failed to notify payment failure for order %s", order.id
+                        )
+                    resolved += 1
+                    continue
 
                 # Sigue ambiguo: culqi-python no respondió, o todavía no hay ningún
                 # intento registrado. Se reintenta en la próxima corrida salvo que ya

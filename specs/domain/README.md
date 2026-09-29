@@ -16,7 +16,7 @@ Es el canon que consumen web, admin y vet-dev.
 | IAM / usuarios / allies | `iam.md` | `iam` | ⬜ pendiente |
 | Tracking | `tracking.md` | `tracking`, `streaming` | ⬜ pendiente (ver `docs/tracking-api.md`) |
 | Chat | `chat.md` | `chat` | ⬜ pendiente (ver `docs/chat-api.md`) |
-| Wallet | `wallet.md` | `wallet` | ⬜ pendiente |
+| Wallet | `wallet.md` | `wallet` | 🟡 parcial |
 | Pagos (Culqi) | `payments.md` | `commerce` | ⬜ pendiente |
 | Geo / direcciones | `geo.md` | `geo` | ⬜ pendiente |
 | Paku Spa | `paku-spa.md` | `paku_spa` | ⬜ pendiente |
