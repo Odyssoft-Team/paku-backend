@@ -10,14 +10,14 @@ from uuid import UUID, uuid4
 # Immutable entity representing a single chat message within an order conversation.
 #
 # [NATURAL/BUSINESS]
-# Mensaje de texto enviado entre el cliente y el ally durante una orden activa.
+# Mensaje de texto enviado entre el cliente y el groomer durante una orden activa.
 # El canal de chat está siempre asociado a una orden; no existe chat fuera de una orden.
 @dataclass(frozen=True)
 class Message:
     id: UUID
     order_id: UUID
     sender_id: UUID
-    sender_role: str          # "user" | "ally"
+    sender_role: str          # "user" | "groomer"
     body: str
     created_at: datetime
     is_read: bool

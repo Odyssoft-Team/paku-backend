@@ -12,15 +12,23 @@ from uuid import UUID, uuid4
 #
 # [NATURAL/BUSINESS]
 # Estados por los que pasa un servicio a domicilio, en orden cronológico:
-# creado → aceptado por ally → ally en camino → servicio iniciado → finalizado.
+# creado → aceptado por groomer → groomer en camino → servicio iniciado → finalizado.
 # cancelled es una rama alternativa que puede ocurrir desde cualquier estado activo.
 class OrderStatus(str, Enum):
     created    = "created"     # reserva confirmada, pendiente de asignación
-    accepted   = "accepted"    # ally aceptó (reservado para futuro)
-    on_the_way = "on_the_way"  # ally salió hacia el domicilio
-    in_service = "in_service"  # ally llegó, servicio en curso
+    accepted   = "accepted"    # groomer aceptó (reservado para futuro)
+    on_the_way = "on_the_way"  # groomer salió hacia el domicilio
+    in_service = "in_service"  # groomer llegó, servicio en curso
     done       = "done"        # servicio finalizado
     cancelled  = "cancelled"   # cancelado (rama alternativa)
+    skipped    = "skipped"     # parada saltada (mascota/tutor no encontrados); el admin la reprograma
+
+
+# Motivo por el que el groomer saltó la parada (pedido 4).
+class SkipReason(str, Enum):
+    pet_not_present = "pet_not_present"
+    tutor_not_present = "tutor_not_present"
+    other = "other"
 
 
 # [TECH]
@@ -34,7 +42,7 @@ class OrderStatus(str, Enum):
 #              reconciliación) no llegó a tiempo; el cronjob de reconciliación sigue
 #              reintentando hasta resolver a paid/failed o escalar tras 15-20 minutos
 # paid       → cobro confirmado; culqi_charge_id presente (o payment_method=cash confirmado
-#              por el ally)
+#              por el groomer)
 # failed     → el cobro fue rechazado por Culqi; la orden no debe procesarse
 class PaymentStatus(str, Enum):
     pending   = "pending"
@@ -45,7 +53,7 @@ class PaymentStatus(str, Enum):
 
 # [NATURAL/BUSINESS]
 # Cómo se pagó la orden. "card"/"yape" pasan por Culqi (culqi_charge_id presente);
-# "cash" se confirma directo por el ally al momento de la entrega, sin pasar por Culqi.
+# "cash" se confirma directo por el groomer al momento de la entrega, sin pasar por Culqi.
 class PaymentMethod(str, Enum):
     card = "card"
     yape = "yape"
@@ -66,19 +74,40 @@ _STATUS_ORDER: dict[OrderStatus, int] = {
     OrderStatus.done:       5,
 }
 
+# Proceso fijo del servicio en la van (igual para todos los servicios). Solo aplica con
+# status=in_service: /arrive inicia en "reception", /next-step avanza y /complete cierra en "return".
+SERVICE_STEPS: tuple[str, ...] = ("reception", "bath", "drying", "finishing", "return")
+SERVICE_STEP_LABELS: dict[str, str] = {
+    "reception": "Recepción y recojo",
+    "bath": "Baño",
+    "drying": "Secado",
+    "finishing": "Corte y acabado",
+    "return": "Devolución al domicilio",
+}
+# Pasos en los que el groomer puede marcar addons como realizados.
+ADDON_STEPS: frozenset[str] = frozenset({"bath", "drying", "finishing"})
+
+
+def next_service_step(step: str) -> Optional[str]:
+    """Paso siguiente, o None si `step` es el último."""
+    idx = SERVICE_STEPS.index(step)
+    return SERVICE_STEPS[idx + 1] if idx + 1 < len(SERVICE_STEPS) else None
+
+
 # Estados desde los que se puede cancelar
 _CANCELLABLE_STATUSES: frozenset[OrderStatus] = frozenset({
     OrderStatus.created,
     OrderStatus.accepted,
     OrderStatus.on_the_way,
+    OrderStatus.skipped,  # supuesto: el admin puede cancelar una parada saltada en vez de reprogramarla
 })
 
 
 # [TECH]
-# Immutable order entity with ally assignment, scheduling, and payment fields.
+# Immutable order entity with groomer assignment, scheduling, and payment fields.
 #
 # [NATURAL/BUSINESS]
-# Pedido de servicio a domicilio. Incluye quién lo hace (ally_id) y
+# Pedido de servicio a domicilio. Incluye quién lo hace (groomer_id) y
 # cuándo está programado (scheduled_at), que se pueblan al asignar.
 # El pago se registra via payment_status y culqi_charge_id cuando el
 # frontend confirma el cargo exitoso desde culqi-python.
@@ -93,19 +122,25 @@ class Order:
     delivery_address_snapshot: Optional[dict[str, Any]]
     created_at: datetime
     updated_at: datetime
-    ally_id: Optional[UUID] = None           # quién realiza el servicio
+    groomer_id: Optional[UUID] = None           # quién realiza el servicio
     scheduled_at: Optional[datetime] = None  # fecha/hora programada del servicio
     hold_id: Optional[UUID] = None           # reserva que originó esta orden
     payment_status: PaymentStatus = PaymentStatus.pending  # estado del cobro en Culqi
     culqi_charge_id: Optional[str] = None   # chr_(test|live)_XXXXXXXXXXXXXXXX de Culqi
     payment_method: Optional[PaymentMethod] = None  # card | yape | cash; None hasta que se paga
     parent_order_id: Optional[UUID] = None  # presente solo en "órdenes de ajuste" por recálculo
+    service_step: Optional[str] = None       # paso actual del proceso (SERVICE_STEPS) con in_service
+    service_steps_log: Optional[list] = None  # [{"step", "started_at"}]
+    addons_done: Optional[list] = None        # [{"addon_id", "done_at"}]
+    skip_reason: Optional[SkipReason] = None   # solo si la parada se saltó (se conserva como historial)
+    skip_note: Optional[str] = None
+    skipped_at: Optional[datetime] = None
 
     # [TECH]
     # Factory creating Order with created status and timestamps.
     #
     # [NATURAL/BUSINESS]
-    # Crea una orden nueva en estado inicial. ally_id y scheduled_at
+    # Crea una orden nueva en estado inicial. groomer_id y scheduled_at
     # se asignan luego por el administrador.
     @staticmethod
     def new(
@@ -155,3 +190,9 @@ class Order:
     # Solo se puede cancelar antes de que el servicio comience (in_service o done).
     def can_cancel(self) -> bool:
         return self.status in _CANCELLABLE_STATUSES
+
+    def can_skip(self) -> bool:
+        """El groomer salta la parada yendo en camino, o recién llegado (paso reception)."""
+        return self.status == OrderStatus.on_the_way or (
+            self.status == OrderStatus.in_service and self.service_step == SERVICE_STEPS[0]
+        )

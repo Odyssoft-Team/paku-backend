@@ -4,6 +4,11 @@
 > **Fecha:** 27 de marzo de 2026  
 > **Base URL:** `https://api.paku.app` (o `http://localhost:8000` en local)
 
+> ⚠️ **Actualización 2026-10-03:** los precios y nombres del carrito los calcula el backend
+> (`unit_price` enviado se ignora), los addons usan un formato único sin `meta`, y el checkout puede
+> responder 409 `PRICE_CHANGED`. Ver C-07 en [`cambios-api-para-front.md`](cambios-api-para-front.md);
+> donde este documento contradiga a ese, manda el changelog.
+
 ---
 
 ## Resumen visual del flujo
@@ -27,9 +32,9 @@
         ↓
 [9] Crear orden → POST /orders   ← se necesita address_id
         ↓
-[10] Orden en estado "created" — espera asignación de ally
+[10] Orden en estado "created" — espera asignación de groomer
         ↓
-[11] Admin asigna ally y fecha → la orden avanza a través de estados
+[11] Admin asigna groomer y fecha → la orden avanza a través de estados
 ```
 
 ---
@@ -471,7 +476,7 @@ POST /orders
     "lng": -77.0553,
     "reference": "Edificio azul, piso 3"
   },
-  "ally_id": null,
+  "groomer_id": null,
   "scheduled_at": null,
   "hold_id": null,
   "created_at": "2026-03-27T12:30:00Z",
@@ -487,7 +492,7 @@ POST /orders
 
 ## Paso 10 — Estados de la orden post-creación
 
-Una vez creada la orden, el admin la gestiona asignando un **ally** (groomer) y programando la fecha/hora de ejecución.
+Una vez creada la orden, el admin la gestiona asignando un **groomer** (groomer) y programando la fecha/hora de ejecución.
 
 ### Flujo de estados de la orden
 
@@ -500,9 +505,9 @@ created → on_the_way → in_service → done
 | Estado | Actor | Descripción |
 |---|---|---|
 | `created` | Sistema | Orden creada, pendiente de asignación |
-| `on_the_way` | Ally | Ally salió hacia el domicilio |
-| `in_service` | Ally | Ally llegó, servicio en curso |
-| `done` | Ally | Servicio finalizado |
+| `on_the_way` | Groomer | Groomer salió hacia el domicilio |
+| `in_service` | Groomer | Groomer llegó, servicio en curso |
+| `done` | Groomer | Servicio finalizado |
 | `cancelled` | Admin | Cancelado antes de iniciar el servicio |
 
 ### El usuario puede consultar sus órdenes

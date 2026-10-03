@@ -30,7 +30,7 @@ class SendMessage:
         sender_role: str,
         body: str,
         # La orden ya fue validada en el router (acceso + estado in_service).
-        # Se recibe ally_id y user_id para disparar push al destinatario.
+        # Se recibe groomer_id y user_id para disparar push al destinatario.
         recipient_id: Optional[UUID] = None,
     ) -> Message:
         body = body.strip()
@@ -63,7 +63,7 @@ class SendMessage:
                 from app.modules.push.infra.postgres_device_repository import PostgresDeviceTokenRepository
                 from app.modules.push.infra.provider import ExpoPushProvider, MockPushProvider
 
-                sender_label = "Tu groomer" if sender_role == "ally" else "Tu cliente"
+                sender_label = "Tu groomer" if sender_role == "groomer" else "Tu cliente"
                 async with get_async_session() as session:
                     devices_repo = PostgresDeviceTokenRepository(session=session, engine=engine)
                     tokens = await devices_repo.get_active_tokens(recipient_id)

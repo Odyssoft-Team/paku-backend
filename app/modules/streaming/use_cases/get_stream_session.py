@@ -28,10 +28,10 @@ class GetStreamSession:
         *,
         order_id: UUID,
         requester_id: UUID,
-        requester_role: str,   # "user" | "ally" | "admin"
+        requester_role: str,   # "user" | "groomer" | "admin"
     ) -> tuple[StreamSession, str | None]:
 
-        # Buscar la orden sin restricción de user_id para que admin y ally
+        # Buscar la orden sin restricción de user_id para que admin y groomer
         # también puedan consultarla.
         order = await self.orders_repo.get_order_admin(id=order_id)
 
@@ -42,8 +42,8 @@ class GetStreamSession:
                 detail="order_not_found",
             )
 
-        logger.info("streaming.get_stream_session order_found order_id=%s status=%s ally_id=%s requester_id=%s requester_role=%s",
-                    order_id, order.status.value, order.ally_id, requester_id, requester_role)
+        logger.info("streaming.get_stream_session order_found order_id=%s status=%s groomer_id=%s requester_id=%s requester_role=%s",
+                    order_id, order.status.value, order.groomer_id, requester_id, requester_role)
 
         # Delegar reglas de negocio puras a resolve_stream_session
         try:

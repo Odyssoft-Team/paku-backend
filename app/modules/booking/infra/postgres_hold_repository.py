@@ -24,7 +24,10 @@ class PostgresHoldRepository:
         if hold.status in (HoldStatus.cancelled, HoldStatus.confirmed, HoldStatus.expired):
             return hold
         now = datetime.now(timezone.utc)
-        if hold.expires_at <= now:
+        expires_at = hold.expires_at
+        if expires_at.tzinfo is None:  # se guarda en UTC; algunos drivers la devuelven sin zona
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= now:
             await self.update_status(hold.id, HoldStatus.expired)
             refreshed = await self.get_hold(hold.id)
             return refreshed or hold
@@ -94,6 +97,24 @@ class PostgresHoldRepository:
         )
         return await self._maybe_expire(hold)
 
+    async def _release_slot(self, *, service_id: UUID, date) -> None:
+        """Devuelve el cupo que ocupaba una reserva (booked - 1). No hace commit: va en la misma
+        transacción que el cambio de estado de la reserva."""
+        from app.modules.booking.infra.models import AvailabilitySlotModel, utcnow
+
+        if date is None:
+            return  # reservas sin fecha no ocuparon cupo
+        stmt = (
+            update(AvailabilitySlotModel)
+            .where(
+                AvailabilitySlotModel.service_id == service_id,
+                AvailabilitySlotModel.date == date,
+                AvailabilitySlotModel.booked > 0,
+            )
+            .values(booked=AvailabilitySlotModel.booked - 1, updated_at=utcnow())
+        )
+        await self._session.execute(stmt)
+
     async def update_status(
         self,
         hold_id: UUID,
@@ -101,6 +122,12 @@ class PostgresHoldRepository:
         *,
         quote_snapshot: Optional[dict] = None,
     ) -> Optional[Hold]:
+        """
+        Solo una reserva `held` cambia de estado (a confirmed, cancelled o expired); los demás
+        estados son finales. Cancelar o expirar libera el cupo del día en la misma transacción.
+        El UPDATE es condicional (status = held) para que dos requests simultáneos no liberen
+        el cupo dos veces.
+        """
         from app.modules.booking.infra.models import HoldModel, utcnow
 
         await self._ensure_ready()
@@ -110,19 +137,23 @@ class PostgresHoldRepository:
             return None
 
         current = HoldStatus(model.status)
-        if current == HoldStatus.expired:
-            return await self.get_hold(hold_id)
-        if current == HoldStatus.held and status not in (HoldStatus.confirmed, HoldStatus.cancelled, HoldStatus.expired):
-            return await self.get_hold(hold_id)
-        if current in (HoldStatus.confirmed, HoldStatus.cancelled) and status != current:
+        if current != HoldStatus.held or status == HoldStatus.held:
             return await self.get_hold(hold_id)
 
-        model.status = status.value
+        values = {"status": status.value, "updated_at": utcnow()}
         if quote_snapshot is not None:
-            model.quote_snapshot = quote_snapshot
-        model.updated_at = utcnow()
+            values["quote_snapshot"] = quote_snapshot
+        result = await self._session.execute(
+            update(HoldModel)
+            .where(HoldModel.id == hold_id, HoldModel.status == HoldStatus.held.value)
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount == 1 and status in (HoldStatus.cancelled, HoldStatus.expired):
+            await self._release_slot(service_id=model.service_id, date=model.date)
 
         await self._session.commit()
+        await self._session.refresh(model)
         return await self.get_hold(hold_id)
 
     async def list_by_user(self, user_id: UUID) -> List[Hold]:
@@ -151,15 +182,20 @@ class PostgresHoldRepository:
         return out
 
     async def expire_holds(self, *, now: datetime) -> int:
+        """Expira las reservas `held` vencidas y libera el cupo de cada una (cronjob de limpieza)."""
         from app.modules.booking.infra.models import HoldModel
 
         await self._ensure_ready()
 
         stmt = (
-            update(HoldModel)
+            select(HoldModel)
             .where(HoldModel.status == HoldStatus.held.value, HoldModel.expires_at < now)
-            .values(status=HoldStatus.expired.value, updated_at=now)
+            .with_for_update(skip_locked=True)
         )
-        res = await self._session.execute(stmt)
+        rows = (await self._session.execute(stmt)).scalars().all()
+        for model in rows:
+            model.status = HoldStatus.expired.value
+            model.updated_at = now
+            await self._release_slot(service_id=model.service_id, date=model.date)
         await self._session.commit()
-        return int(res.rowcount or 0)
+        return len(rows)

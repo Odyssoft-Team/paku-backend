@@ -28,7 +28,7 @@ class ChatMessageModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     order_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, index=True)
     sender_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
-    sender_role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" | "ally"
+    sender_role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" | "groomer"
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(

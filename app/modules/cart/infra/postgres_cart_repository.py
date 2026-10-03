@@ -319,6 +319,24 @@ class PostgresCartRepository(CartRepository):
             for row in rows
         ]
 
+    async def update_item_prices(
+        self,
+        *,
+        cart_id: UUID,
+        prices: dict[UUID, tuple[float, Optional[str], Optional[dict]]],
+    ) -> None:
+        """Guarda precio, nombre y meta recalculados por el servidor (item_id → (precio, nombre, meta))."""
+        from app.modules.cart.infra.models import CartItemModel
+
+        for item_id, (unit_price, name, meta) in prices.items():
+            stmt = (
+                update(CartItemModel)
+                .where(CartItemModel.id == item_id, CartItemModel.cart_id == cart_id)
+                .values(unit_price=unit_price, name=name, meta=meta)
+            )
+            await self._session.execute(stmt)
+        await self._session.commit()
+
     async def checkout(self, cart_id: UUID, user_id: UUID) -> CartSession:
         cart = await self.get_cart(cart_id, user_id)
         if cart.status != CartStatus.active:

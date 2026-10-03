@@ -21,7 +21,7 @@ ALLOWED_CONTENT_TYPES: Final[dict[str, str]] = {
 }
 
 OBJECT_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^(users|pets)/[0-9a-fA-F-]{36}/profile_\d{8}T\d{6}\d{6}Z\.(webp|jpg|png)$"
+    r"^((users|pets)/[0-9a-fA-F-]{36}/profile|orders/[0-9a-fA-F-]{36}/photo)_\d{8}T\d{6}\d{6}Z\.(webp|jpg|png)$"
 )
 
 
@@ -43,16 +43,20 @@ def get_ttl_seconds() -> int:
 def resolve_prefix(entity_type: MediaEntityType) -> str:
     if entity_type == MediaEntityType.user:
         return "users"
+    if entity_type == MediaEntityType.order:
+        return "orders"
     return "pets"
 
 
 def build_object_name(entity_type: MediaEntityType, entity_id: UUID, content_type: str) -> str:
+    """users/{id}/profile_… y pets/{id}/profile_… (foto de perfil); orders/{id}/photo_… (fotos del servicio)."""
     if content_type not in ALLOWED_CONTENT_TYPES:
         raise ValueError("Unsupported content_type")
     extension = ALLOWED_CONTENT_TYPES[content_type]
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%fZ")
     prefix = resolve_prefix(entity_type)
-    return f"{prefix}/{entity_id}/profile_{timestamp}.{extension}"
+    stem = "photo" if entity_type == MediaEntityType.order else "profile"
+    return f"{prefix}/{entity_id}/{stem}_{timestamp}.{extension}"
 
 
 def validate_object_name(object_name: str) -> None:

@@ -24,7 +24,7 @@ class IceServerOut(BaseModel):
 
 
 # [TECH]
-# Response schema returned to both mobile clients (ally and user)
+# Response schema returned to both mobile clients (groomer and user)
 # after a successful GET /streaming/orders/{order_id}/session call.
 # Contains everything the app needs to open the WebSocket and start WebRTC —
 # no additional calls required.
@@ -33,7 +33,7 @@ class IceServerOut(BaseModel):
 # Con una sola llamada autenticada, la app obtiene:
 #   - room_id     → cadena que ambas partes usan como ?room= en el WebSocket
 #   - ws_url      → URL completa lista para conectar (incluye room_id)
-#   - role        → "host" (ally) o "viewer" (cliente/admin)
+#   - role        → "host" (groomer) o "viewer" (cliente/admin)
 #   - ice_servers → configuración ICE/TURN lista para RTCPeerConnection
 #
 # [STREAMING DEV]
@@ -48,7 +48,7 @@ class StreamSessionOut(BaseModel):
     room_id: str            # == str(order_id) — the ?room= param for the WebSocket
     order_id: UUID
     user_id: UUID           # cliente dueño de la orden
-    ally_id: UUID           # ally asignado (broadcaster / host)
+    groomer_id: UUID           # groomer asignado (broadcaster / host)
     order_status: OrderStatus
     role: StreamRole        # "host" | "viewer"
 

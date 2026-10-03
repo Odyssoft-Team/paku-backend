@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.modules.orders.domain.order import Order, OrderStatus, PaymentMethod, PaymentStatus
+from app.modules.orders.domain.order import Order, OrderStatus, PaymentMethod, PaymentStatus, SkipReason
 
 
 class PostgresOrderRepository:
@@ -36,18 +36,75 @@ class PostgresOrderRepository:
             delivery_address_snapshot=r.delivery_address_snapshot,
             created_at=r.created_at,
             updated_at=r.updated_at,
-            ally_id=r.ally_id,
+            groomer_id=r.groomer_id,
             scheduled_at=r.scheduled_at,
             hold_id=r.hold_id,
             payment_status=PaymentStatus(r.payment_status),
             culqi_charge_id=r.culqi_charge_id,
             payment_method=PaymentMethod(r.payment_method) if r.payment_method else None,
             parent_order_id=r.parent_order_id,
+            service_step=r.service_step,
+            service_steps_log=list(r.service_steps_log or []),
+            addons_done=list(r.addons_done or []),
+            skip_reason=SkipReason(r.skip_reason) if r.skip_reason else None,
+            skip_note=r.skip_note,
+            skipped_at=r.skipped_at,
         )
+
+    async def mark_skipped(self, *, id: UUID, reason: SkipReason, note: Optional[str], at: datetime) -> Order:
+        """La parada se saltó: status=skipped y motivo (el paso del servicio se conserva)."""
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None:
+            raise ValueError("order_not_found")
+        model.status = OrderStatus.skipped.value
+        model.skip_reason = reason.value
+        model.skip_note = note
+        model.skipped_at = at
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
 
     # ------------------------------------------------------------------
     # Write
     # ------------------------------------------------------------------
+
+    async def set_service_step(self, *, id: UUID, step: Optional[str], at: datetime) -> Order:
+        """Fija el paso actual del servicio y lo agrega a la bitácora (step=None limpia todo)."""
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None:
+            raise ValueError("order_not_found")
+        if step is None:
+            model.service_step = None
+            model.service_steps_log = None
+            model.addons_done = None
+        else:
+            model.service_step = step
+            # Lista nueva (no append) para que SQLAlchemy detecte el cambio en la columna JSON.
+            model.service_steps_log = list(model.service_steps_log or []) + [
+                {"step": step, "started_at": at.isoformat()}
+            ]
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
+
+    async def mark_addon_done(self, *, id: UUID, addon_id: str, at: datetime) -> Order:
+        """Agrega el addon a addons_done (el use case evita duplicados)."""
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None:
+            raise ValueError("order_not_found")
+        model.addons_done = list(model.addons_done or []) + [{"addon_id": addon_id, "done_at": at.isoformat()}]
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
 
     async def create_order(self, order: Order) -> Order:
         from app.modules.orders.infra.models import OrderModel, utcnow
@@ -60,7 +117,7 @@ class PostgresOrderRepository:
             total_snapshot=Decimal(str(order.total_snapshot)),
             currency=order.currency,
             delivery_address_snapshot=order.delivery_address_snapshot,
-            ally_id=order.ally_id,
+            groomer_id=order.groomer_id,
             scheduled_at=order.scheduled_at,
             hold_id=order.hold_id,
             payment_status=order.payment_status.value,
@@ -84,7 +141,7 @@ class PostgresOrderRepository:
             total_snapshot=Decimal(str(order.total_snapshot)),
             currency=order.currency,
             delivery_address_snapshot=order.delivery_address_snapshot,
-            ally_id=order.ally_id,
+            groomer_id=order.groomer_id,
             scheduled_at=order.scheduled_at,
             hold_id=order.hold_id,
             payment_status=order.payment_status.value,
@@ -204,9 +261,9 @@ class PostgresOrderRepository:
         await self._session.refresh(model)
         return self._row_to_order(model)
 
-    async def confirm_cash_payment(self, *, id: UUID, ally_id: UUID) -> Order:
+    async def confirm_cash_payment(self, *, id: UUID, groomer_id: UUID) -> Order:
         """
-        Marca la orden como pagada en efectivo, confirmado por el ally asignado al
+        Marca la orden como pagada en efectivo, confirmado por el groomer asignado al
         momento de la entrega. No pasa por Culqi — no hay culqi_charge_id.
         """
         from app.modules.orders.infra.models import OrderModel, utcnow
@@ -214,8 +271,8 @@ class PostgresOrderRepository:
         model = await self._session.get(OrderModel, id)
         if model is None:
             raise ValueError("order_not_found")
-        if model.ally_id != ally_id:
-            raise ValueError("not_assigned_ally")
+        if model.groomer_id != groomer_id:
+            raise ValueError("not_assigned_groomer")
         if model.payment_status not in (PaymentStatus.pending.value, PaymentStatus.verifying.value):
             raise ValueError("payment_already_processed")
         model.payment_status = PaymentStatus.paid.value
@@ -253,14 +310,14 @@ class PostgresOrderRepository:
         await self._session.refresh(model)
         return self._row_to_order(model)
 
-    async def set_ally(self, *, id: UUID, ally_id: UUID, scheduled_at: datetime) -> Order:
-        """Asigna un ally y fecha/hora programada a la orden (lo hace el admin)."""
+    async def set_groomer(self, *, id: UUID, groomer_id: UUID, scheduled_at: datetime) -> Order:
+        """Asigna un groomer y fecha/hora programada a la orden (lo hace el admin)."""
         from app.modules.orders.infra.models import OrderModel, utcnow
         await self._ensure_ready()
         model = await self._session.get(OrderModel, id)
         if model is None:
             raise ValueError("order_not_found")
-        model.ally_id = ally_id
+        model.groomer_id = groomer_id
         model.scheduled_at = scheduled_at
         model.updated_at = utcnow()
         await self._session.commit()
@@ -306,7 +363,7 @@ class PostgresOrderRepository:
         self,
         *,
         status: Optional[OrderStatus] = None,
-        ally_id: Optional[UUID] = None,
+        groomer_id: Optional[UUID] = None,
     ) -> list[Order]:
         """Lista órdenes con filtros opcionales para el panel de administración."""
         from app.modules.orders.infra.models import OrderModel
@@ -314,31 +371,38 @@ class PostgresOrderRepository:
         stmt = select(OrderModel).order_by(desc(OrderModel.created_at))
         if status is not None:
             stmt = stmt.where(OrderModel.status == status.value)
-        if ally_id is not None:
-            stmt = stmt.where(OrderModel.ally_id == ally_id)
+        if groomer_id is not None:
+            stmt = stmt.where(OrderModel.groomer_id == groomer_id)
         rows = (await self._session.execute(stmt)).scalars().all()
         return [self._row_to_order(r) for r in rows]
 
     # ------------------------------------------------------------------
-    # Read — ally
+    # Read — groomer
     # ------------------------------------------------------------------
 
-    async def list_orders_by_ally(
+    async def list_orders_by_groomer(
         self,
         *,
-        ally_id: UUID,
+        groomer_id: UUID,
         status: Optional[OrderStatus] = None,
+        scheduled_from: Optional[datetime] = None,
+        scheduled_to: Optional[datetime] = None,
     ) -> list[Order]:
-        """Lista las órdenes asignadas a un ally específico."""
+        """Lista las órdenes asignadas a un groomer, en orden de ruta (scheduled_at ASC).
+        `scheduled_from` (inclusive) / `scheduled_to` (exclusivo) filtran por fecha programada."""
         from app.modules.orders.infra.models import OrderModel
         await self._ensure_ready()
         stmt = (
             select(OrderModel)
-            .where(OrderModel.ally_id == ally_id)
+            .where(OrderModel.groomer_id == groomer_id)
             .order_by(OrderModel.scheduled_at.asc().nulls_last())
         )
         if status is not None:
             stmt = stmt.where(OrderModel.status == status.value)
+        if scheduled_from is not None:
+            stmt = stmt.where(OrderModel.scheduled_at >= scheduled_from)
+        if scheduled_to is not None:
+            stmt = stmt.where(OrderModel.scheduled_at < scheduled_to)
         rows = (await self._session.execute(stmt)).scalars().all()
         return [self._row_to_order(r) for r in rows]
 
@@ -368,9 +432,9 @@ class PostgresOrderRepository:
         model = result.scalars().first()
         return self._row_to_order(model) if model is not None else None
 
-    async def is_ally_assigned_to_pet(self, *, ally_id: UUID, pet_id: UUID) -> bool:
+    async def is_groomer_assigned_to_pet(self, *, groomer_id: UUID, pet_id: UUID) -> bool:
         """
-        Verifica si el ally está asignado a alguna orden activa (no done/cancelled) que
+        Verifica si el groomer está asignado a alguna orden activa (no done/cancelled) que
         incluya a esta mascota — usado para autorizar POST /pets/{pet_id}/records cuando
         quien llama no es el dueño ni un admin.
         """
@@ -381,7 +445,7 @@ class PostgresOrderRepository:
             .join(OrderPetModel, OrderPetModel.order_id == OrderModel.id)
             .where(
                 OrderPetModel.pet_id == pet_id,
-                OrderModel.ally_id == ally_id,
+                OrderModel.groomer_id == groomer_id,
                 OrderModel.status.notin_([OrderStatus.done.value, OrderStatus.cancelled.value]),
             )
             .limit(1)

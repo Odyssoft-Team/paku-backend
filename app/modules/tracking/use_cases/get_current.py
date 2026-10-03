@@ -1,11 +1,11 @@
 """
-Use case: obtener la última posición conocida del ally y el destino del servicio.
+Use case: obtener la última posición conocida del groomer y el destino del servicio.
 
 Flujo:
   1. Lee la orden.
   2. Valida que el tracking está disponible para lectura.
-  3. Valida que el requester tiene acceso (dueño / ally asignado / admin).
-  4. Lee la última posición del LocationStore (puede ser None si el ally aún no reportó).
+  3. Valida que el requester tiene acceso (dueño / groomer asignado / admin).
+  4. Lee la última posición del LocationStore (puede ser None si el groomer aún no reportó).
   5. Extrae el destino del delivery_address_snapshot de la orden.
   6. Calcula staleness_seconds.
   7. Devuelve los datos para CurrentLocationOut.
@@ -23,7 +23,7 @@ from fastapi import HTTPException, status
 from app.modules.orders.domain.order import Order
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.tracking.domain.location import (
-    AllyLocation,
+    GroomerLocation,
     assert_can_read,
     assert_tracking_readable,
 )
@@ -65,7 +65,7 @@ class GetCurrent:
     ) -> dict[str, Any]:
         """
         Devuelve un dict con las claves:
-          order_id, order_status, ally_location (AllyLocation | None),
+          order_id, order_status, groomer_location (GroomerLocation | None),
           destination (dict lat/lng), staleness_seconds (int | None)
         """
         # 1. Leer orden
@@ -94,22 +94,22 @@ class GetCurrent:
                 detail=str(exc),
             ) from exc
 
-        # 4. Última posición del ally desde PostgreSQL (puede ser None)
-        ally_location: AllyLocation | None = await self.location_store.get(order_id)
+        # 4. Última posición del groomer desde PostgreSQL (puede ser None)
+        groomer_location: GroomerLocation | None = await self.location_store.get(order_id)
 
         # 5. Destino
         destination = _extract_destination(order)
 
         # 6. Antigüedad de los datos
         staleness_seconds: int | None = None
-        if ally_location is not None:
-            delta = datetime.now(timezone.utc) - ally_location.recorded_at
+        if groomer_location is not None:
+            delta = datetime.now(timezone.utc) - groomer_location.recorded_at
             staleness_seconds = int(delta.total_seconds())
 
         return {
             "order_id": order_id,
             "order_status": order.status.value,
-            "ally_location": ally_location,
+            "groomer_location": groomer_location,
             "destination": destination,
             "staleness_seconds": staleness_seconds,
         }

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 # Input DTO for sending a new chat message.
 #
 # [NATURAL/BUSINESS]
-# Cuerpo del mensaje que el cliente o ally envía en la conversación de una orden.
+# Cuerpo del mensaje que el cliente o groomer envía en la conversación de una orden.
 class SendMessageIn(BaseModel):
     body: str = Field(..., min_length=1, max_length=2000)
 

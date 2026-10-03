@@ -2,11 +2,12 @@
 
 ## 📚 **DOCUMENTACIÓN TÉCNICA**
 
-### **🛒 Sistema de Carrito (Cart)**
-- **[CART_BATCH_OPERATIONS.md](./CART_BATCH_OPERATIONS.md)** - Endpoints y operaciones batch
-- **[CART_VALIDATIONS.md](./CART_VALIDATIONS.md)** - Sistema completo de validaciones
-- **[CART_IMPLEMENTATION_SUMMARY.md](./CART_IMPLEMENTATION_SUMMARY.md)** - Resumen de implementación
-- **[FRONTEND_INTEGRATION_GUIDE.md](./FRONTEND_INTEGRATION_GUIDE.md)** - Guía de integración para frontend
+- **[docs/plan-de-trabajo.md](./docs/plan-de-trabajo.md)** — plan vigente y decisiones
+- **[docs/cambios-api-para-front.md](./docs/cambios-api-para-front.md)** — cambios de API para los fronts
+- **[docs/flujo-compra-servicio.md](./docs/flujo-compra-servicio.md)** — flujo de compra (carrito → orden → pago)
+- **[docs/chat-api.md](./docs/chat-api.md)**, **[docs/tracking-api.md](./docs/tracking-api.md)**
+- **[docs/pendientes.md](./docs/pendientes.md)**, **[docs/pendientes-pagos-culqi.md](./docs/pendientes-pagos-culqi.md)**
+- **[specs/](./specs/)** — constitución, workspace y flujo spec → plan → tasks
 
 ---
 
@@ -72,8 +73,8 @@ python -m alembic revision -m "fix_cartstatus_enum"
 python -m alembic downgrade -1
 ```
 
-**📋 NOTA:** Las mejoras de validación del carrito NO requieren migraciones.  
-Ver [DATABASE_STATUS.md](./DATABASE_STATUS.md) para más detalles.
+**📋 NOTA:** hay migraciones nuevas escritas y aún no aplicadas (`1a2b3c4d5e6f`, `2b3c4d5e6f7a`,
+`3c4d5e6f7a8b`); ver `docs/plan-de-trabajo.md`.
 
 ### 🧪 Tests (local)
 ```bash

@@ -9,7 +9,7 @@ creado: YYYY-MM-DD
 
 ## Problema
 
-Qué necesidad / dolor. Para quién (dueño, ally, admin). Por qué ahora.
+Qué necesidad / dolor. Para quién (dueño, groomer, admin). Por qué ahora.
 
 ## Objetivo
 

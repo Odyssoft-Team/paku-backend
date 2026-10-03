@@ -103,7 +103,7 @@ def test_get_order_by_id_for_owner_ok():
     assert order["id"] == order_id
 
 
-def test_update_status_requires_admin_or_ally():
+def test_update_status_requires_admin_or_groomer():
     client = TestClient(app)
     headers = _auth_headers(client, email="orders_status_" + __import__("uuid").uuid4().hex + "@example.com", password="pass1234")
 

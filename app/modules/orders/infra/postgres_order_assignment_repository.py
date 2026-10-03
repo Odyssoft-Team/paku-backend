@@ -19,7 +19,7 @@ class PostgresOrderAssignmentRepository:
         return OrderAssignment(
             id=r.id,
             order_id=r.order_id,
-            ally_id=r.ally_id,
+            groomer_id=r.groomer_id,
             scheduled_at=r.scheduled_at,
             assigned_by=r.assigned_by,
             notes=r.notes,
@@ -31,7 +31,7 @@ class PostgresOrderAssignmentRepository:
         model = OrderAssignmentModel(
             id=assignment.id,
             order_id=assignment.order_id,
-            ally_id=assignment.ally_id,
+            groomer_id=assignment.groomer_id,
             scheduled_at=assignment.scheduled_at,
             assigned_by=assignment.assigned_by,
             notes=assignment.notes,

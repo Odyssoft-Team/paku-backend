@@ -1,0 +1,18 @@
+# No copiar a la imagen secretos, entornos locales ni artefactos de desarrollo.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+.git/
+.claude/
+.pytest_cache/
+**/__pycache__/
+*.pyc
+*.db
+cloud-sql-proxy.exe
+versions_backup_legacy/
+tests/
+docs/
+specs/

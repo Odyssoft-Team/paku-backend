@@ -4,7 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
-from app.core.auth import CurrentUser, create_access_token, decode_token, require_roles
+from app.core.auth import CurrentUser, create_access_token, decode_token, normalize_role, require_roles
 from app.core.db import engine, get_async_session
 from app.core.rate_limiter import forgot_password_limiter, login_limiter
 from app.modules.geo.infra.repository import PostgresDistrictRepository
@@ -234,7 +234,7 @@ async def refresh(payload: RefreshIn) -> TokenOut:
     access_token = create_access_token(
         user_id=data.get("sub"),
         email=data.get("email"),
-        role=data.get("role"),
+        role=normalize_role(data.get("role")),
     )
     return TokenOut(access_token=access_token, refresh_token=payload.refresh_token)
 
@@ -472,7 +472,7 @@ async def set_default_address(
 
 @admin_router.get("/users", response_model=list[UserOut])
 async def admin_list_users(
-    role: Optional[str] = Query(None, description="Filtrar por rol: user|ally|admin"),
+    role: Optional[str] = Query(None, description="Filtrar por rol: user|groomer|admin"),
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresUserRepository = Depends(get_user_repo),
 ) -> list[UserOut]:
@@ -484,7 +484,7 @@ async def admin_list_users(
 @admin_router.get("/users/search", response_model=list[UserSearchResultOut])
 async def admin_search_users(
     q: str = Query(..., min_length=3, description="Busca por nombre o apellido"),
-    role: Optional[str] = Query("user", description="Filtrar por rol: user|ally|admin"),
+    role: Optional[str] = Query("user", description="Filtrar por rol: user|groomer|admin"),
     limit: int = Query(default=20, ge=1, le=50),
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresUserRepository = Depends(get_user_repo),
@@ -509,7 +509,7 @@ async def admin_change_role(
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresUserRepository = Depends(get_user_repo),
 ) -> UserOut:
-    """Cambia el rol de un usuario (user ↔ ally ↔ admin)."""
+    """Cambia el rol de un usuario (user ↔ groomer ↔ admin)."""
     user = await ChangeUserRole(repo=repo).execute(user_id=user_id, role=payload.role)
     return _user_to_out(user)
 
@@ -520,7 +520,7 @@ async def admin_create_user(
     _: CurrentUser = Depends(require_roles("admin")),
     repo: UserRepository = Depends(get_user_repo),
 ) -> UserOut:
-    """Crea un usuario con el rol especificado (user, ally o admin)."""
+    """Crea un usuario con el rol especificado (user, groomer o admin)."""
     try:
         user = await RegisterUser(repo=repo).execute(
             email=payload.email,

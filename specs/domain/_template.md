@@ -18,7 +18,7 @@ Campos relevantes, tipos, invariantes. No copiar el ORM entero; solo lo que impo
 estado_a → estado_b → estado_c
 ```
 
-Quién dispara cada transición (usuario / ally / admin / sistema).
+Quién dispara cada transición (usuario / groomer / admin / sistema).
 
 ## Reglas de negocio
 

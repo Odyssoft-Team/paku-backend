@@ -5,7 +5,7 @@ from uuid import UUID
 import re
 from pydantic import BaseModel, EmailStr, field_validator
 
-Role = Literal["admin", "user", "ally"]
+Role = Literal["admin", "user", "groomer"]
 Sex = Literal["male", "female"]
 
 

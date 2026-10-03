@@ -3,7 +3,7 @@ Use case: obtener polyline, ETA y distancia via Google Routes API.
 
 Comportamiento:
   - Si GOOGLE_ROUTES_API_KEY no está configurada → HTTP 501 (no implementado).
-  - Si el ally aún no reportó posición → devuelve RouteOut con campos None
+  - Si el groomer aún no reportó posición → devuelve RouteOut con campos None
     (el frontend muestra el destino sin ruta trazada).
   - Si Google Routes falla → HTTP 502 con detalle del error.
 
@@ -26,7 +26,7 @@ from fastapi import HTTPException, status
 from app.core.settings import settings
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.tracking.domain.location import (
-    AllyLocation,
+    GroomerLocation,
     assert_can_read,
     assert_tracking_readable,
 )
@@ -107,7 +107,7 @@ class GetRoute:
     ) -> dict[str, Any]:
         """
         Devuelve un dict con las claves:
-          order_id, ally_location (AllyLocation | None), destination (dict),
+          order_id, groomer_location (GroomerLocation | None), destination (dict),
           eta_seconds, eta_display, polyline, distance_meters
         """
         # Prerequisito: API key configurada
@@ -146,14 +146,14 @@ class GetRoute:
         # 4. Destino
         destination = _extract_destination(order)
 
-        # 5. Posición del ally desde PostgreSQL (puede ser None)
-        ally_location: AllyLocation | None = await self.location_store.get(order_id)
+        # 5. Posición del groomer desde PostgreSQL (puede ser None)
+        groomer_location: GroomerLocation | None = await self.location_store.get(order_id)
 
         # Sin origen conocido: devolvemos destino sin ruta
-        if ally_location is None:
+        if groomer_location is None:
             return {
                 "order_id": order_id,
-                "ally_location": None,
+                "groomer_location": None,
                 "destination": destination,
                 "eta_seconds": None,
                 "eta_display": None,
@@ -163,8 +163,8 @@ class GetRoute:
 
         # 6. Llamar a Google Routes
         route = await _call_google_routes(
-            origin_lat=ally_location.lat,
-            origin_lng=ally_location.lng,
+            origin_lat=groomer_location.lat,
+            origin_lng=groomer_location.lng,
             dest_lat=destination["lat"],
             dest_lng=destination["lng"],
         )
@@ -182,7 +182,7 @@ class GetRoute:
 
         return {
             "order_id": order_id,
-            "ally_location": ally_location,
+            "groomer_location": groomer_location,
             "destination": destination,
             "eta_seconds": eta_seconds,
             "eta_display": eta_display,

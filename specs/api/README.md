@@ -21,11 +21,17 @@ Un cambio que rompe a un cliente (web / admin / vet-dev) requiere:
 1. Nota en el `plan.md` de la feature listando los 3 clientes y el impacto.
 2. Coordinación o versionado antes de mergear.
 
+## Pagos
+
+El cobro no está en esta API: lo sirve un microservicio de pagos aparte
+(`https://stream.dev-qa.site/payment/*`, credenciales de desarrollo).
+Contrato en `paku-web/referencias/frontend-api.md`. El backend solo persiste los IDs de Culqi en `orders`.
+
 ## Docs de API existentes
 
 - `paku-backend/docs/chat-api.md`
 - `paku-backend/docs/tracking-api.md`
 - `paku-backend/docs/flujo-compra-servicio.md`
-- `paku-backend/FRONTEND_INTEGRATION_GUIDE.md`, `CART_*.md`
+- `paku-web/referencias/frontend-api.md` (API de pagos), `streaming-integration-docs.md`
 
 Migrar su contenido de referencia a `domain/<entidad>.md` cuando se toque cada área.

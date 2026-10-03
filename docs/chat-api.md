@@ -1,6 +1,6 @@
 # Chat API — Guía de integración para Frontend
 
-Módulo de mensajería en tiempo real (polling) entre el **usuario** y el **ally (groomer)**
+Módulo de mensajería en tiempo real (polling) entre el **usuario** y el **groomer**
 durante una orden activa.
 
 ---
@@ -25,7 +25,7 @@ durante una orden activa.
 | Concepto | Explicación |
 |---|---|
 | **Canal de chat** | Siempre está ligado a una `order_id`. No existe chat fuera de una orden. |
-| **sender_role** | `"user"` si lo envía el cliente, `"ally"` si lo envía el groomer. |
+| **sender_role** | `"user"` si lo envía el cliente, `"groomer"` si lo envía el groomer. |
 | **Polling** | El cliente consulta periódicamente si hay mensajes nuevos usando el parámetro `since`. |
 | **Cursor (`since`)** | Es el `created_at` del último mensaje que ya tienes. El servidor devuelve solo lo que vino después. |
 | **is_read** | Se marca `true` automáticamente cuando el destinatario hace GET a los mensajes. |
@@ -40,8 +40,8 @@ Todos los endpoints requieren el token JWT del usuario en el header:
 Authorization: Bearer <access_token>
 ```
 
-El backend determina automáticamente si eres el usuario o el ally según el token.
-Si no eres dueño de la orden ni el ally asignado, recibirás `403 Forbidden`.
+El backend determina automáticamente si eres el usuario o el groomer según el token.
+Si no eres dueño de la orden ni el groomer asignado, recibirás `403 Forbidden`.
 
 ---
 
@@ -80,7 +80,7 @@ Content-Type: application/json
   "id": "a1b2c3d4-0000-0000-0000-000000000001",
   "order_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "sender_id": "abc12345-0000-0000-0000-000000000099",
-  "sender_role": "ally",
+  "sender_role": "groomer",
   "body": "Hola, ya voy en camino 🐾",
   "is_read": false,
   "created_at": "2026-05-15T14:32:10.123456+00:00"
@@ -130,7 +130,7 @@ Authorization: Bearer eyJ...
     "id": "a1b2c3d4-0000-0000-0000-000000000001",
     "order_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "sender_id": "abc12345-0000-0000-0000-000000000099",
-    "sender_role": "ally",
+    "sender_role": "groomer",
     "body": "Hola, ya voy en camino 🐾",
     "is_read": true,
     "created_at": "2026-05-15T14:32:10.123456+00:00"
@@ -216,7 +216,7 @@ export interface ChatMessage {
   id: string;
   order_id: string;
   sender_id: string;
-  sender_role: "user" | "ally" | "admin";
+  sender_role: "user" | "groomer" | "admin";
   body: string;
   is_read: boolean;
   created_at: string; // ISO-8601
@@ -460,7 +460,7 @@ function useUnreadCount(orderId: string, accessToken: string) {
 | Código | Causa | Acción recomendada |
 |---|---|---|
 | `401 Unauthorized` | Token expirado o inválido | Redirigir a login / refrescar token |
-| `403 Forbidden` | No eres dueño de la orden ni el ally | No mostrar el chat |
+| `403 Forbidden` | No eres dueño de la orden ni el groomer | No mostrar el chat |
 | `404 Not Found` | La orden no existe | Mostrar error "Orden no encontrada" |
 | `422 Unprocessable Entity` | Mensaje vacío o supera 2000 caracteres | Validar antes de enviar |
 | `500 Internal Server Error` | Error del servidor | Reintentar con backoff exponencial |

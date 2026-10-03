@@ -50,14 +50,14 @@ def _build_ice_servers() -> list[IceServerOut]:
 # ------------------------------------------------------------------
 # GET /streaming/orders/{order_id}/session
 # ------------------------------------------------------------------
-# Disponible para: ally asignado, cliente dueño de la orden, admin.
+# Disponible para: groomer asignado, cliente dueño de la orden, admin.
 #
 # La app llama a este endpoint ANTES de conectarse al WebSocket de señalización.
 # La respuesta incluye todo lo necesario para iniciar WebRTC sin ninguna llamada adicional:
 #   - ws_url      → conectar directamente: new WebSocket(ws_url)
 #   - room_id     → el ?room= param (= order_id como string)
 #   - ice_servers → pasar directo a RTCPeerConnection({ iceServers: ice_servers })
-#   - role        → "host" si es el ally (genera offer), "viewer" si es el cliente (espera)
+#   - role        → "host" si es el groomer (genera offer), "viewer" si es el cliente (espera)
 #
 # Solo disponible cuando order_status == in_service.
 # ------------------------------------------------------------------
@@ -106,7 +106,7 @@ async def get_stream_session(
         room_id=room_id,
         order_id=session.order_id,
         user_id=session.user_id,
-        ally_id=session.ally_id,
+        groomer_id=session.groomer_id,
         order_status=session.order_status,
         role=session.role,
         ws_url=ws_url,

@@ -2,7 +2,7 @@
 Schemas Pydantic del módulo tracking.
 
 Contratos de request/response para los tres endpoints:
-  - POST /tracking/orders/{order_id}/location  (ally reporta posición)
+  - POST /tracking/orders/{order_id}/location  (groomer reporta posición)
   - GET  /tracking/orders/{order_id}/current   (última posición + destino)
   - GET  /tracking/orders/{order_id}/route     (polyline + ETA via Google Routes)
 """
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# Entrada — reporte de posición del ally
+# Entrada — reporte de posición del groomer
 # ---------------------------------------------------------------------------
 
 class ReportLocationIn(BaseModel):
@@ -54,19 +54,19 @@ class ReportLocationOut(BaseModel):
 
 class CurrentLocationOut(BaseModel):
     """
-    Última posición conocida del ally + destino del servicio.
+    Última posición conocida del groomer + destino del servicio.
 
-    - ally_location es None si el ally aún no ha reportado ninguna posición
+    - groomer_location es None si el groomer aún no ha reportado ninguna posición
       (acaba de cambiar el estado a on_the_way pero no envió GPS todavía).
-    - staleness_seconds indica cuántos segundos tienen los datos de ally_location.
+    - staleness_seconds indica cuántos segundos tienen los datos de groomer_location.
       El frontend puede usarlo para mostrar un aviso de "datos desactualizados"
       si supera, por ejemplo, 30 segundos.
     """
     order_id: UUID
     order_status: str
-    ally_location: Optional[LocationPoint]
+    groomer_location: Optional[LocationPoint]
     destination: LocationPoint
-    staleness_seconds: Optional[int]         # None si ally_location es None
+    staleness_seconds: Optional[int]         # None si groomer_location es None
 
 
 class RouteOut(BaseModel):
@@ -74,11 +74,11 @@ class RouteOut(BaseModel):
     Información de ruta y ETA calculada por Google Routes API.
 
     - Todos los campos opcionales pueden ser None si:
-        a) El ally aún no reportó posición (no hay origen).
+        a) El groomer aún no reportó posición (no hay origen).
         b) Google Routes devolvió error o no hay API key configurada.
     """
     order_id: UUID
-    ally_location: Optional[LocationPoint]
+    groomer_location: Optional[LocationPoint]
     destination: LocationPoint
     eta_seconds: Optional[int]
     eta_display: Optional[str]               # e.g. "7 min" para mostrar en UI

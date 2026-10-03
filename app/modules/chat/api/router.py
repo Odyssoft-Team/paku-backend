@@ -34,8 +34,8 @@ def _get_orders_repo(session: AsyncSession = Depends(get_async_session)) -> Post
 
 # ------------------------------------------------------------------
 # Access guard
-# Valida que el requester pertenezca a la orden (user dueño, ally asignado o admin).
-# Devuelve la orden para que los endpoints puedan obtener ally_id / user_id.
+# Valida que el requester pertenezca a la orden (user dueño, groomer asignado o admin).
+# Devuelve la orden para que los endpoints puedan obtener groomer_id / user_id.
 # ------------------------------------------------------------------
 
 async def _get_order_or_403(
@@ -48,10 +48,10 @@ async def _get_order_or_403(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order_not_found")
 
     is_owner = order.user_id == current.id
-    is_ally  = order.ally_id == current.id
+    is_groomer  = order.groomer_id == current.id
     is_admin = current.role == "admin"
 
-    if not (is_owner or is_ally or is_admin):
+    if not (is_owner or is_groomer or is_admin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="chat_forbidden")
 
     return order
@@ -77,7 +77,7 @@ async def send_message(
     """
     Envía un mensaje de texto en el chat de una orden.
 
-    Acceso: usuario dueño de la orden, ally asignado o admin.
+    Acceso: usuario dueño de la orden, groomer asignado o admin.
     El mensaje queda persistido en PostgreSQL; el destinatario lo obtiene
     en su próxima petición de polling a GET /messages.
     """
@@ -91,9 +91,9 @@ async def send_message(
         recipient_id = None
     elif order.user_id == current.id:
         sender_role = "user"
-        recipient_id = order.ally_id  # puede ser None si aún no hay ally asignado
+        recipient_id = order.groomer_id  # puede ser None si aún no hay groomer asignado
     else:
-        sender_role = "ally"
+        sender_role = "groomer"
         recipient_id = order.user_id
 
     logger.info(

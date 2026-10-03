@@ -1,6 +1,6 @@
 """
 Órdenes de ajuste — cobro adicional cuando el peso real de la mascota (confirmado por
-admin/ally) da un precio mayor al ya cobrado en la orden original. Ver plan de rediseño:
+admin/groomer) da un precio mayor al ya cobrado en la orden original. Ver plan de rediseño:
 requiere confirmación explícita (no se crea solo por detectar la diferencia).
 """
 from __future__ import annotations
@@ -25,10 +25,13 @@ class CreateAdjustmentOrder:
     pets_repo: PetRepository
     store_repo: PostgresStoreRepository
 
-    async def execute(self, *, order_id: UUID, pet_id: UUID) -> Order:
+    async def execute(self, *, order_id: UUID, pet_id: UUID, actor_id: UUID, actor_role: str) -> Order:
         order = await self.orders_repo.get_order_admin(id=order_id)
         if order is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        # Solo el groomer asignado a esta orden (o un admin) confirma el cargo extra por peso.
+        if actor_role != "admin" and order.groomer_id != actor_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a esta orden")
 
         pet = await self.pets_repo.get_by_id(pet_id)
         if pet is None:

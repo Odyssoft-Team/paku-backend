@@ -5,8 +5,19 @@ Los specs de feature no pueden contradecir esto.
 
 ## Producto
 
-- Paku conecta dueños de mascotas con **allies** (veterinarios / cuidadores) que prestan servicios a domicilio.
-- Clientes finales usan **paku-web** y (allies) **paku-vet-dev**. Operación interna vía **paku-admin**.
+- Paku vende servicios de **baño y grooming** para mascotas. Los presta un **groomer contratado por Paku**
+  con **modelo van**: el groomer recoge a la mascota, hace el servicio en la van y la devuelve.
+  1 orden = 1 mascota = 1 parada; el admin define la ruta del día con `scheduled_at`.
+- Apps: **app de clientes**, **app Paku Groomer** y **web admin** (operación interna).
+- Término de dominio: **groomer** (reemplaza a "ally"; ver `docs/plan-de-trabajo.md`).
+- El historial clínico se mudará a **HCVet** (proyecto aparte) en una etapa 2. No agregar lógica nueva
+  a `pet_records`.
+
+## Precios
+
+- **El backend calcula, el front muestra.** Todo monto (servicio, addons, totales, ajustes) lo calcula
+  el backend con `store` y lo devuelve en cada respuesta; el front nunca envía montos que se usen.
+- Un addon solo existe como complemento del servicio base y se cotiza por especie, raza y peso.
 
 ## Arquitectura
 
@@ -32,6 +43,13 @@ Los specs de feature no pueden contradecir esto.
 - Todo cambio de comportamiento en backend lleva tests (`pytest`).
 - Migraciones de esquema siempre vía Alembic, nunca DDL manual.
 - No romper contratos de API sin versionar o coordinar con los 3 clientes.
+
+## Pagos
+
+- **Culqi** es la única pasarela. No reintroducir Mercado Pago ni otra.
+- El cobro se hace vía un microservicio de pagos separado; el backend persiste los IDs de Culqi.
+- Datos de tarjeta se tokenizan en el cliente contra Culqi y **nunca** llegan al backend.
+- Hoy con credenciales de desarrollo.
 
 ## Estilo
 

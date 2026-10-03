@@ -176,15 +176,22 @@ class CreateHold:
         return hold
 
 
+def assert_hold_access(hold: Hold, *, requester_id: UUID, requester_role: str) -> None:
+    """Solo el dueño de la reserva o un admin la confirman o cancelan."""
+    if requester_role != "admin" and hold.user_id != requester_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+
 @dataclass
 class CancelHold:
     hold_repo: PostgresHoldRepository
     availability_repo: PostgresAvailabilityRepository
 
-    async def execute(self, *, hold_id: UUID) -> Hold:
+    async def execute(self, *, hold_id: UUID, requester_id: UUID, requester_role: str) -> Hold:
         hold = await self.hold_repo.get_hold(hold_id)
         if not hold:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hold not found")
+        assert_hold_access(hold, requester_id=requester_id, requester_role=requester_role)
         if hold.status == HoldStatus.cancelled:
             return hold
         if hold.status != HoldStatus.held:
@@ -192,11 +199,6 @@ class CancelHold:
                 status_code=status.HTTP_409_CONFLICT, detail="Hold cannot be cancelled"
             )
 
+        # El repositorio libera el cupo del día en la misma transacción.
         updated = await self.hold_repo.update_status(hold_id, HoldStatus.cancelled)
-
-        if hold.date and hold.service_id:
-            slot = await self.availability_repo.get_slot_for_date(hold.service_id, hold.date)
-            if slot:
-                await self.availability_repo.decrement_booked(slot.id)
-
         return updated or hold

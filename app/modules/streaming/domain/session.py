@@ -12,11 +12,11 @@ from app.modules.orders.domain.order import Order, OrderStatus
 # Used to communicate to the media server who is broadcasting vs. who is watching.
 #
 # [BUSINESS]
-# El ally (groomer/rider) es el HOST: el que inicia y transmite el video.
+# El groomer es el HOST: el que inicia y transmite el video.
 # El cliente es el VIEWER: solo puede ver la transmisión.
 # El admin puede unirse como VIEWER para supervisión.
 class StreamRole(str, Enum):
-    host   = "host"    # ally: abre el canal y transmite
+    host   = "host"    # groomer: abre el canal y transmite
     viewer = "viewer"  # cliente / admin: se une y visualiza
 
 
@@ -34,7 +34,7 @@ class StreamSession:
     channel_id: UUID        # == order.id  — identificador del canal en el media server
     order_id: UUID          # redundante pero explícito para claridad del consumidor
     user_id: UUID           # cliente dueño de la orden
-    ally_id: UUID           # ally asignado (host)
+    groomer_id: UUID           # groomer asignado (host)
     order_status: OrderStatus
     role: StreamRole        # rol del solicitante en este canal
 
@@ -48,40 +48,40 @@ class StreamSession:
 # [BUSINESS]
 # Reglas para habilitar una sesión de transmisión:
 # 1. La orden debe estar en estado in_service.
-# 2. La orden debe tener un ally asignado.
-# 3. Solo el cliente dueño de la orden, el ally asignado o un admin pueden acceder.
-# 4. El ally obtiene rol HOST; el cliente y el admin obtienen rol VIEWER.
+# 2. La orden debe tener un groomer asignado.
+# 3. Solo el cliente dueño de la orden, el groomer asignado o un admin pueden acceder.
+# 4. El groomer obtiene rol HOST; el cliente y el admin obtienen rol VIEWER.
 def resolve_stream_session(
     *,
     order: Order,
     requester_id: UUID,
-    requester_role: str,   # "user" | "ally" | "admin"  — viene del JWT
+    requester_role: str,   # "user" | "groomer" | "admin"  — viene del JWT
 ) -> StreamSession:
 
     # Regla 1 — solo cuando el servicio está en curso
     if order.status != OrderStatus.in_service:
         raise ValueError("stream_not_available: order is not in_service")
 
-    # Regla 2 — debe haber un ally asignado
-    if order.ally_id is None:
-        raise ValueError("stream_not_available: order has no ally assigned")
+    # Regla 2 — debe haber un groomer asignado
+    if order.groomer_id is None:
+        raise ValueError("stream_not_available: order has no groomer assigned")
 
     # Regla 3 — solo participantes autorizados
     is_owner = requester_id == order.user_id
-    is_ally  = requester_id == order.ally_id
+    is_groomer  = requester_id == order.groomer_id
     is_admin = requester_role == "admin"
 
-    if not (is_owner or is_ally or is_admin):
+    if not (is_owner or is_groomer or is_admin):
         raise ValueError("stream_forbidden: requester is not a participant of this order")
 
     # Regla 4 — asignación de rol
-    role = StreamRole.host if is_ally else StreamRole.viewer
+    role = StreamRole.host if is_groomer else StreamRole.viewer
 
     return StreamSession(
         channel_id=order.id,
         order_id=order.id,
         user_id=order.user_id,
-        ally_id=order.ally_id,
+        groomer_id=order.groomer_id,
         order_status=order.status,
         role=role,
     )

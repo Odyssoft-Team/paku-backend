@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Any, Literal, Optional, Protocol
 from uuid import UUID, uuid4
 
-Role = Literal["admin", "user", "ally"]
+Role = Literal["admin", "user", "groomer"]
 
 
 class Sex(str, Enum):

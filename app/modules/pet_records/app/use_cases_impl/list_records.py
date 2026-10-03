@@ -39,8 +39,8 @@ class ListRecords:
         is_owner = pet.owner_id == user_id
         if role == "admin" or is_owner:
             pass
-        elif role == "ally":
-            assigned = await self.orders_repo.is_ally_assigned_to_pet(ally_id=user_id, pet_id=pet_id)
+        elif role == "groomer":
+            assigned = await self.orders_repo.is_groomer_assigned_to_pet(groomer_id=user_id, pet_id=pet_id)
             if not assigned:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
         else:

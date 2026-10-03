@@ -93,13 +93,20 @@ class CreatePet:
 
 @dataclass
 class GetPet:
+    """Ficha de la mascota: solo el dueño, el groomer asignado a una orden activa de esa mascota o un admin."""
     repo: PetRepository
+    orders_repo: Optional[object] = None  # PostgresOrderRepository; solo se usa para el groomer
 
-    async def execute(self, pet_id: UUID) -> Pet:
+    async def execute(self, pet_id: UUID, *, requester_id: UUID, requester_role: str) -> Pet:
         pet = await self.repo.get_by_id(pet_id)
         if not pet:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
-        return pet
+        if requester_role == "admin" or pet.owner_id == requester_id:
+            return pet
+        if requester_role == "groomer" and self.orders_repo is not None:
+            if await self.orders_repo.is_groomer_assigned_to_pet(groomer_id=requester_id, pet_id=pet_id):
+                return pet
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
 
 @dataclass

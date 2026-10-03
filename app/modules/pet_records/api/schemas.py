@@ -43,7 +43,7 @@ class PetRecordOut(BaseModel):
 class PriceCheckOut(BaseModel):
     """
     Presente solo si se detectó una diferencia de precio al registrar un weight_record
-    (admin/ally, con una orden pagada de esta mascota en curso). El front debe mostrar
+    (admin/groomer, con una orden pagada de esta mascota en curso). El front debe mostrar
     esto y ofrecer confirmar la generación del cobro de la diferencia
     (POST /orders/{order_id}/create-adjustment).
     """

@@ -56,8 +56,15 @@ class CartItemOut(BaseModel):
     ref_id: Union[UUID, str]
     name: Optional[str] = None
     qty: int
-    unit_price: Optional[float] = None
+    unit_price: Optional[float] = Field(None, description="Precio calculado por el backend (store)")
     meta: Optional[dict[str, Any]] = None
+    price_adjusted: bool = Field(
+        False,
+        description="true si el unit_price enviado por el front no coincidía y se usó el del servidor",
+    )
+    client_unit_price: Optional[float] = Field(
+        None, description="unit_price que envió el front (solo cuando price_adjusted=true)",
+    )
 
 
 # [TECH]

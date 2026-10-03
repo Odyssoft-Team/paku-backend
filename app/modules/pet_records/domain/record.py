@@ -28,7 +28,7 @@ class RecordType(str, Enum):
 
 class RecordRole(str, Enum):
     owner = "owner"
-    ally = "ally"
+    groomer = "groomer"
     admin = "admin"
     system = "system"
 

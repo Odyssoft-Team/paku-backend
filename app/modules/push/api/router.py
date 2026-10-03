@@ -52,7 +52,7 @@ async def broadcast_push(
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresDeviceTokenRepository = Depends(get_push_repo),
 ) -> BroadcastOut:
-    if current.role not in ("admin", "ally"):
+    if current.role not in ("admin", "groomer"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     sent_to = await BroadcastPush(repo=repo).execute(
         title=payload.title,

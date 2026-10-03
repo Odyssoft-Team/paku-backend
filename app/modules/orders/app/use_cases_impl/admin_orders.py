@@ -1,12 +1,12 @@
 """
 Use cases administrativos para la gestión de órdenes:
-asignación de ally, listado con filtros y consulta individual.
+asignación de groomer, listado con filtros y consulta individual.
 """
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
-# AssignOrder — admin asigna un ally y programa la fecha/hora
+# AssignOrder — admin asigna un groomer y programa la fecha/hora
 # ------------------------------------------------------------------
 
 @dataclass
@@ -33,7 +33,7 @@ class AssignOrder:
         self,
         *,
         order_id: UUID,
-        ally_id: UUID,
+        groomer_id: UUID,
         scheduled_at: datetime,
         assigned_by: UUID,
         notes: Optional[str] = None,
@@ -53,17 +53,23 @@ class AssignOrder:
         # Crear registro de asignación (historial)
         assignment = OrderAssignment.new(
             order_id=order_id,
-            ally_id=ally_id,
+            groomer_id=groomer_id,
             scheduled_at=scheduled_at,
             assigned_by=assigned_by,
             notes=notes,
         )
         await self.assignments_repo.create(assignment)
 
+        # Reprogramar una parada saltada (pedido 4): vuelve a created y el proceso del servicio
+        # empieza de cero. El motivo del salto se conserva como historial.
+        if order.status == OrderStatus.skipped:
+            await self.orders_repo.set_status(id=order_id, status=OrderStatus.created)
+            await self.orders_repo.set_service_step(id=order_id, step=None, at=datetime.now(timezone.utc))
+
         # Actualizar datos desnormalizados en la orden para queries rápidas
-        updated_order = await self.orders_repo.set_ally(
+        updated_order = await self.orders_repo.set_groomer(
             id=order_id,
-            ally_id=ally_id,
+            groomer_id=groomer_id,
             scheduled_at=scheduled_at,
         )
 
@@ -116,23 +122,54 @@ class ListOrdersAdmin:
         self,
         *,
         status: Optional[OrderStatus] = None,
-        ally_id: Optional[UUID] = None,
+        groomer_id: Optional[UUID] = None,
     ) -> list[Order]:
-        return await self.orders_repo.list_orders_admin(status=status, ally_id=ally_id)
+        return await self.orders_repo.list_orders_admin(status=status, groomer_id=groomer_id)
 
 
 # ------------------------------------------------------------------
-# ListAllyOrders — órdenes asignadas al ally autenticado
+# ListGroomerOrders — órdenes asignadas al groomer autenticado
 # ------------------------------------------------------------------
+
+# Perú no tiene horario de verano: America/Lima es UTC-5 fijo.
+LIMA_TZ = timezone(timedelta(hours=-5))
+
+
+def lima_day_range(day: date) -> tuple[datetime, datetime]:
+    """[inicio, fin) del día `day` en hora de Lima, como datetimes con zona."""
+    start = datetime(day.year, day.month, day.day, tzinfo=LIMA_TZ)
+    return start, start + timedelta(days=1)
+
 
 @dataclass
-class ListAllyOrders:
+class ListGroomerOrders:
     orders_repo: PostgresOrderRepository
 
     async def execute(
         self,
         *,
-        ally_id: UUID,
+        groomer_id: UUID,
         status: Optional[OrderStatus] = None,
+        day: Optional[date] = None,
     ) -> list[Order]:
-        return await self.orders_repo.list_orders_by_ally(ally_id=ally_id, status=status)
+        """Ruta del groomer en orden de scheduled_at (lo define el admin); `day` filtra en hora de Lima."""
+        scheduled_from = scheduled_to = None
+        if day is not None:
+            scheduled_from, scheduled_to = lima_day_range(day)
+        return await self.orders_repo.list_orders_by_groomer(
+            groomer_id=groomer_id, status=status, scheduled_from=scheduled_from, scheduled_to=scheduled_to,
+        )
+
+
+@dataclass
+class GetGroomerOrder:
+    """Una parada del groomer: solo la orden que tiene asignada (admin ve cualquiera)."""
+    orders_repo: PostgresOrderRepository
+
+    async def execute(self, *, order_id: UUID, groomer_id: UUID, role: str) -> Order:
+        order = await self.orders_repo.get_order_admin(id=order_id)
+        if order is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        if role != "admin" and order.groomer_id != groomer_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a esta orden")
+        return order

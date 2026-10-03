@@ -2,14 +2,14 @@
 Dominio del módulo tracking.
 
 Responsabilidades:
-  - Definir el value object AllyLocation.
+  - Definir el value object GroomerLocation.
   - Definir las reglas de negocio puras (sin I/O) que gobiernan el ciclo
     de vida del tracking en función del estado de la orden.
 
 Reglas de negocio:
-  - El ally puede reportar su posición cuando la orden está en on_the_way
+  - El groomer puede reportar su posición cuando la orden está en on_the_way
     o in_service (ya llegó pero el cliente puede tener el mapa abierto).
-  - El cliente, el ally y el admin pueden leer la posición cuando la orden
+  - El cliente, el groomer y el admin pueden leer la posición cuando la orden
     está en on_the_way o in_service.
   - Fuera de esos estados el tracking está cerrado.
 """
@@ -27,7 +27,7 @@ from app.modules.orders.domain.order import Order, OrderStatus
 # Estados en los que el tracking está activo
 # ---------------------------------------------------------------------------
 
-# Escritura: el ally puede reportar posición
+# Escritura: el groomer puede reportar posición
 TRACKING_WRITABLE_STATUSES: frozenset[OrderStatus] = frozenset(
     {OrderStatus.on_the_way, OrderStatus.in_service}
 )
@@ -43,14 +43,14 @@ TRACKING_READABLE_STATUSES: frozenset[OrderStatus] = frozenset(
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class AllyLocation:
-    """Última posición conocida del ally para una orden activa."""
+class GroomerLocation:
+    """Última posición conocida del groomer para una orden activa."""
     order_id: UUID
-    ally_id: UUID
+    groomer_id: UUID
     lat: float
     lng: float
     accuracy_m: float | None   # precisión GPS en metros, opcional
-    recorded_at: datetime      # UTC, momento en que el ally reportó
+    recorded_at: datetime      # UTC, momento en que el groomer reportó
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ class AllyLocation:
 def assert_tracking_writable(order: Order) -> None:
     """
     Verifica que el tracking acepta escrituras para esta orden.
-    El ally puede reportar posición en on_the_way e in_service.
+    El groomer puede reportar posición en on_the_way e in_service.
     """
     if order.status not in TRACKING_WRITABLE_STATUSES:
         raise ValueError(
@@ -80,26 +80,26 @@ def assert_tracking_readable(order: Order) -> None:
         )
 
 
-def assert_is_ally(order: Order, ally_id: UUID) -> None:
-    """Verifica que el requester es el ally asignado a la orden."""
-    if order.ally_id is None:
-        raise ValueError("tracking_forbidden: order has no ally assigned")
-    if order.ally_id != ally_id:
-        raise ValueError("tracking_forbidden: requester is not the assigned ally")
+def assert_is_groomer(order: Order, groomer_id: UUID) -> None:
+    """Verifica que el requester es el groomer asignado a la orden."""
+    if order.groomer_id is None:
+        raise ValueError("tracking_forbidden: order has no groomer assigned")
+    if order.groomer_id != groomer_id:
+        raise ValueError("tracking_forbidden: requester is not the assigned groomer")
 
 
 def assert_can_read(order: Order, requester_id: UUID, requester_role: str) -> None:
     """
     Verifica que el requester tiene permiso de lectura.
     - Cliente dueño de la orden.
-    - Ally asignado a la orden.
+    - Groomer asignado a la orden.
     - Admin (cualquier orden).
     """
     is_owner = requester_id == order.user_id
-    is_ally  = requester_id == order.ally_id
+    is_groomer  = requester_id == order.groomer_id
     is_admin = requester_role == "admin"
 
-    if not (is_owner or is_ally or is_admin):
+    if not (is_owner or is_groomer or is_admin):
         raise ValueError(
             "tracking_forbidden: requester is not a participant of this order"
         )

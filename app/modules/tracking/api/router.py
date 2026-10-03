@@ -3,11 +3,11 @@ Router del módulo tracking.
 
 Endpoints:
   POST /tracking/orders/{order_id}/location
-    → Ally reporta su posición actual. Solo accesible con rol "ally".
+    → Groomer reporta su posición actual. Solo accesible con rol "groomer".
 
   GET /tracking/orders/{order_id}/current
-    → Devuelve la última posición conocida del ally + destino del servicio.
-      Accesible por el cliente dueño de la orden, el ally asignado o un admin.
+    → Devuelve la última posición conocida del groomer + destino del servicio.
+      Accesible por el cliente dueño de la orden, el groomer asignado o un admin.
 
   GET /tracking/orders/{order_id}/route
     → Devuelve polyline + ETA calculados por Google Routes API.
@@ -54,27 +54,27 @@ def _get_location_store(session: AsyncSession = Depends(get_async_session)) -> P
     "/orders/{order_id}/location",
     response_model=ReportLocationOut,
     status_code=status.HTTP_201_CREATED,
-    summary="Ally reporta su posición actual",
+    summary="Groomer reporta su posición actual",
 )
 async def report_location(
     order_id: UUID,
     payload: ReportLocationIn,
-    current: CurrentUser = Depends(require_roles("ally")),
+    current: CurrentUser = Depends(require_roles("groomer")),
     orders_repo: PostgresOrderRepository = Depends(_get_orders_repo),
     location_store: PostgresLocationStore = Depends(_get_location_store),
 ) -> ReportLocationOut:
     """
-    El ally/groomer envía su lat/lng actual mientras está en camino.
+    El groomer envía su lat/lng actual mientras está en camino.
 
-    - Solo accesible con rol **ally**.
+    - Solo accesible con rol **groomer**.
     - La orden debe estar en estado `on_the_way` o `in_service`.
-    - El ally debe ser el asignado a la orden.
+    - El groomer debe ser el asignado a la orden.
     - La posición se persiste en PostgreSQL (compatible con múltiples instancias).
     - Intervalo recomendado desde el app: cada 10 segundos.
     """
     location = await ReportLocation(orders_repo=orders_repo, location_store=location_store).execute(
         order_id=order_id,
-        ally_id=current.id,
+        groomer_id=current.id,
         lat=payload.lat,
         lng=payload.lng,
         accuracy_m=payload.accuracy_m,
@@ -94,7 +94,7 @@ async def report_location(
 @router.get(
     "/orders/{order_id}/current",
     response_model=CurrentLocationOut,
-    summary="Última posición conocida del ally + destino",
+    summary="Última posición conocida del groomer + destino",
 )
 async def get_current(
     order_id: UUID,
@@ -103,12 +103,12 @@ async def get_current(
     location_store: PostgresLocationStore = Depends(_get_location_store),
 ) -> CurrentLocationOut:
     """
-    Devuelve la última posición reportada por el ally y las coordenadas
+    Devuelve la última posición reportada por el groomer y las coordenadas
     del domicilio del cliente.
 
-    - Accesible por el **cliente** dueño de la orden, el **ally** asignado o un **admin**.
+    - Accesible por el **cliente** dueño de la orden, el **groomer** asignado o un **admin**.
     - La orden debe estar en estado `on_the_way` o `in_service`.
-    - `ally_location` puede ser `null` si el ally aún no envió su primera posición.
+    - `groomer_location` puede ser `null` si el groomer aún no envió su primera posición.
     - `staleness_seconds` indica la antigüedad de los datos de posición.
 
     **Uso recomendado:** el frontend hace polling cada 5 segundos.
@@ -119,21 +119,21 @@ async def get_current(
         requester_role=current.role,
     )
 
-    ally_loc = data["ally_location"]
-    ally_point: LocationPoint | None = None
-    if ally_loc is not None:
-        ally_point = LocationPoint(
-            lat=ally_loc.lat,
-            lng=ally_loc.lng,
-            accuracy_m=ally_loc.accuracy_m,
-            recorded_at=ally_loc.recorded_at,
+    groomer_loc = data["groomer_location"]
+    groomer_point: LocationPoint | None = None
+    if groomer_loc is not None:
+        groomer_point = LocationPoint(
+            lat=groomer_loc.lat,
+            lng=groomer_loc.lng,
+            accuracy_m=groomer_loc.accuracy_m,
+            recorded_at=groomer_loc.recorded_at,
         )
 
     dest = data["destination"]
     return CurrentLocationOut(
         order_id=data["order_id"],
         order_status=data["order_status"],
-        ally_location=ally_point,
+        groomer_location=groomer_point,
         destination=LocationPoint(lat=dest["lat"], lng=dest["lng"]),
         staleness_seconds=data["staleness_seconds"],
     )
@@ -160,7 +160,7 @@ async def get_route(
 
     - Mismo control de acceso que `/current`.
     - Devuelve **HTTP 501** si `GOOGLE_ROUTES_API_KEY` no está configurada.
-    - Si el ally aún no reportó posición, devuelve el destino sin ruta
+    - Si el groomer aún no reportó posición, devuelve el destino sin ruta
       (`eta_seconds`, `polyline` y `distance_meters` serán `null`).
     """
     data = await GetRoute(orders_repo=orders_repo, location_store=location_store).execute(
@@ -169,20 +169,20 @@ async def get_route(
         requester_role=current.role,
     )
 
-    ally_loc = data["ally_location"]
-    ally_point: LocationPoint | None = None
-    if ally_loc is not None:
-        ally_point = LocationPoint(
-            lat=ally_loc.lat,
-            lng=ally_loc.lng,
-            accuracy_m=ally_loc.accuracy_m,
-            recorded_at=ally_loc.recorded_at,
+    groomer_loc = data["groomer_location"]
+    groomer_point: LocationPoint | None = None
+    if groomer_loc is not None:
+        groomer_point = LocationPoint(
+            lat=groomer_loc.lat,
+            lng=groomer_loc.lng,
+            accuracy_m=groomer_loc.accuracy_m,
+            recorded_at=groomer_loc.recorded_at,
         )
 
     dest = data["destination"]
     return RouteOut(
         order_id=data["order_id"],
-        ally_location=ally_point,
+        groomer_location=groomer_point,
         destination=LocationPoint(lat=dest["lat"], lng=dest["lng"]),
         eta_seconds=data["eta_seconds"],
         eta_display=data["eta_display"],

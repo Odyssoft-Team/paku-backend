@@ -13,6 +13,7 @@ from app.modules.cart.app.use_cases_impl.items import (
     RemoveItem,
     ReplaceAllItems,
 )
+from app.modules.cart.app.use_cases_impl.pricing import CartPricing
 from app.modules.cart.app.use_cases_impl.validation import (
     _validate_addon_dependencies,
     _validate_date_format,
@@ -24,6 +25,7 @@ from app.modules.cart.app.use_cases_impl.validation import (
 __all__ = [
     "AddItem",
     "AddItemsBatch",
+    "CartPricing",
     "Checkout",
     "CreateCart",
     "CreateCartWithItems",

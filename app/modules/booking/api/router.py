@@ -88,21 +88,27 @@ async def create(
 @router.post("/holds/{id}/confirm", response_model=HoldOut)
 async def confirm(
     id: UUID,
-    _: CurrentUser = Depends(get_current_user),
+    current: CurrentUser = Depends(get_current_user),
     repo: PostgresHoldRepository = Depends(get_hold_repo),
 ) -> HoldOut:
-    hold = await ConfirmHold(repo=repo).execute(hold_id=id)
+    """Solo el dueño de la reserva o un admin."""
+    hold = await ConfirmHold(repo=repo).execute(
+        hold_id=id, requester_id=current.id, requester_role=current.role,
+    )
     return HoldOut(**hold.__dict__)
 
 
 @router.post("/holds/{id}/cancel", response_model=HoldOut)
 async def cancel(
     id: UUID,
-    _: CurrentUser = Depends(get_current_user),
+    current: CurrentUser = Depends(get_current_user),
     hold_repo: PostgresHoldRepository = Depends(get_hold_repo),
     availability_repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
 ) -> HoldOut:
-    hold = await CancelHold(hold_repo=hold_repo, availability_repo=availability_repo).execute(hold_id=id)
+    """Solo el dueño de la reserva o un admin. Libera el cupo del día."""
+    hold = await CancelHold(hold_repo=hold_repo, availability_repo=availability_repo).execute(
+        hold_id=id, requester_id=current.id, requester_role=current.role,
+    )
     return HoldOut(**hold.__dict__)
 
 

@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
-from app.modules.store.domain.models import Addon, Category, Product, Species
+from app.modules.store.domain.models import Addon, Category, Product, Species, breed_allowed
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 from app.modules.store.app.use_cases_impl.quote import _breed_category
 from app.modules.pets.domain.pet import PetRepository
@@ -52,6 +52,10 @@ class ListProducts:
         effective_species = pet_species or species
 
         products = await self.repo.list_products(category_id=category.id, species=effective_species)
+        if pet_id is not None:
+            # Con mascota, solo lo que su raza puede comprar (el carrito rechazaría el resto).
+            breed_id, breed_name = await _pet_breed(self.pets_repo, pet_id)
+            products = [p for p in products if breed_allowed(p.allowed_breeds, breed_id, breed_name)]
         result = []
         for p in products:
             price = None
@@ -92,6 +96,12 @@ class GetProduct:
             )
 
         addons = await self.repo.list_addons(product_id=product_id)
+        if pet_id is not None:
+            breed_id, breed_name = await _pet_breed(self.pets_repo, pet_id)
+            addons = [
+                a for a in addons
+                if a.species == pet_species and breed_allowed(a.allowed_breeds, breed_id, breed_name)
+            ]
         resolved_addons: List[ResolvedAddon] = []
         for a in addons:
             addon_price = None
@@ -106,6 +116,11 @@ class GetProduct:
             resolved_addons.append(ResolvedAddon(addon=a, price=addon_price))
 
         return ResolvedProduct(product=product, price=product_price), resolved_addons
+
+
+async def _pet_breed(pets_repo: PetRepository, pet_id: UUID) -> tuple[Optional[str], Optional[str]]:
+    pet = await pets_repo.get_by_id(pet_id)
+    return (getattr(pet, "breed_id", None), getattr(pet, "breed_name", None)) if pet else (None, None)
 
 
 async def _resolve_pet(

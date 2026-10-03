@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -8,6 +9,7 @@ from app.core.db import engine, get_async_session
 from app.modules.cart.api.schemas import CartItemIn, CartItemsBatchIn, CartItemOut, CartOut, CartWithItemsOut, CheckoutOut, CartValidationOut
 from app.modules.cart.app.use_cases import (
     AddItem,
+    CartPricing,
     Checkout,
     CreateCart,
     CreateCartWithItems,
@@ -18,6 +20,7 @@ from app.modules.cart.app.use_cases import (
     ReplaceAllItems,
     ValidateCart,
 )
+from app.modules.cart.app.use_cases_impl.pricing import prices_differ
 from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository
 
 
@@ -26,6 +29,25 @@ router = APIRouter(tags=["cart"], prefix="/cart")
 
 def get_cart_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresCartRepository:
     return PostgresCartRepository(session=session, engine=engine)
+
+
+def get_cart_pricing(session: AsyncSession = Depends(get_async_session)) -> CartPricing:
+    from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
+    from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
+
+    return CartPricing(
+        store_repo=PostgresStoreRepository(session=session, engine=engine),
+        pets_repo=PostgresPetRepository(session=session, engine=engine),
+    )
+
+
+def _item_out(item, client_unit_price: Optional[float] = None) -> CartItemOut:
+    """El precio es siempre el del servidor; si el front mandó otro, se marca price_adjusted."""
+    out = CartItemOut(**item.__dict__)
+    if client_unit_price is not None and prices_differ(client_unit_price, item.unit_price):
+        out.price_adjusted = True
+        out.client_unit_price = client_unit_price
+    return out
 
 
 @router.get("", response_model=CartWithItemsOut)
@@ -56,9 +78,13 @@ async def create_cart_with_items(
     payload: CartItemsBatchIn,
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
+    pricing: CartPricing = Depends(get_cart_pricing),
 ) -> CartWithItemsOut:
     """
     Crea un carrito nuevo con múltiples items de una vez.
+
+    Precios y nombres los calcula el backend (store) por especie, raza y peso de la mascota;
+    el unit_price que envíe el front se ignora (price_adjusted=true si no coincidía).
     
     Flujo típico:
     1. Usuario selecciona mascota
@@ -72,13 +98,13 @@ async def create_cart_with_items(
     Retorna el carrito creado + items agregados.
     """
     items_dict = [item.model_dump() for item in payload.items]
-    cart, items = await CreateCartWithItems(repo=repo).execute(
+    cart, items = await CreateCartWithItems(repo=repo, pricing=pricing).execute(
         user_id=current.id,
         items=items_dict,
     )
     return CartWithItemsOut(
         cart=CartOut(**cart.__dict__),
-        items=[CartItemOut(**i.__dict__) for i in items],
+        items=[_item_out(i, sent.unit_price) for i, sent in zip(items, payload.items)],
     )
 
 
@@ -102,6 +128,7 @@ async def add_item(
     payload: CartItemIn,
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
+    pricing: CartPricing = Depends(get_cart_pricing),
 ) -> CartItemOut:
     """
     Agrega un item individual al carrito existente.
@@ -110,7 +137,7 @@ async def add_item(
     
     DEPRECADO: Preferir usar POST /cart/items (batch) o PUT /cart/{id}/items (replace).
     """
-    item = await AddItem(repo=repo).execute(
+    item = await AddItem(repo=repo, pricing=pricing).execute(
         cart_id=id,
         user_id=current.id,
         kind=payload.kind,
@@ -120,7 +147,7 @@ async def add_item(
         unit_price=payload.unit_price,
         meta=payload.meta,
     )
-    return CartItemOut(**item.__dict__)
+    return _item_out(item, payload.unit_price)
 
 
 @router.put("/{id}/items", response_model=CartWithItemsOut)
@@ -129,9 +156,10 @@ async def replace_all_items(
     payload: CartItemsBatchIn,
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
+    pricing: CartPricing = Depends(get_cart_pricing),
 ) -> CartWithItemsOut:
     """
-    Reemplaza TODOS los items del carrito.
+    Reemplaza TODOS los items del carrito (precios calculados por el backend).
     
     Uso típico: Usuario quiere cambiar de servicio base.
     
@@ -146,7 +174,7 @@ async def replace_all_items(
     Retorna el carrito actualizado + nuevos items.
     """
     items_dict = [item.model_dump() for item in payload.items]
-    items = await ReplaceAllItems(repo=repo).execute(
+    items = await ReplaceAllItems(repo=repo, pricing=pricing).execute(
         cart_id=id,
         user_id=current.id,
         items=items_dict,
@@ -154,7 +182,7 @@ async def replace_all_items(
     cart = await GetCart(repo=repo).execute(cart_id=id, user_id=current.id)
     return CartWithItemsOut(
         cart=CartOut(**cart.__dict__),
-        items=[CartItemOut(**i.__dict__) for i in items],
+        items=[_item_out(i, sent.unit_price) for i, sent in zip(items, payload.items)],
     )
 
 
@@ -211,9 +239,15 @@ async def checkout(
     id: UUID,
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
+    pricing: CartPricing = Depends(get_cart_pricing),
 ) -> CheckoutOut:
     """
     Finaliza el carrito marcándolo como checked_out.
+
+    Antes de cerrar, el backend recotiza el carrito. Si algún precio cambió desde que se agregó
+    (regla de precio o peso de la mascota), guarda los precios nuevos y responde
+    409 {"code": "PRICE_CHANGED", "items": [...], "total": ...}; el front muestra el nuevo
+    total y vuelve a llamar a checkout.
 
     Nota: la creación de la orden (tabla `orders`) se realiza vía POST /orders,
     porque requiere seleccionar una dirección (address_id o default).
@@ -248,7 +282,7 @@ async def checkout(
         )
     
     # Procesar checkout
-    cart = await Checkout(repo=repo).execute(cart_id=id, user_id=current.id)
+    cart = await Checkout(repo=repo, pricing=pricing).execute(cart_id=id, user_id=current.id)
     items = await ListItems(repo=repo).execute(cart_id=id, user_id=current.id)
 
     total = 0.0

@@ -57,6 +57,17 @@ class PriceRule:
     is_active: bool
 
 
+def breed_allowed(allowed_breeds: Optional[List[str]], breed_id: Optional[str], breed_name: Optional[str]) -> bool:
+    """Un servicio/addon sin `allowed_breeds` aplica a toda raza. Si tiene lista, la mascota debe
+    coincidir por id de raza o por nombre (sin distinguir mayúsculas): el admin carga la lista como
+    texto libre y no hay garantía de que use ids."""
+    if not allowed_breeds:
+        return True
+    allowed = {b.strip().lower() for b in allowed_breeds if b and b.strip()}
+    candidates = {str(v).strip().lower() for v in (breed_id, breed_name) if v and str(v).strip()}
+    return bool(allowed & candidates)
+
+
 class StoreRepository(Protocol):
     # --- categorías ---
     async def list_categories(self, *, species: Optional[Species] = None) -> List[Category]: ...

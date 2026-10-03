@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
-from app.modules.store.domain.models import Species
+from app.modules.store.domain.models import Species, breed_allowed
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 from app.modules.pets.domain.pet import PetRepository
 
@@ -59,71 +59,97 @@ class Quote:
         pet = await self.pets_repo.get_by_id(pet_id)
         if not pet:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
+        return await price_service(self.repo, pet=pet, product_id=product_id, addon_ids=addon_ids)
 
-        pet_weight = getattr(pet, "weight_kg", None)
-        if pet_weight is None or float(pet_weight) <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Pet weight_kg is required to quote",
-            )
 
-        raw_species = getattr(pet.species, "value", pet.species)
-        pet_species = Species(str(raw_species))
-        breed_cat = _breed_category(getattr(pet, "breed_id", None), getattr(pet, "breed_name", None))
-        weight = float(pet_weight)
+async def price_service(
+    repo: PostgresStoreRepository,
+    *,
+    pet,
+    product_id: UUID,
+    addon_ids: Optional[List[UUID]] = None,
+) -> QuoteResult:
+    """
+    Única fuente del precio de un servicio + addons para una mascota (por especie, categoría de
+    raza y peso). La usan `POST /store/quote` y el carrito, para que el cliente pague exactamente
+    lo que se le cotizó.
+    """
+    pet_weight = getattr(pet, "weight_kg", None)
+    if pet_weight is None or float(pet_weight) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Pet weight_kg is required to quote",
+        )
 
-        product = await self.repo.get_product(product_id)
-        if not product or not product.is_active:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    raw_species = getattr(pet.species, "value", pet.species)
+    pet_species = Species(str(raw_species))
+    breed_id = getattr(pet, "breed_id", None)
+    breed_name = getattr(pet, "breed_name", None)
+    breed_cat = _breed_category(breed_id, breed_name)
+    weight = float(pet_weight)
 
-        if product.species != pet_species:
+    product = await repo.get_product(product_id)
+    if not product or not product.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    if product.species != pet_species:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Product species does not match pet species",
+        )
+    if not breed_allowed(product.allowed_breeds, breed_id, breed_name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Product is not available for this pet's breed",
+        )
+
+    product_price = await repo.price_for(
+        target_id=product.id,
+        target_type="product",
+        species=pet_species,
+        breed_category=breed_cat,
+        weight=weight,
+    )
+    if product_price is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No price rule found for this product and pet",
+        )
+
+    product_line = QuoteLine(target_id=product.id, name=product.name, price=product_price)
+
+    addons_out: List[QuoteLine] = []
+    for addon_id in addon_ids or []:
+        addon = await repo.get_addon(addon_id)
+        if not addon or not addon.is_active:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Product species does not match pet species",
+                detail={"addon_id": str(addon_id), "reason": "not_found"},
+            )
+        if addon.product_id != product.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"addon_id": str(addon_id), "reason": "not_in_product"},
+            )
+        if addon.species != pet_species or not breed_allowed(addon.allowed_breeds, breed_id, breed_name):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"addon_id": str(addon_id), "reason": "not_for_this_pet"},
             )
 
-        product_price = await self.repo.price_for(
-            target_id=product.id,
-            target_type="product",
+        addon_price = await repo.price_for(
+            target_id=addon.id,
+            target_type="addon",
             species=pet_species,
             breed_category=breed_cat,
             weight=weight,
         )
-        if product_price is None:
+        if addon_price is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No price rule found for this product and pet",
+                detail={"addon_id": str(addon_id), "reason": "no_price_rule"},
             )
+        addons_out.append(QuoteLine(target_id=addon.id, name=addon.name, price=addon_price))
 
-        product_line = QuoteLine(target_id=product.id, name=product.name, price=product_price)
-
-        addons_out: List[QuoteLine] = []
-        for addon_id in addon_ids or []:
-            addon = await self.repo.get_addon(addon_id)
-            if not addon or not addon.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={"addon_id": str(addon_id), "reason": "not_found"},
-                )
-            if addon.product_id != product.id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={"addon_id": str(addon_id), "reason": "not_in_product"},
-                )
-
-            addon_price = await self.repo.price_for(
-                target_id=addon.id,
-                target_type="addon",
-                species=pet_species,
-                breed_category=breed_cat,
-                weight=weight,
-            )
-            if addon_price is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail={"addon_id": str(addon_id), "reason": "no_price_rule"},
-                )
-            addons_out.append(QuoteLine(target_id=addon.id, name=addon.name, price=addon_price))
-
-        total = product_line.price + sum(a.price for a in addons_out)
-        return QuoteResult(pet_id=pet_id, product=product_line, addons=addons_out, total=total)
+    total = product_line.price + sum(a.price for a in addons_out)
+    return QuoteResult(pet_id=pet.id, product=product_line, addons=addons_out, total=total)

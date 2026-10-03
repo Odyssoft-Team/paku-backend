@@ -1,7 +1,7 @@
 # Tracking API — Guía de integración para Frontend
 
-Seguimiento en tiempo real del groomer (ally) en camino al domicilio del cliente.
-Funciona similar a Rappi/Uber: el ally envía su GPS periódicamente y el cliente
+Seguimiento en tiempo real del groomer en camino al domicilio del cliente.
+Funciona similar a Rappi/Uber: el groomer envía su GPS periódicamente y el cliente
 ve su posición en el mapa con ETA actualizado.
 
 ---
@@ -12,7 +12,7 @@ ve su posición en el mapa con ETA actualizado.
 2. [Estados de la orden y tracking](#estados-de-la-orden-y-tracking)
 3. [Autenticación](#autenticación)
 4. [Endpoints](#endpoints)
-   - [Ally: reportar posición](#1-post-trackingordersorder_idlocation)
+   - [Groomer: reportar posición](#1-post-trackingordersorder_idlocation)
    - [Cliente: obtener posición actual](#2-get-trackingordersorder_idcurrent)
    - [Cliente: ruta y ETA](#3-get-trackingordersorder_idroute)
 5. [Flujos recomendados](#flujos-recomendados)
@@ -25,12 +25,12 @@ ve su posición en el mapa con ETA actualizado.
 ## Cómo funciona
 
 ```
-[App Ally]  →  POST /location (cada 10s)  →  [Backend]  →  PostgreSQL
+[App Groomer]  →  POST /location (cada 10s)  →  [Backend]  →  PostgreSQL
                                                                 ↓
 [App Cliente]  ←  GET /current (cada 10s)  ←  [Backend]  ←  PostgreSQL
 ```
 
-1. El **ally** reporta su lat/lng cada **10 segundos** al backend.
+1. El **groomer** reporta su lat/lng cada **10 segundos** al backend.
 2. El **backend** guarda la última posición en PostgreSQL (upsert — siempre 1 fila por orden).
 3. El **cliente** hace polling cada 10 segundos para obtener la posición actualizada.
 4. Opcionalmente el cliente llama a `/route` para obtener la **polyline dibujable** y el **ETA**.
@@ -39,7 +39,7 @@ ve su posición en el mapa con ETA actualizado.
 
 ## Estados de la orden y tracking
 
-| Estado de la orden | ¿Ally puede reportar? | ¿Cliente puede ver? |
+| Estado de la orden | ¿Groomer puede reportar? | ¿Cliente puede ver? |
 |---|---|---|
 | `created` | ❌ | ❌ |
 | `accepted` | ❌ | ❌ |
@@ -62,9 +62,9 @@ Authorization: Bearer <access_token>
 
 | Endpoint | Quién puede llamarlo |
 |---|---|
-| `POST /location` | Solo el **ally** asignado a la orden (`role: "ally"`) |
-| `GET /current` | Cliente dueño, ally asignado o admin |
-| `GET /route` | Cliente dueño, ally asignado o admin |
+| `POST /location` | Solo el **groomer** asignado a la orden (`role: "groomer"`) |
+| `GET /current` | Cliente dueño, groomer asignado o admin |
+| `GET /route` | Cliente dueño, groomer asignado o admin |
 
 ---
 
@@ -80,13 +80,13 @@ https://<tu-dominio>/tracking
 
 ### 1. `POST /tracking/orders/{order_id}/location`
 
-**Lo llama el app del ALLY.** Envía la posición GPS actual. Llamar cada **10 segundos**.
+**Lo llama el app del GROOMER.** Envía la posición GPS actual. Llamar cada **10 segundos**.
 
 #### Request
 
 ```
 POST /tracking/orders/3fa85f64-5717-4562-b3fc-2c963f66afa6/location
-Authorization: Bearer eyJ...  (token del ally)
+Authorization: Bearer eyJ...  (token del groomer)
 Content-Type: application/json
 ```
 
@@ -121,7 +121,7 @@ Content-Type: application/json
 
 ### 2. `GET /tracking/orders/{order_id}/current`
 
-**Lo llama el app del CLIENTE.** Devuelve la última posición del ally y las coordenadas del destino. Hacer polling cada **10 segundos**.
+**Lo llama el app del CLIENTE.** Devuelve la última posición del groomer y las coordenadas del destino. Hacer polling cada **10 segundos**.
 
 #### Request
 
@@ -136,7 +136,7 @@ Authorization: Bearer eyJ...
 {
   "order_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "order_status": "on_the_way",
-  "ally_location": {
+  "groomer_location": {
     "lat": -12.046374,
     "lng": -77.042793,
     "accuracy_m": 8.5,
@@ -156,9 +156,9 @@ Authorization: Bearer eyJ...
 
 | Campo | Descripción |
 |---|---|
-| `ally_location` | `null` si el ally aún no envió su primera posición |
+| `groomer_location` | `null` si el groomer aún no envió su primera posición |
 | `destination` | Coordenadas del domicilio del cliente (fijas, desde la orden) |
-| `staleness_seconds` | Segundos desde el último reporte del ally. Si supera ~30s, mostrar aviso "Actualizando ubicación..." |
+| `staleness_seconds` | Segundos desde el último reporte del groomer. Si supera ~30s, mostrar aviso "Actualizando ubicación..." |
 
 ---
 
@@ -180,7 +180,7 @@ Authorization: Bearer eyJ...
 ```json
 {
   "order_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "ally_location": {
+  "groomer_location": {
     "lat": -12.046374,
     "lng": -77.042793,
     "accuracy_m": 8.5,
@@ -208,13 +208,13 @@ Authorization: Bearer eyJ...
 | `polyline` | ✅ | Encoded polyline para dibujar en el mapa con Google Maps SDK o Mapbox |
 | `distance_meters` | ✅ | Distancia restante en metros |
 
-> Todos los campos pueden ser `null` si el ally aún no reportó su posición (no hay origen).
+> Todos los campos pueden ser `null` si el groomer aún no reportó su posición (no hay origen).
 
 ---
 
 ## Flujos recomendados
 
-### App del Ally — reportar posición
+### App del Groomer — reportar posición
 
 ```
 Al cambiar orden a on_the_way:
@@ -230,7 +230,7 @@ Al cambiar orden a on_the_way:
 Al detectar que order_status = on_the_way:
   1. Mostrar pantalla de mapa
   2. GET /current (para posición inicial)
-  3. Cada 10s → GET /current (actualizar marcador del ally)
+  3. Cada 10s → GET /current (actualizar marcador del groomer)
   4. Cada 30s → GET /route (actualizar polyline y ETA)
   5. Al detectar order_status = in_service → cambiar UI ("¡Ya llegó!")
   6. Al cerrar el mapa → cancelar los intervalos
@@ -240,7 +240,7 @@ Al detectar que order_status = on_the_way:
 
 ## Ejemplos completos en React Native / Expo
 
-### App del Ally — `useLocationReporter.ts`
+### App del Groomer — `useLocationReporter.ts`
 
 ```typescript
 // hooks/useLocationReporter.ts
@@ -295,7 +295,7 @@ export function useLocationReporter(
               }),
             });
           } catch {
-            // best-effort — no interrumpir al ally si hay error de red momentáneo
+            // best-effort — no interrumpir al groomer si hay error de red momentáneo
           }
         }
       );
@@ -314,10 +314,10 @@ export function useLocationReporter(
 
 ---
 
-### App del Cliente — `useAllyTracking.ts`
+### App del Cliente — `useGroomerTracking.ts`
 
 ```typescript
-// hooks/useAllyTracking.ts
+// hooks/useGroomerTracking.ts
 import { useEffect, useRef, useState } from "react";
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -330,7 +330,7 @@ export interface LocationPoint {
 }
 
 export interface TrackingState {
-  allyLocation: LocationPoint | null;
+  groomerLocation: LocationPoint | null;
   destination: LocationPoint | null;
   stalenessSeconds: number | null;
   etaDisplay: string | null;
@@ -338,13 +338,13 @@ export interface TrackingState {
   loading: boolean;
 }
 
-export function useAllyTracking(
+export function useGroomerTracking(
   orderId: string,
   accessToken: string,
   active: boolean  // true cuando order_status === "on_the_way" || "in_service"
 ) {
   const [state, setState] = useState<TrackingState>({
-    allyLocation: null,
+    groomerLocation: null,
     destination: null,
     stalenessSeconds: null,
     etaDisplay: null,
@@ -371,7 +371,7 @@ export function useAllyTracking(
         if (!cancelled) {
           setState((prev) => ({
             ...prev,
-            allyLocation: data.ally_location,
+            groomerLocation: data.groomer_location,
             destination: data.destination,
             stalenessSeconds: data.staleness_seconds,
             loading: false,
@@ -428,7 +428,7 @@ import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { decodePolyline } from "../utils/polyline"; // ver nota abajo
-import { useAllyTracking } from "../hooks/useAllyTracking";
+import { useGroomerTracking } from "../hooks/useGroomerTracking";
 
 interface Props {
   orderId: string;
@@ -438,8 +438,8 @@ interface Props {
 
 export default function TrackingMapScreen({ orderId, accessToken, orderStatus }: Props) {
   const active = orderStatus === "on_the_way" || orderStatus === "in_service";
-  const { allyLocation, destination, stalenessSeconds, etaDisplay, polyline, loading } =
-    useAllyTracking(orderId, accessToken, active);
+  const { groomerLocation, destination, stalenessSeconds, etaDisplay, polyline, loading } =
+    useGroomerTracking(orderId, accessToken, active);
 
   if (loading) {
     return (
@@ -481,10 +481,10 @@ export default function TrackingMapScreen({ orderId, accessToken, orderStatus }:
             : undefined
         }
       >
-        {/* Marcador del ally */}
-        {allyLocation && (
+        {/* Marcador del groomer */}
+        {groomerLocation && (
           <Marker
-            coordinate={{ latitude: allyLocation.lat, longitude: allyLocation.lng }}
+            coordinate={{ latitude: groomerLocation.lat, longitude: groomerLocation.lng }}
             title="Tu groomer"
             pinColor="#4F46E5"
           />
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
 | Código | Causa | Acción recomendada |
 |---|---|---|
 | `401 Unauthorized` | Token expirado | Refrescar token o redirigir a login |
-| `403 Forbidden` | El ally no es el asignado a la orden | No iniciar el reporter |
+| `403 Forbidden` | El groomer no es el asignado a la orden | No iniciar el reporter |
 | `404 Not Found` | Orden inexistente | Mostrar error y redirigir |
 | `409 Conflict` | La orden no está en `on_the_way` ni `in_service` | Detener el polling/reporter silenciosamente |
 | `501 Not Implemented` | `GOOGLE_ROUTES_API_KEY` no configurada (solo `/route`) | Ocultar la polyline y ETA, mostrar solo el marcador |
@@ -558,14 +558,14 @@ const styles = StyleSheet.create({
 
 ## Preguntas frecuentes
 
-**¿Qué pasa si el ally no tiene señal por unos segundos?**
+**¿Qué pasa si el groomer no tiene señal por unos segundos?**
 El cliente simplemente muestra la última posición conocida. El campo `staleness_seconds` te dice cuántos segundos tienen esos datos. Si supera 30s, muestra "Actualizando ubicación...".
 
 **¿Necesito Google Maps SDK para mostrar el mapa?**
 No es obligatorio. Puedes usar `react-native-maps` (incluye Google Maps en Android y Apple Maps en iOS). Para la polyline, cualquier proveedor que acepte coordenadas lat/lng funciona.
 
 **¿Debo pedir permisos de ubicación en background?**
-Para el **ally** solo se necesitan permisos `foreground` mientras tiene la app abierta. Si quieres que reporte en background, solicita `background` permissions y usa `expo-task-manager`. Para el **cliente** no se necesita ningún permiso de ubicación.
+Para el **groomer** solo se necesitan permisos `foreground` mientras tiene la app abierta. Si quieres que reporte en background, solicita `background` permissions y usa `expo-task-manager`. Para el **cliente** no se necesita ningún permiso de ubicación.
 
 **¿Qué tan preciso es el ETA?**
 Viene de Google Routes API con `TRAFFIC_AWARE`, es decir, considera el tráfico en tiempo real. Es el mismo cálculo que usa Google Maps. La precisión es muy alta.

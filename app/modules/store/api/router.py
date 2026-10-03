@@ -4,7 +4,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import CurrentUser, get_current_user, require_roles
+from app.modules.store.app.use_cases_impl.access import check_pet_access as _check_pet_access
+
+from app.core.auth import CurrentUser, get_current_user, get_optional_current_user, require_roles
 from app.core.db import engine, get_async_session
 from app.modules.store.api.schemas import (
     AddonCreateIn,
@@ -81,9 +83,11 @@ async def list_products(
     slug: str,
     pet_id: Optional[UUID] = Query(None),
     species: Optional[Species] = Query(None),
+    current: Optional[CurrentUser] = Depends(get_optional_current_user),
     repo: PostgresStoreRepository = Depends(get_store_repo),
     pets_repo: PetRepository = Depends(get_pets_repo),
 ) -> List[ProductOut]:
+    await _check_pet_access(pet_id, current, pets_repo)
     items = await ListProducts(repo=repo, pets_repo=pets_repo).execute(
         category_slug=slug, pet_id=pet_id, species=species
     )
@@ -94,9 +98,11 @@ async def list_products(
 async def get_product(
     id: UUID,
     pet_id: Optional[UUID] = Query(None),
+    current: Optional[CurrentUser] = Depends(get_optional_current_user),
     repo: PostgresStoreRepository = Depends(get_store_repo),
     pets_repo: PetRepository = Depends(get_pets_repo),
 ) -> ProductDetailOut:
+    await _check_pet_access(pet_id, current, pets_repo)
     rp, addons = await GetProduct(repo=repo, pets_repo=pets_repo).execute(product_id=id, pet_id=pet_id)
     return ProductDetailOut(
         **rp.product.__dict__,
@@ -108,10 +114,11 @@ async def get_product(
 @router.post("/quote", response_model=QuoteOut)
 async def quote(
     payload: QuoteIn,
-    _: CurrentUser = Depends(get_current_user),
+    current: CurrentUser = Depends(get_current_user),
     repo: PostgresStoreRepository = Depends(get_store_repo),
     pets_repo: PetRepository = Depends(get_pets_repo),
 ) -> QuoteOut:
+    await _check_pet_access(payload.pet_id, current, pets_repo)
     result = await Quote(repo=repo, pets_repo=pets_repo).execute(
         pet_id=payload.pet_id,
         product_id=payload.product_id,

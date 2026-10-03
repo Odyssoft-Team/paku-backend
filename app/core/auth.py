@@ -23,6 +23,16 @@ class CurrentUser:
     is_active: bool
     profile_completed: bool = True
 
+# Roles renombrados. Los tokens emitidos antes del renombre (access 30 min, refresh 30 días) siguen
+# diciendo "ally"; se tratan como "groomer" hasta que expiren. Ver docs/plan-de-trabajo.md (fase 2).
+_LEGACY_ROLES = {"ally": "groomer"}
+
+
+def normalize_role(role) -> str:
+    value = str(role)
+    return _LEGACY_ROLES.get(value, value)
+
+
 def hash_password(password: str) -> str:
     """Hashea la contraseña con bcrypt (work factor 12).
     Seguro contra ataques de fuerza bruta por su costo computacional.
@@ -210,10 +220,23 @@ async def get_current_user(
     return CurrentUser(
         id=user_id,
         email=str(data.get("email")),
-        role=str(data.get("role")),
+        role=normalize_role(data.get("role")),
         is_active=bool(data.get("is_active", True)),
         profile_completed=bool(data.get("profile_completed", True)),
     )
+
+
+_optional_security = HTTPBearer(auto_error=False)
+
+
+async def get_optional_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_security),
+) -> Optional[CurrentUser]:
+    """Para endpoints públicos que cambian de comportamiento si hay sesión.
+    Sin header → None; con un token inválido → 401 (igual que get_current_user)."""
+    if credentials is None:
+        return None
+    return await get_current_user(credentials=credentials, request=None)
 
 
 def require_roles(*roles: str):

@@ -215,20 +215,20 @@ class PayOrder:
 @dataclass
 class ConfirmCashPayment:
     """
-    Confirma un pago en efectivo, ejecutado por el ally asignado al momento de la
+    Confirma un pago en efectivo, ejecutado por el groomer asignado al momento de la
     entrega. No pasa por Culqi — descentraliza el cobro hacia la operación física.
     """
     orders_repo: PostgresOrderRepository
 
-    async def execute(self, *, order_id: UUID, ally_id: UUID) -> Order:
+    async def execute(self, *, order_id: UUID, groomer_id: UUID) -> Order:
         try:
-            order = await self.orders_repo.confirm_cash_payment(id=order_id, ally_id=ally_id)
+            order = await self.orders_repo.confirm_cash_payment(id=order_id, groomer_id=groomer_id)
             await _notify_payment_confirmed(self.orders_repo, order)
             return order
         except ValueError as exc:
             if str(exc) == "order_not_found":
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found") from exc
-            if str(exc) == "not_assigned_ally":
+            if str(exc) == "not_assigned_groomer":
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a esta orden") from exc
             if str(exc) == "payment_already_processed":
                 raise HTTPException(

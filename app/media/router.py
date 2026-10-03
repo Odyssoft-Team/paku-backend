@@ -29,6 +29,15 @@ from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 router = APIRouter(tags=["media"])
 
 
+async def _get_order(session: AsyncSession, order_id: UUID):
+    from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
+
+    order = await PostgresOrderRepository(session=session, engine=engine).get_order_admin(id=order_id)
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+    return order
+
+
 @router.post("/media/signed-upload", response_model=SignedUploadResponse, status_code=status.HTTP_201_CREATED)
 async def create_signed_upload(
     payload: SignedUploadRequest,
@@ -50,6 +59,11 @@ async def create_signed_upload(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot upload media for another user",
             )
+    elif payload.entity_type == MediaEntityType.order:
+        # Fotos del servicio: solo el groomer asignado o un admin.
+        order = await _get_order(session, payload.entity_id)
+        if current.role != "admin" and order.groomer_id != current_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot upload media for this order")
     else:
         # entity_type == pet: la mascota debe existir y pertenecer al current_user
         pet_repo = PostgresPetRepository(session=session, engine=engine)
@@ -115,6 +129,11 @@ async def create_signed_read(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot read media for another user",
             )
+    elif prefix == "orders":
+        # Fotos del servicio: groomer asignado, cliente dueño de la orden o admin.
+        order = await _get_order(session, entity_id)
+        if current.role != "admin" and current_id not in (order.groomer_id, order.user_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot read media for this order")
     else:
         # prefix == "pets": verificar que la mascota existe y pertenece al current_user
         pet_repo = PostgresPetRepository(session=session, engine=engine)
@@ -160,6 +179,12 @@ async def confirm_profile_photo(
         obj_prefix, obj_entity_id = parse_object_name(payload.object_name)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if payload.entity_type == MediaEntityType.order:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Las fotos de una orden se registran con POST /orders/{id}/photos",
+        )
 
     # Verificar que el object_name pertenece realmente a la entidad declarada
     expected_prefix = "users" if payload.entity_type == MediaEntityType.user else "pets"

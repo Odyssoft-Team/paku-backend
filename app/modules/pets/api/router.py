@@ -96,8 +96,19 @@ async def list_pets(
 
 
 @router.get("/pets/{id}", response_model=PetOut)
-async def get_pet(id: UUID, repo: PetRepository = Depends(get_pet_repo)) -> PetOut:
-    pet = await GetPet(repo=repo).execute(pet_id=id)
+async def get_pet(
+    id: UUID,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PetRepository = Depends(get_pet_repo),
+    session: AsyncSession = Depends(get_async_session),
+) -> PetOut:
+    """Dueño, groomer asignado a una orden activa de la mascota, o admin."""
+    from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
+
+    orders_repo = PostgresOrderRepository(session=session, engine=engine)
+    pet = await GetPet(repo=repo, orders_repo=orders_repo).execute(
+        id, requester_id=current.id, requester_role=current.role,
+    )
     return _pet_to_out(pet)
 
 

@@ -56,8 +56,8 @@ class CreateRecord:
             pass
         elif is_owner:
             pass
-        elif role == "ally":
-            assigned = await self.orders_repo.is_ally_assigned_to_pet(ally_id=user_id, pet_id=pet_id)
+        elif role == "groomer":
+            assigned = await self.orders_repo.is_groomer_assigned_to_pet(groomer_id=user_id, pet_id=pet_id)
             if not assigned:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
         else:
@@ -72,8 +72,8 @@ class CreateRecord:
 
         if role == "admin":
             recorded_by_role = RecordRole.admin
-        elif role == "ally":
-            recorded_by_role = RecordRole.ally
+        elif role == "groomer":
+            recorded_by_role = RecordRole.groomer
         else:
             recorded_by_role = RecordRole.owner
 
@@ -104,9 +104,9 @@ class CreateRecord:
             await self.pets_repo.update(updated_pet)
 
             # Detección de candidato a recálculo de precio (ver plan): solo si quien registra
-            # es admin/ally (no el dueño autoreportando en casa) y hay una orden pagada de
+            # es admin/groomer (no el dueño autoreportando en casa) y hay una orden pagada de
             # esta mascota cuyo servicio aún no termina.
-            if recorded_by_role in (RecordRole.admin, RecordRole.ally):
+            if recorded_by_role in (RecordRole.admin, RecordRole.groomer):
                 order = await self.orders_repo.find_recalculation_candidate(pet_id=pet_id)
                 if order is not None:
                     species = Species(str(pet.species.value if hasattr(pet.species, "value") else pet.species))
