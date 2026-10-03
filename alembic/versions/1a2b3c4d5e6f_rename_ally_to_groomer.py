@@ -33,27 +33,28 @@ def upgrade() -> None:
 
     # orders
     op.alter_column("orders", "ally_id", new_column_name="groomer_id")
-    op.execute("ALTER INDEX ix_orders_ally_id RENAME TO ix_orders_groomer_id")
+    # IF EXISTS: un índice con otro nombre en alguna BD no debe impedir el arranque (el renombre es cosmético).
+    op.execute("ALTER INDEX IF EXISTS ix_orders_ally_id RENAME TO ix_orders_groomer_id")
 
     # order_assignments
     op.alter_column("order_assignments", "ally_id", new_column_name="groomer_id")
-    op.execute("ALTER INDEX ix_order_assignments_ally_id RENAME TO ix_order_assignments_groomer_id")
+    op.execute("ALTER INDEX IF EXISTS ix_order_assignments_ally_id RENAME TO ix_order_assignments_groomer_id")
 
     # tracking
     op.rename_table("ally_locations", "groomer_locations")
     op.alter_column("groomer_locations", "ally_id", new_column_name="groomer_id")
-    op.execute("ALTER INDEX ix_ally_locations_ally_id RENAME TO ix_groomer_locations_groomer_id")
+    op.execute("ALTER INDEX IF EXISTS ix_ally_locations_ally_id RENAME TO ix_groomer_locations_groomer_id")
 
 
 def downgrade() -> None:
-    op.execute("ALTER INDEX ix_groomer_locations_groomer_id RENAME TO ix_ally_locations_ally_id")
+    op.execute("ALTER INDEX IF EXISTS ix_groomer_locations_groomer_id RENAME TO ix_ally_locations_ally_id")
     op.alter_column("groomer_locations", "groomer_id", new_column_name="ally_id")
     op.rename_table("groomer_locations", "ally_locations")
 
-    op.execute("ALTER INDEX ix_order_assignments_groomer_id RENAME TO ix_order_assignments_ally_id")
+    op.execute("ALTER INDEX IF EXISTS ix_order_assignments_groomer_id RENAME TO ix_order_assignments_ally_id")
     op.alter_column("order_assignments", "groomer_id", new_column_name="ally_id")
 
-    op.execute("ALTER INDEX ix_orders_groomer_id RENAME TO ix_orders_ally_id")
+    op.execute("ALTER INDEX IF EXISTS ix_orders_groomer_id RENAME TO ix_orders_ally_id")
     op.alter_column("orders", "groomer_id", new_column_name="ally_id")
 
     op.execute("UPDATE pet_records SET recorded_by_role = 'ally' WHERE recorded_by_role = 'groomer'")

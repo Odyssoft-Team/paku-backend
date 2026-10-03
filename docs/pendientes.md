@@ -13,8 +13,21 @@ del dueño; "Para después" ya está entendido y se programa más adelante.
 
 ## Configuración del servidor (no es código)
 
-- **`GOOGLE_ROUTES_API_KEY`** (pedido 7): no está en `.env` ni en `docker-compose.yml`. Sin ella
-  `GET /tracking/orders/{id}/route` responde 501 y el mapa del groomer no muestra ruta/ETA.
+- **`GOOGLE_ROUTES_API_KEY`** (pedido 7) — análisis del 2026-10-03, se retoma más adelante:
+  - **Quién la usa:** solo `GET /tracking/orders/{id}/route` (`app/modules/tracking/use_cases/get_route.py`).
+    Sin la clave responde 501; con ella llama a Google Routes (`computeRoutes`) y devuelve
+    `eta_seconds`, `eta_display`, `distance_meters` y `polyline`.
+  - **Sin ella funciona** `GET /tracking/orders/{id}/current` (posición del groomer + destino, sin Google)
+    y todo el resto del backend.
+  - **¿Necesaria?** Solo si el mapa muestra ruta dibujada y tiempo de llegada. El pedido 7 del front dice
+    que el mapa del groomer usa `/route`.
+  - **Dónde va:** en el `.env` del servidor. El backend no lee `.env.example` (solo `.env.local` y `.env`);
+    hoy la clave está solo en `.env.example`, así que no se está usando. El dueño decidió mantener esa
+    clave (repo privado).
+  - **Costo:** cada llamada a `/route` es una consulta pagada a Google y no hay caché. Recomendar al front
+    llamar `/route` cada 30–60 s y usar `/current` para mover el punto; o agregar caché en el backend.
+  - Para habilitarla: proyecto GCP de Paku con facturación → habilitar "Routes API" → la clave restringida
+    a Routes API y a la IP del servidor → `.env` del servidor → `docker compose up -d`.
 - **Migraciones nuevas** `1a2b3c4d5e6f` → `2b3c4d5e6f7a` → `3c4d5e6f7a8b`: corren solas al arrancar el
   contenedor (`alembic upgrade head`). Probarlas antes en una copia de la BD.
 - **Venv local** sin `firebase_admin` ni `PyJWT` (están en `requirements.txt`): `pip install -r requirements.txt`.

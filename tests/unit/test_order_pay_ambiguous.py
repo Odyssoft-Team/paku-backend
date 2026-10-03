@@ -72,7 +72,28 @@ def test_charge_http_502_is_classified_by_outcome(monkeypatch, outcome, expected
 
     path, _payload, headers = _HTTPClient.calls[0]
     assert path == "/api/culqi/charges"
-    assert headers["Idempotency-Key"] == "order-order-123-payment"
+    assert headers["Idempotency-Key"].startswith("order-order-123-payment-")
+
+
+def test_idempotency_key_same_source_same_key_other_source_new_key(monkeypatch):
+    """Reintento con el mismo token = mismo intento; otra tarjeta tras un rechazo = intento nuevo."""
+    _HTTPClient.response = _Response(200, {"id": "chr_test_1234567890123456"})
+    _HTTPClient.exception = None
+    _HTTPClient.calls = []
+    monkeypatch.setattr("app.core.culqi_client.httpx.AsyncClient", _HTTPClient)
+
+    def _charge(source_id):
+        asyncio.run(CulqiPythonClient().create_charge(
+            order_id="order-123", amount=2500, currency_code="PEN", email="owner@example.test", source_id=source_id,
+        ))
+        return _HTTPClient.calls[-1][2]["Idempotency-Key"]
+
+    first = _charge("tkn_test_1234567890123456")
+    again = _charge("tkn_test_1234567890123456")
+    other = _charge("tkn_test_abcdefghijklmnop")
+
+    assert first == again
+    assert first != other
 
 
 @pytest.mark.parametrize("status_code", [503, 504])

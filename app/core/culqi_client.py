@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Optional
 
 import httpx
@@ -120,7 +121,12 @@ class CulqiPythonClient:
         }
         if antifraud_details:
             payload["antifraud_details"] = antifraud_details
-        idempotency_key = f"order-{order_id}-payment"
+        # Una clave por (orden, medio de pago): reintentar con el mismo token repite el mismo intento
+        # (culqi-python devuelve el resultado cacheado, sin doble cobro); pagar con otra tarjeta tras un
+        # rechazo es un intento nuevo. Con una clave fija por orden, culqi-python respondía 409 y la
+        # orden quedaba trabada en "verifying".
+        source_hash = hashlib.sha256(source_id.encode("utf-8")).hexdigest()[:16]
+        idempotency_key = f"order-{order_id}-payment-{source_hash}"
 
         try:
             async with httpx.AsyncClient(base_url=self._base_url, timeout=timeout) as client:
