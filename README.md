@@ -3,7 +3,8 @@
 ## 📚 **DOCUMENTACIÓN TÉCNICA**
 
 - **[docs/plan-de-trabajo.md](./docs/plan-de-trabajo.md)** — plan vigente y decisiones
-- **[docs/cambios-api-para-front.md](./docs/cambios-api-para-front.md)** — cambios de API para los fronts
+- **[docs/guia-front-cambios-octubre-2026.md](./docs/guia-front-cambios-octubre-2026.md)** — guía para los fronts: qué cambió y qué hacer por app
+- **[docs/cambios-api-para-front.md](./docs/cambios-api-para-front.md)** — cambios de API para los fronts (detalle C-01…)
 - **[docs/flujo-compra-servicio.md](./docs/flujo-compra-servicio.md)** — flujo de compra (carrito → orden → pago)
 - **[docs/chat-api.md](./docs/chat-api.md)**, **[docs/tracking-api.md](./docs/tracking-api.md)**
 - **[docs/pendientes.md](./docs/pendientes.md)**, **[docs/pendientes-pagos-culqi.md](./docs/pendientes-pagos-culqi.md)**
