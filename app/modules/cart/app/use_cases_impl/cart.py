@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from app.modules.cart.domain.cart import CartItemKind, CartRepository, CartSession, CartStatus
 
 from .common import _is_kind, _meta_dict, _raise_cart_error
+from .hold_binding import CartHolds
 from .pricing import CartPricing, prices_differ
 
 
@@ -53,6 +54,7 @@ class GetOrCreateActiveCart:
 class Checkout:
     repo: CartRepository
     pricing: CartPricing
+    holds: Optional[CartHolds] = None
 
     async def execute(self, *, cart_id: UUID, user_id: UUID) -> CartSession:
         try:
@@ -63,6 +65,13 @@ class Checkout:
 
         if cart.status == CartStatus.expired:
             raise HTTPException(status_code=status.HTTP_410_GONE, detail="Cart expired")
+
+        if self.holds is not None:
+            # La reserva del día debe seguir vigente; si venció → 409 HOLD_EXPIRED (elegir fecha de nuevo).
+            items = await self.repo.list_items(cart_id=cart_id, user_id=user_id)
+            await self.holds.assert_still_valid(
+                [{"kind": i.kind, "ref_id": i.ref_id, "meta": i.meta} for i in items], user_id=user_id,
+            )
 
         await self._reprice_or_fail(cart_id=cart_id, user_id=user_id)
 

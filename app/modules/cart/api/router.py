@@ -20,6 +20,7 @@ from app.modules.cart.app.use_cases import (
     ReplaceAllItems,
     ValidateCart,
 )
+from app.modules.cart.app.use_cases_impl.hold_binding import CartHolds
 from app.modules.cart.app.use_cases_impl.pricing import prices_differ
 from app.modules.cart.infra.postgres_cart_repository import PostgresCartRepository
 
@@ -39,6 +40,12 @@ def get_cart_pricing(session: AsyncSession = Depends(get_async_session)) -> Cart
         store_repo=PostgresStoreRepository(session=session, engine=engine),
         pets_repo=PostgresPetRepository(session=session, engine=engine),
     )
+
+
+def get_cart_holds(session: AsyncSession = Depends(get_async_session)) -> CartHolds:
+    from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepository
+
+    return CartHolds(hold_repo=PostgresHoldRepository(session=session, engine=engine))
 
 
 def _item_out(item, client_unit_price: Optional[float] = None) -> CartItemOut:
@@ -79,9 +86,13 @@ async def create_cart_with_items(
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
     pricing: CartPricing = Depends(get_cart_pricing),
+    holds: CartHolds = Depends(get_cart_holds),
 ) -> CartWithItemsOut:
     """
     Crea un carrito nuevo con múltiples items de una vez.
+
+    El servicio base debe traer meta.hold_id (reserva de cupo hecha antes con POST /holds); la fecha
+    del servicio sale de la reserva, que desde ahora vence junto con el carrito.
 
     Precios y nombres los calcula el backend (store) por especie, raza y peso de la mascota;
     el unit_price que envíe el front se ignora (price_adjusted=true si no coincidía).
@@ -98,7 +109,7 @@ async def create_cart_with_items(
     Retorna el carrito creado + items agregados.
     """
     items_dict = [item.model_dump() for item in payload.items]
-    cart, items = await CreateCartWithItems(repo=repo, pricing=pricing).execute(
+    cart, items = await CreateCartWithItems(repo=repo, pricing=pricing, holds=holds).execute(
         user_id=current.id,
         items=items_dict,
     )
@@ -129,6 +140,7 @@ async def add_item(
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
     pricing: CartPricing = Depends(get_cart_pricing),
+    holds: CartHolds = Depends(get_cart_holds),
 ) -> CartItemOut:
     """
     Agrega un item individual al carrito existente.
@@ -137,7 +149,7 @@ async def add_item(
     
     DEPRECADO: Preferir usar POST /cart/items (batch) o PUT /cart/{id}/items (replace).
     """
-    item = await AddItem(repo=repo, pricing=pricing).execute(
+    item = await AddItem(repo=repo, pricing=pricing, holds=holds).execute(
         cart_id=id,
         user_id=current.id,
         kind=payload.kind,
@@ -157,9 +169,11 @@ async def replace_all_items(
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
     pricing: CartPricing = Depends(get_cart_pricing),
+    holds: CartHolds = Depends(get_cart_holds),
 ) -> CartWithItemsOut:
     """
-    Reemplaza TODOS los items del carrito (precios calculados por el backend).
+    Reemplaza TODOS los items del carrito (precios calculados por el backend). Si cambia la reserva
+    del servicio base, la anterior se libera.
     
     Uso típico: Usuario quiere cambiar de servicio base.
     
@@ -174,7 +188,7 @@ async def replace_all_items(
     Retorna el carrito actualizado + nuevos items.
     """
     items_dict = [item.model_dump() for item in payload.items]
-    items = await ReplaceAllItems(repo=repo, pricing=pricing).execute(
+    items = await ReplaceAllItems(repo=repo, pricing=pricing, holds=holds).execute(
         cart_id=id,
         user_id=current.id,
         items=items_dict,
@@ -192,8 +206,10 @@ async def remove_item(
     item_id: UUID,
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
+    holds: CartHolds = Depends(get_cart_holds),
 ) -> None:
-    await RemoveItem(repo=repo).execute(cart_id=id, user_id=current.id, item_id=item_id)
+    """Quita un ítem. Si es el servicio base, su reserva de cupo se libera."""
+    await RemoveItem(repo=repo, holds=holds).execute(cart_id=id, user_id=current.id, item_id=item_id)
     return None
 
 
@@ -240,6 +256,7 @@ async def checkout(
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresCartRepository = Depends(get_cart_repo),
     pricing: CartPricing = Depends(get_cart_pricing),
+    holds: CartHolds = Depends(get_cart_holds),
 ) -> CheckoutOut:
     """
     Finaliza el carrito marcándolo como checked_out.
@@ -282,7 +299,7 @@ async def checkout(
         )
     
     # Procesar checkout
-    cart = await Checkout(repo=repo, pricing=pricing).execute(cart_id=id, user_id=current.id)
+    cart = await Checkout(repo=repo, pricing=pricing, holds=holds).execute(cart_id=id, user_id=current.id)
     items = await ListItems(repo=repo).execute(cart_id=id, user_id=current.id)
 
     total = 0.0

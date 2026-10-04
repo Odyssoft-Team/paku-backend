@@ -70,15 +70,11 @@ def _validate_required_meta_fields(items: list[dict[str, Any]]) -> None:
                     detail=f"Service '{item.get('name', 'unknown')}' requires 'pet_id' in meta",
                 )
 
+            # La fecha sale de la reserva (meta.hold_id); si el front la envía, se valida el formato
+            # y luego debe coincidir con la reserva (ver hold_binding.CartHolds.bind).
             scheduled_date = meta.get("scheduled_date")
-            if not scheduled_date:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"Service '{item.get('name', 'unknown')}' requires 'scheduled_date' in meta (format: YYYY-MM-DD)"
-                    ),
-                )
-            _validate_date_format(str(scheduled_date), "scheduled_date")
+            if scheduled_date:
+                _validate_date_format(str(scheduled_date), "scheduled_date")
 
             scheduled_time = meta.get("scheduled_time")
             if not scheduled_time:

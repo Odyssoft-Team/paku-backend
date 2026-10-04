@@ -70,7 +70,7 @@ class PostgresCartRepository(CartRepository):
         return cart, items
 
     async def create_cart(self, user_id: UUID) -> CartSession:
-        cart = CartSession.new(user_id=user_id, ttl_hours=2)
+        cart = CartSession.new(user_id=user_id)
         from app.modules.cart.infra.models import CartSessionModel
 
         model = CartSessionModel(

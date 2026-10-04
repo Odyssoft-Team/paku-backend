@@ -12,6 +12,11 @@ from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepos
 
 @dataclass
 class ConfirmHold:
+    """
+    OBSOLETO: la reserva se confirma sola al crear la orden (POST /orders). Este endpoint ya no cambia
+    el estado; si lo hiciera, un cliente que confirma y abandona bloquearía el cupo para siempre.
+    Se mantiene para no romper clientes: valida acceso y vigencia y devuelve la reserva tal cual.
+    """
     repo: PostgresHoldRepository
 
     async def execute(self, *, hold_id: UUID, requester_id: UUID, requester_role: str) -> Hold:
@@ -19,8 +24,6 @@ class ConfirmHold:
         if not hold:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hold not found")
         assert_hold_access(hold, requester_id=requester_id, requester_role=requester_role)
-        if hold.status != HoldStatus.held:
+        if hold.status not in (HoldStatus.held, HoldStatus.confirmed):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Hold cannot be confirmed")
-
-        updated = await self.repo.update_status(hold_id, HoldStatus.confirmed)
-        return updated or hold
+        return hold

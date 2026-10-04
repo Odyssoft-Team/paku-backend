@@ -74,10 +74,31 @@ def _calc_total(items: list[Any]) -> float:
     return total
 
 
+async def _confirm_cart_hold(holds_repo, items_snapshot: list[dict[str, Any]], *, user_id: UUID) -> Optional[UUID]:
+    """
+    La compra terminó en una orden: la reserva de cupo del servicio base pasa a `confirmed` (ya no
+    vence). Si venció entre el checkout y la orden → 409 HOLD_EXPIRED (elegir fecha de nuevo).
+    """
+    from app.modules.booking.domain.hold import HoldStatus
+    from app.modules.cart.app.use_cases_impl.hold_binding import CartHolds, base_line, hold_expired_error, line_hold_id
+
+    if holds_repo is None:
+        return None
+    base = base_line(items_snapshot)
+    if base is None:
+        return None
+    hold = await CartHolds(hold_repo=holds_repo).assert_still_valid(items_snapshot, user_id=user_id)
+    confirmed = await holds_repo.update_status(hold.id, HoldStatus.confirmed)
+    if confirmed is None or confirmed.status != HoldStatus.confirmed:
+        raise hold_expired_error(line_hold_id(base))
+    return hold.id
+
+
 @dataclass
 class CreateOrderFromCart:
     orders_repo: PostgresOrderRepository
     cart_repo: PostgresCartRepository
+    holds_repo: Optional[object] = None  # PostgresHoldRepository
 
     async def execute(self, *, user_id: UUID, cart_id: UUID, delivery_address_snapshot: dict) -> Order:
         from app.modules.cart.domain.cart import CartStatus
@@ -93,12 +114,15 @@ class CreateOrderFromCart:
         items_snapshot = _snapshot_cart_items(items)
         total_snapshot = _calc_total(items)
 
+        hold_id = await _confirm_cart_hold(self.holds_repo, items_snapshot, user_id=user_id)
+
         order = Order.new(
             user_id=user_id,
             items_snapshot=items_snapshot,
             total_snapshot=total_snapshot,
             currency="PEN",
             delivery_address_snapshot=delivery_address_snapshot,
+            hold_id=hold_id,
         )
         created = await self.orders_repo.create_order(order)
 

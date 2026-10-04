@@ -162,9 +162,20 @@ class CompleteOrder:
 # CancelOrder — admin cancela desde cualquier estado activo
 # ------------------------------------------------------------------
 
+async def release_order_hold(holds_repo, order: Order) -> None:
+    """La orden se canceló o se saltó: su reserva de cupo se libera (el día vuelve a tener cupo)."""
+    if holds_repo is None or order.hold_id is None:
+        return
+    try:
+        await holds_repo.release(order.hold_id)
+    except Exception:
+        logger.exception("No se pudo liberar la reserva %s de la orden %s", order.hold_id, order.id)
+
+
 @dataclass
 class CancelOrder:
     repo: PostgresOrderRepository
+    holds_repo: object = None  # PostgresHoldRepository
 
     async def execute(self, *, order_id: UUID) -> Order:
         order = _get_order_or_404(await self.repo.get_order_admin(id=order_id), order_id)
@@ -174,5 +185,6 @@ class CancelOrder:
                 detail=f"cancel_invalid: no se puede cancelar una orden en estado '{order.status.value}'",
             )
         updated = await self.repo.set_status(id=order_id, status=OrderStatus.cancelled)
+        await release_order_hold(self.holds_repo, updated)
         await _notify(self.repo, updated)
         return updated

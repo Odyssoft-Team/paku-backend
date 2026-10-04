@@ -12,6 +12,8 @@ from app.modules.booking.app.use_cases_impl.availability import (
     CreateAvailabilitySlotsBulk,
     CreateHold,
     ListAvailability,
+    ListMyHolds,
+    ListSlotHolds,
     ToggleAvailabilitySlot,
     UpdateAvailabilitySlot,
 )
@@ -24,6 +26,8 @@ __all__ = [
     "CreateAvailabilitySlotsBulk",
     "CreateHold",
     "ListAvailability",
+    "ListMyHolds",
+    "ListSlotHolds",
     "ToggleAvailabilitySlot",
     "UpdateAvailabilitySlot",
 ]

@@ -101,6 +101,12 @@ def get_districts_repo(session: AsyncSession = Depends(get_async_session)) -> Po
     return PostgresDistrictRepository(session)
 
 
+def get_holds_repo(session: AsyncSession = Depends(get_async_session)):
+    from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepository
+
+    return PostgresHoldRepository(session=session, engine=engine)
+
+
 def _order_out(order) -> OrderOut:
     return OrderOut(**order.__dict__)
 
@@ -148,7 +154,10 @@ async def create_order(
         "lng": addr["lng"],
     }
 
-    order = await CreateOrderFromCart(orders_repo=orders_repo, cart_repo=cart_repo).execute(
+    from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepository
+
+    holds_repo = PostgresHoldRepository(session=session, engine=engine)
+    order = await CreateOrderFromCart(orders_repo=orders_repo, cart_repo=cart_repo, holds_repo=holds_repo).execute(
         user_id=current.id,
         cart_id=payload.cart_id,
         delivery_address_snapshot=snapshot,
@@ -406,13 +415,14 @@ async def skip_stop(
     current: CurrentUser = Depends(require_roles("groomer", "admin")),
     repo: PostgresOrderRepository = Depends(get_orders_repo),
     users_repo: PostgresUserRepository = Depends(get_users_repo),
+    holds_repo=Depends(get_holds_repo),
 ) -> OrderOut:
     """
     Salta la parada (mascota o tutor no encontrados): status=skipped. Solo en camino o recién
     llegado (in_service + reception). Notifica al cliente y a los admins; el tracking se detiene.
     El admin la reprograma con POST /admin/orders/{id}/assign (vuelve a created).
     """
-    order = await SkipStop(orders_repo=repo, users_repo=users_repo).execute(
+    order = await SkipStop(orders_repo=repo, users_repo=users_repo, holds_repo=holds_repo).execute(
         order_id=id, reason=payload.reason, note=payload.note, actor_id=current.id, actor_role=current.role,
     )
     return _order_out(order)
@@ -515,9 +525,10 @@ async def admin_cancel_order(
     id: UUID,
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresOrderRepository = Depends(get_orders_repo),
+    holds_repo=Depends(get_holds_repo),
 ) -> OrderOut:
-    """Cancela una orden desde cualquier estado activo."""
-    order = await CancelOrder(repo=repo).execute(order_id=id)
+    """Cancela una orden desde cualquier estado activo. Libera la reserva de cupo del día."""
+    order = await CancelOrder(repo=repo, holds_repo=holds_repo).execute(order_id=id)
     return _order_out(order)
 
 

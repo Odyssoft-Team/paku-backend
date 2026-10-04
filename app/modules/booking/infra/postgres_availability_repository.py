@@ -36,6 +36,8 @@ class PostgresAvailabilityRepository:
     ) -> AvailabilitySlot:
         from app.modules.booking.infra.models import AvailabilitySlotModel, utcnow
 
+        from sqlalchemy.exc import IntegrityError
+
         now = utcnow()
         model = AvailabilitySlotModel(
             service_id=service_id,
@@ -47,7 +49,12 @@ class PostgresAvailabilityRepository:
             updated_at=now,
         )
         self._session.add(model)
-        await self._session.commit()
+        try:
+            await self._session.commit()
+        except IntegrityError as exc:
+            # UniqueConstraint(service_id, date): ya hay cupo para ese día (p. ej. carrera con otro admin).
+            await self._session.rollback()
+            raise ValueError("slot_exists") from exc
         await self._session.refresh(model)
         return self._row_to_slot(model)
 

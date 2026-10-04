@@ -235,3 +235,35 @@ Ningún cambio está desplegado hasta que se indique lo contrario.
 - **Nuevo** `GET /orders/{id}/delay-reports` (groomer asignado, cliente dueño o admin).
 - **Compatible** (todo nuevo).
 - **Apps:** Groomer, Clientes, Admin.
+
+## C-15 · Reserva de cupo ligada a la compra ⚠️ (2026-10-04)
+
+Regla: el cliente **reserva el cupo del día antes de comprar**; el cupo queda bloqueado mientras compra,
+se confirma al crear la orden y se libera si la compra no se concreta o la orden se cancela.
+
+- `POST /holds` — la reserva ahora dura **2 horas** (lo mismo que el carrito; antes 10 min). Nuevas reglas:
+  fecha pasada → 422 `DATE_IN_PAST`; mascota de otro usuario → 403 `PET_NOT_OWNED`; la mascota ya tiene
+  reserva vigente ese día → 409 `HOLD_ALREADY_EXISTS` (con `hold_id` de la existente).
+- **Carrito** (`POST /cart/items`, `POST /cart/{id}/items`, `PUT /cart/{id}/items`): el servicio base
+  **debe traer `meta.hold_id`**. `meta.scheduled_date` ya no es obligatoria: el backend la toma de la
+  reserva (si se envía, debe coincidir). Desde ese momento la reserva **vence junto con el carrito**.
+  Errores (`detail.code`): `HOLD_REQUIRED` (400), `HOLD_NOT_FOUND` (404), `HOLD_NOT_OWNED` (403),
+  `HOLD_MISMATCH` (409, `detail.fields` dice si no coincide servicio, mascota o fecha),
+  **`HOLD_EXPIRED` (409)**.
+- Quitar el servicio base del carrito, o reemplazarlo por otro con otra reserva, **libera** la reserva anterior.
+- `POST /cart/{id}/checkout` y `POST /orders`: si la reserva venció → **409 `HOLD_EXPIRED`**.
+  **El front debe llevar al cliente a elegir la fecha de nuevo** (nueva reserva).
+- `POST /orders` confirma la reserva y la guarda en `OrderOut.hold_id`; desde ahí ya no vence.
+- `POST /admin/orders/{id}/cancel` y `POST /orders/{id}/skip` **liberan** el cupo del día. Al reprogramar
+  una parada saltada, el admin asigna la nueva fecha a mano (no se toma otro cupo).
+- `POST /holds/{id}/confirm` queda **obsoleto**: ya no cambia el estado (responde la reserva tal cual).
+  La confirmación ocurre sola al crear la orden.
+- **Nuevo** `GET /holds` — reservas del usuario, más recientes primero.
+- **Nuevo** `GET /admin/availability/{slot_id}/holds` — quién reservó ese día (con estado).
+- `GET /availability` sin `date_from` empieza en el **día de hoy en Lima** (antes, desde las 7 pm,
+  empezaba en el día siguiente).
+- Admin: crear un cupo que ya existe → 409 `SLOT_EXISTS`; servicio inexistente → 404 `SERVICE_NOT_FOUND`
+  (antes 500); bajar la capacidad por debajo de lo reservado → 409 `CAPACITY_BELOW_BOOKED`.
+- **Rompe** la app de clientes: hay que reservar antes de armar el carrito, enviar `meta.hold_id` y manejar
+  `HOLD_EXPIRED`.
+- **Apps:** Clientes, Admin.

@@ -131,8 +131,7 @@ class ListOrdersAdmin:
 # ListGroomerOrders — órdenes asignadas al groomer autenticado
 # ------------------------------------------------------------------
 
-# Perú no tiene horario de verano: America/Lima es UTC-5 fijo.
-LIMA_TZ = timezone(timedelta(hours=-5))
+from app.core.timezone import LIMA_TZ  # noqa: E402
 
 
 def lima_day_range(day: date) -> tuple[datetime, datetime]:

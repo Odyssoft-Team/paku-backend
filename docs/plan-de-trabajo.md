@@ -79,6 +79,12 @@ Creado: 2026-10-03. Fuente de verdad del trabajo en curso. Se actualiza al cerra
   **Lo hace el dueño:** `git rm -r app/modules/paku_spa` (archivos vacíos) y borrar las carpetas locales `app/modules/commerce` y `app/modules/clinical_history` (solo tienen `__pycache__`, no están en git).
 - (Antes 4.2) Código muerto (~~`booking/.../holds.py` duplicado~~ hecho en 1.6, `__pycache__` de `commerce` y `clinical_history`, `paku_spa` vacío) y enlaces rotos del README
 
+### Fase 5 — Booking ligado a la compra (2026-10-04)
+- [x] 5.1 Reserva antes de comprar; dura lo que el carrito (2 h); `meta.hold_id` obligatorio en el servicio base; vence con el carrito; se confirma con la orden; se libera al cancelar/saltar — C-15
+- [x] 5.2 Bugs: "hoy" en hora de Lima, fechas pasadas, mascota ajena, una reserva por mascota y día, 409/404 en vez de 500 al crear cupos, capacidad no menor a lo reservado
+- [x] 5.3 `GET /holds` (cliente) y `GET /admin/availability/{slot_id}/holds` (admin)
+- [ ] 5.4 **Lo hace el dueño:** `git rm app/modules/booking/infra/hold_repository.py` (repositorio en memoria sin uso)
+
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)
 - [ ] Refresh token, streaming (`pendientes.md`)

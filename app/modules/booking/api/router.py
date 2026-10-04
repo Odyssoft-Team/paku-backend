@@ -24,6 +24,8 @@ from app.modules.booking.app.use_cases import (
     CreateAvailabilitySlotsBulk,
     CreateHold,
     ListAvailability,
+    ListMyHolds,
+    ListSlotHolds,
     ToggleAvailabilitySlot,
     UpdateAvailabilitySlot,
 )
@@ -69,14 +71,35 @@ async def _to_availability_out(slots, store_repo: PostgresStoreRepository) -> li
 # Holds
 # ------------------------------------------------------------------
 
+def get_pets_repo(session: AsyncSession = Depends(get_async_session)):
+    from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
+
+    return PostgresPetRepository(session=session, engine=engine)
+
+
+@router.get("/holds", response_model=list[HoldOut])
+async def list_my_holds(
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresHoldRepository = Depends(get_hold_repo),
+) -> list[HoldOut]:
+    """Reservas del usuario autenticado, más recientes primero."""
+    holds = await ListMyHolds(hold_repo=repo).execute(user_id=current.id)
+    return [HoldOut(**h.__dict__) for h in holds]
+
+
 @router.post("/holds", response_model=HoldOut, status_code=status.HTTP_201_CREATED)
 async def create(
     payload: HoldCreateIn,
     current: CurrentUser = Depends(require_profile_complete()),
     hold_repo: PostgresHoldRepository = Depends(get_hold_repo),
     availability_repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
+    pets_repo=Depends(get_pets_repo),
 ) -> HoldOut:
-    hold = await CreateHold(hold_repo=hold_repo, availability_repo=availability_repo).execute(
+    """
+    Reserva un cupo del día antes de comprar. Dura lo mismo que el carrito (2 h); al agregarla al
+    carrito (meta.hold_id del servicio base) vence junto con él, y al crear la orden se confirma.
+    """
+    hold = await CreateHold(hold_repo=hold_repo, availability_repo=availability_repo, pets_repo=pets_repo).execute(
         user_id=current.id,
         pet_id=payload.pet_id,
         service_id=payload.service_id,
@@ -91,7 +114,10 @@ async def confirm(
     current: CurrentUser = Depends(get_current_user),
     repo: PostgresHoldRepository = Depends(get_hold_repo),
 ) -> HoldOut:
-    """Solo el dueño de la reserva o un admin."""
+    """
+    OBSOLETO: la reserva se confirma sola al crear la orden. Ya no cambia el estado; devuelve la
+    reserva si es del usuario y está vigente.
+    """
     hold = await ConfirmHold(repo=repo).execute(
         hold_id=id, requester_id=current.id, requester_role=current.role,
     )
@@ -163,7 +189,7 @@ async def admin_create_slot(
     repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
     store_repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> AvailabilityOut:
-    slot = await CreateAvailabilitySlot(repo=repo).execute(
+    slot = await CreateAvailabilitySlot(repo=repo, store_repo=store_repo).execute(
         service_id=payload.service_id,
         date=payload.date,
         capacity=payload.capacity,
@@ -185,7 +211,7 @@ async def admin_create_slots_bulk(
     llamada. Fechas que ya tenían slot para ese service_id (UniqueConstraint(service_id, date))
     se omiten y se listan en `skipped`, no se sobreescriben.
     """
-    created, skipped = await CreateAvailabilitySlotsBulk(repo=repo).execute(
+    created, skipped = await CreateAvailabilitySlotsBulk(repo=repo, store_repo=store_repo).execute(
         service_id=payload.service_id,
         date_from=payload.date_from,
         date_to=payload.date_to,
@@ -194,6 +220,18 @@ async def admin_create_slots_bulk(
     )
     created_out = await _to_availability_out(created, store_repo)
     return AvailabilitySlotBulkOut(created=created_out, skipped=skipped)
+
+
+@router.get("/admin/availability/{slot_id}/holds", response_model=list[HoldOut])
+async def admin_list_slot_holds(
+    slot_id: UUID,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresHoldRepository = Depends(get_hold_repo),
+    availability_repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
+) -> list[HoldOut]:
+    """Quién reservó ese día (todas las reservas del cupo, con su estado)."""
+    holds = await ListSlotHolds(hold_repo=repo, availability_repo=availability_repo).execute(slot_id=slot_id)
+    return [HoldOut(**h.__dict__) for h in holds]
 
 
 @router.patch("/admin/availability/{slot_id}", response_model=AvailabilityOut)

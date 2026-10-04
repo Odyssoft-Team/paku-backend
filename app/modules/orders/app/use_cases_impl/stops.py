@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.modules.orders.app.use_cases_impl.service_flow import _conflict, _load_for_groomer
-from app.modules.orders.app.use_cases_impl.transitions import notify_user
+from app.modules.orders.app.use_cases_impl.transitions import notify_user, release_order_hold
 from app.modules.orders.domain.delay_report import DelayReport
 from app.modules.orders.domain.order import Order, OrderStatus, SkipReason
 
@@ -41,6 +41,7 @@ async def _notify_admins(orders_repo, users_repo, *, title: str, body: str, data
 class SkipStop:
     orders_repo: object
     users_repo: object
+    holds_repo: object = None  # PostgresHoldRepository: la reserva del día se libera
 
     async def execute(
         self, *, order_id: UUID, reason: SkipReason, note: Optional[str], actor_id: UUID, actor_role: str,
@@ -56,6 +57,8 @@ class SkipStop:
         updated = await self.orders_repo.mark_skipped(
             id=order.id, reason=reason, note=note, at=datetime.now(timezone.utc),
         )
+        # El cupo de ese día queda libre; al reprogramar, el admin asigna la nueva fecha a mano.
+        await release_order_hold(self.holds_repo, updated)
         data = {"order_id": str(updated.id), "status": updated.status.value, "skip_reason": reason.value}
         motivo = _SKIP_REASON_TEXT[reason]
         await notify_user(

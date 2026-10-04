@@ -6,6 +6,9 @@ from enum import Enum
 from typing import Any, Optional, Protocol, Union
 from uuid import UUID, uuid4
 
+# Duración del carrito. La reserva de cupo (booking) dura lo mismo: vence junto con el carrito.
+CART_TTL_HOURS = 2
+
 
 # [TECH]
 # Enum defining cart lifecycle states with TTL behavior.
@@ -50,7 +53,7 @@ class CartSession:
     # [NATURAL/BUSINESS]
     # Crea un carrito nuevo que expira en horas.
     @staticmethod
-    def new(*, user_id: UUID, ttl_hours: int = 2) -> "CartSession":
+    def new(*, user_id: UUID, ttl_hours: int = CART_TTL_HOURS) -> "CartSession":
         now = datetime.now(timezone.utc)
         return CartSession(
             id=uuid4(),

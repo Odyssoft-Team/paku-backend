@@ -7,9 +7,10 @@ del dueño; "Para después" ya está entendido y se programa más adelante.
 
 - **Un carrito, ¿una sola orden?** Hoy un carrito `checked_out` permite crear varias órdenes con
   `POST /orders` (el carrito no queda marcado como usado). Decidir si un carrito genera una sola orden.
-- **Reserva por día ↔ orden.** El booking reserva cupo por día (`/holds`), pero la orden no queda
-  ligada a la reserva (`hold_id` nunca se asigna) y la fecha del carrito no se valida contra la
-  disponibilidad. Decidir cómo se conectan.
+- ~~**Reserva por día ↔ orden.**~~ Resuelto el 2026-10-04 (C-15): reserva antes de comprar, vence con
+  el carrito, se confirma con la orden y se libera al cancelar/saltar.
+- **Órdenes sin pagar que ocupan cupo.** Una orden creada y nunca pagada mantiene su reserva confirmada.
+  Decidir si una orden impaga se cancela sola después de cierto tiempo (y libera el cupo).
 
 ## Configuración del servidor (no es código)
 

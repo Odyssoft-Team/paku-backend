@@ -44,7 +44,9 @@ def _hold(status: HoldStatus = HoldStatus.held) -> Hold:
     )
 
 
-def test_confirm_hold_updates_status_to_confirmed():
+def test_confirm_endpoint_is_obsolete_and_does_not_change_status():
+    """La reserva se confirma sola al crear la orden; confirmar a mano no la cambia (si no, bloquearía
+    el cupo para siempre si el cliente abandona)."""
     hold = _hold()
     repo = _FakeHoldRepo(hold)
 
@@ -52,8 +54,8 @@ def test_confirm_hold_updates_status_to_confirmed():
         hold_id=hold.id, requester_id=hold.user_id, requester_role="user",
     ))
 
-    assert out.status == HoldStatus.confirmed
-    assert repo.update_calls == [(hold.id, HoldStatus.confirmed)]
+    assert out.status == HoldStatus.held
+    assert repo.update_calls == []
 
 
 def test_confirm_hold_nonexistent_returns_404():
@@ -89,10 +91,10 @@ def test_confirm_hold_of_another_user_returns_403():
     assert repo.update_calls == []
 
 
-def test_admin_can_confirm_any_hold():
+def test_admin_can_read_any_hold_through_confirm():
     hold = _hold()
     repo = _FakeHoldRepo(hold)
 
     out = asyncio.run(ConfirmHold(repo=repo).execute(hold_id=hold.id, requester_id=uuid4(), requester_role="admin"))
 
-    assert out.status == HoldStatus.confirmed
+    assert out.id == hold.id

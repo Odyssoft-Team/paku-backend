@@ -12,6 +12,8 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.base import Base
+from app.core.timezone import today_lima
+from app.modules.cart.domain.cart import CART_TTL_HOURS
 from app.modules.booking.app.use_cases_impl.availability import CancelHold, CreateHold
 from app.modules.booking.domain.hold import HoldStatus
 from app.modules.booking.infra.models import AvailabilitySlotModel, HoldModel
@@ -19,7 +21,8 @@ from app.modules.booking.infra.postgres_availability_repository import PostgresA
 from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepository
 from app.modules.store.infra.db_models import CategoryModel, ProductModel  # FK de availability_slots
 
-DAY = date(2026, 10, 10)
+DAY = today_lima() + timedelta(days=7)
+AFTER_EXPIRY = timedelta(hours=CART_TTL_HOURS, minutes=1)
 
 
 async def _setup(capacity: int = 2):
@@ -96,12 +99,15 @@ def test_cleanup_job_expiration_releases_capacity():
         await _create(holds, slots, service_id, uuid4())
         assert await _booked(slots, service_id) == 2
 
-        expired = await holds.expire_holds(now=datetime.now(timezone.utc) + timedelta(minutes=11))
+        # La reserva dura lo mismo que el carrito: antes de ese plazo no vence.
+        assert await holds.expire_holds(now=datetime.now(timezone.utc) + timedelta(minutes=30)) == 0
+
+        expired = await holds.expire_holds(now=datetime.now(timezone.utc) + AFTER_EXPIRY)
         assert expired == 2
         assert await _booked(slots, service_id) == 0
 
         # Una segunda corrida no encuentra nada ni descuenta de más.
-        assert await holds.expire_holds(now=datetime.now(timezone.utc) + timedelta(minutes=11)) == 0
+        assert await holds.expire_holds(now=datetime.now(timezone.utc) + AFTER_EXPIRY) == 0
         assert await _booked(slots, service_id) == 0
         await session.close()
         await engine.dispose()
@@ -115,7 +121,7 @@ def test_confirmed_hold_keeps_capacity():
         hold = await _create(holds, slots, service_id, uuid4())
         await holds.update_status(hold.id, HoldStatus.confirmed)
 
-        assert await holds.expire_holds(now=datetime.now(timezone.utc) + timedelta(minutes=11)) == 0
+        assert await holds.expire_holds(now=datetime.now(timezone.utc) + AFTER_EXPIRY) == 0
         assert await _booked(slots, service_id) == 1
         await session.close()
         await engine.dispose()
