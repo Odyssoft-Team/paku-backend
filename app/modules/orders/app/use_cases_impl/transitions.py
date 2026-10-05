@@ -176,6 +176,7 @@ async def release_order_hold(holds_repo, order: Order) -> None:
 class CancelOrder:
     repo: PostgresOrderRepository
     holds_repo: object = None  # PostgresHoldRepository
+    pets_repo: object = None   # nombre de la mascota en el aviso al groomer
 
     async def execute(self, *, order_id: UUID) -> Order:
         order = _get_order_or_404(await self.repo.get_order_admin(id=order_id), order_id)
@@ -187,4 +188,9 @@ class CancelOrder:
         updated = await self.repo.set_status(id=order_id, status=OrderStatus.cancelled)
         await release_order_hold(self.holds_repo, updated)
         await _notify(self.repo, updated)
+
+        # Aviso al groomer asignado (C-17). Import diferido: groomer_notifications importa este módulo.
+        from app.modules.orders.app.use_cases_impl.groomer_notifications import notify_groomer_cancelled
+
+        await notify_groomer_cancelled(self.repo, self.pets_repo, updated)
         return updated

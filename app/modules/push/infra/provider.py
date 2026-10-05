@@ -19,6 +19,13 @@ class MockPushProvider(PushProvider):
         print({"provider": "mock", "tokens": tokens, "message": message.__dict__})
 
 
+def get_push_provider() -> PushProvider:
+    """Proveedor según PUSH_PROVIDER ("expo" | "mock"); ver app/core/settings.py."""
+    from app.core.settings import settings
+
+    return ExpoPushProvider() if settings.PUSH_PROVIDER == "expo" else MockPushProvider()
+
+
 class ExpoPushProvider(PushProvider):
     def send(self, tokens: list[str], message: PushMessage) -> None:
         from exponent_server_sdk import (

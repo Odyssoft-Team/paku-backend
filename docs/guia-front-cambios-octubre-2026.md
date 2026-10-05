@@ -185,7 +185,14 @@ se corta el tracking y **se libera el cupo del día**.
 `POST /orders/{id}/delay-report { "delay_minutes": 1-180, "note"? }` — con `created`, `accepted` u
 `on_the_way` (sirve para avisar a la siguiente parada mientras se termina la actual).
 
-### 3.6 Otros
+### 3.6 Notificaciones al groomer (C-17) y push (C-18)
+
+El groomer recibe notificación + push cuando el admin le **asigna** (`order_assigned`), **reprograma**
+(`order_rescheduled`), **retira** (`order_unassigned`) o **cancela** (`order_cancelled`) una parada. Al
+tocarla, abrir la ruta o el detalle con `data.order_id`. El push trae `data.type` con el mismo tipo.
+Los push reales se activan en el servidor con `PUSH_PROVIDER=expo`.
+
+### 3.7 Otros
 
 - Cambios de estado y cargo extra por peso: solo sobre **sus** órdenes (403 en otras).
 - Ya puede leer la ficha de la mascota de su parada (`GET /pets/{id}`).

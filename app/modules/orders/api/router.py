@@ -477,11 +477,16 @@ async def admin_assign_order(
     current: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresOrderRepository = Depends(get_orders_repo),
     assignments_repo: PostgresOrderAssignmentRepository = Depends(get_assignments_repo),
+    pets_repo: PetRepository = Depends(get_pets_repo),
 ) -> AssignmentOut:
-    """Asigna un groomer a la orden y programa la fecha/hora del servicio."""
+    """
+    Asigna un groomer a la orden y programa la fecha/hora del servicio. Notifica al cliente y al
+    groomer (nueva parada, reprogramación o, al reasignar, retiro de la ruta del anterior).
+    """
     order, assignment = await AssignOrder(
         orders_repo=repo,
         assignments_repo=assignments_repo,
+        pets_repo=pets_repo,
     ).execute(
         order_id=id,
         groomer_id=payload.groomer_id,
@@ -507,9 +512,10 @@ async def admin_cancel_order(
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresOrderRepository = Depends(get_orders_repo),
     holds_repo=Depends(get_holds_repo),
+    pets_repo: PetRepository = Depends(get_pets_repo),
 ) -> OrderOut:
-    """Cancela una orden desde cualquier estado activo. Libera la reserva de cupo del día."""
-    order = await CancelOrder(repo=repo, holds_repo=holds_repo).execute(order_id=id)
+    """Cancela una orden desde cualquier estado activo. Libera la reserva de cupo del día y avisa al groomer."""
+    order = await CancelOrder(repo=repo, holds_repo=holds_repo, pets_repo=pets_repo).execute(order_id=id)
     return _order_out(order)
 
 

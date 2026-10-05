@@ -22,22 +22,10 @@ class CreateNotification:
     ) -> Notification:
         n = await self.repo.create_notification(user_id=user_id, type=type, title=title, body=body, data=data)
 
-        try:
-            from app.core.db import engine, get_async_session
-            from app.core.settings import settings
-            from app.modules.push.domain.push import PushMessage
-            from app.modules.push.infra.postgres_device_repository import PostgresDeviceTokenRepository
-            from app.modules.push.infra.provider import ExpoPushProvider, MockPushProvider
+        # Push al teléfono (best-effort). `type` va en data para que la app elija ícono y navegación.
+        from app.modules.push.app.use_cases import send_push_to_user
 
-            async with get_async_session() as session:
-                devices_repo = PostgresDeviceTokenRepository(session=session, engine=engine)
-                tokens = await devices_repo.get_active_tokens(user_id)
-                if tokens:
-                    provider = ExpoPushProvider() if settings.ENV == "production" else MockPushProvider()
-                    provider.send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
-        except Exception:
-            pass
-
+        await send_push_to_user(user_id, title=title, body=body, data={**(data or {}), "type": type})
         return n
 
 

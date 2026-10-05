@@ -50,6 +50,11 @@ class Settings:
     STREAMING_TURN_USERNAME: str = os.getenv("STREAMING_TURN_USERNAME", "pakuuser")
     STREAMING_TURN_CREDENTIAL: str = os.getenv("STREAMING_TURN_CREDENTIAL", "pakupassword")
 
+    # Push: "expo" envía push reales (Expo); "mock" solo los escribe en el log. Independiente de ENV para
+    # poder probar push en desarrollo sin cambiar DEBUG, logs, etc. Sin valor: "expo" en producción y
+    # "mock" en el resto (comportamiento anterior).
+    PUSH_PROVIDER: str = (os.getenv("PUSH_PROVIDER") or ("expo" if ENV == "production" else "mock")).strip().lower()
+
     # Tracking — Google Routes API
     # Dejar vacío para deshabilitar el endpoint GET /tracking/orders/{id}/route.
     # Obtener en: https://console.cloud.google.com/apis/credentials

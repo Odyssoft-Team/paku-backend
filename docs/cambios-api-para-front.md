@@ -277,3 +277,35 @@ se confirma al crear la orden y se libera si la compra no se concreta o la orden
   `on_the_way`), para avisar demora a la siguiente parada.
 - **Compatible.**
 - **Apps:** Groomer.
+
+## C-17 · Notificaciones al groomer (pedido del front, 2026-10-05)
+
+Notificación + push (best-effort) al groomer cuando el admin cambia su ruta. Lo que el groomer mismo
+dispara no se le notifica.
+
+| Evento | A quién | `type` | title / body | data |
+|---|---|---|---|---|
+| `POST /admin/orders/{id}/assign`, orden sin groomer o con otro groomer | groomer nuevo | `order_assigned` | "Nueva parada asignada" / "Firulais · 10/10 10:00 · Barranco" | `{order_id, status, scheduled_at}` |
+| Mismo `assign`, cambia de groomer | groomer anterior | `order_unassigned` | "Parada retirada de tu ruta" / "Firulais · 10/10 10:00 fue asignada a otro groomer" | `{order_id}` |
+| `assign` con el mismo groomer y otra fecha, o la orden venía de `skipped` | groomer | `order_rescheduled` | "Parada reprogramada" / "Firulais pasa al 11/10 14:30" | `{order_id, status, scheduled_at}` |
+| `POST /admin/orders/{id}/cancel`, si tenía groomer | groomer | `order_cancelled` | "Parada cancelada" / "Firulais · 10/10 10:00 fue cancelada" | `{order_id, status: "cancelled"}` |
+
+- Fecha y hora en **hora de Lima**. El lugar es el distrito (o la dirección si no está en el catálogo).
+- Reasignar con el mismo groomer y la misma fecha no envía nada al groomer.
+- **Corrección:** el aviso al cliente "Servicio asignado" mostraba la hora en UTC (5 h adelantada); ahora
+  usa hora de Lima.
+- El push lleva además `data.type` (el mismo `type` de la notificación) para elegir ícono y navegación.
+- **Compatible.**
+- **Apps:** Groomer (y Clientes: la hora del aviso de asignación).
+
+## C-18 · Push: arreglo y variable `PUSH_PROVIDER` (2026-10-05)
+
+- **Bug corregido:** los push de notificaciones y de chat **nunca se enviaban, en ningún entorno** (ni en
+  producción). El código abría la sesión de BD de una forma que fallaba siempre, y el error se descartaba
+  sin dejar log. Ahora se envían y, si fallan, queda el error en el log.
+- **Nueva variable** `PUSH_PROVIDER` = `expo` (push reales) | `mock` (solo log). Si no se define: `expo`
+  en `ENV=production` y `mock` en el resto (igual que antes). Así se pueden probar push reales en el
+  entorno de pruebas sin tocar `ENV`.
+- El envío a Expo ya no bloquea la API mientras espera la respuesta de Expo.
+- **Compatible.** Para recibir push en pruebas: `PUSH_PROVIDER=expo` en el `.env` del servidor.
+- **Apps:** todas.

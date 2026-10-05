@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 from uuid import UUID
@@ -5,6 +7,35 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.modules.push.domain.push import DeviceToken, DeviceTokenRepository, Platform, PushMessage
+
+logger = logging.getLogger(__name__)
+
+
+async def send_push_to_user(user_id: UUID, *, title: str, body: str, data: Optional[dict[str, Any]] = None) -> int:
+    """
+    Envía un push a los dispositivos activos del usuario. Best-effort: nunca lanza, pero registra el
+    error en el log (antes se tragaba sin rastro). Devuelve cuántos tokens se intentaron.
+
+    Usa su propia sesión de BD (AsyncSessionLocal): `get_async_session` es una dependencia de FastAPI
+    (generador) y no sirve con `async with`; usarla así fallaba siempre y el push nunca salía.
+    """
+    try:
+        from app.core.db import AsyncSessionLocal, engine
+        from app.modules.push.infra.postgres_device_repository import PostgresDeviceTokenRepository
+        from app.modules.push.infra.provider import get_push_provider
+
+        async with AsyncSessionLocal() as session:
+            tokens = await PostgresDeviceTokenRepository(session=session, engine=engine).get_active_tokens(user_id)
+        if not tokens:
+            return 0
+        # El SDK de Expo es síncrono (HTTP bloqueante): se ejecuta fuera del event loop.
+        await asyncio.to_thread(
+            get_push_provider().send, tokens=tokens, message=PushMessage(title=title, body=body, data=data),
+        )
+        return len(tokens)
+    except Exception:
+        logger.exception("No se pudo enviar el push al usuario %s", user_id)
+        return 0
 
 
 def _raise_device_error(code: str) -> None:
@@ -45,11 +76,11 @@ class BroadcastPush:
     repo: DeviceTokenRepository
 
     async def execute(self, *, title: str, body: str, data: Optional[dict[str, Any]] = None) -> int:
-        from app.core.settings import settings
-        from app.modules.push.infra.provider import ExpoPushProvider, MockPushProvider
+        from app.modules.push.infra.provider import get_push_provider
 
         tokens = await self.repo.get_all_active_tokens()
         if tokens:
-            provider = ExpoPushProvider() if settings.ENV == "production" else MockPushProvider()
-            provider.send(tokens=tokens, message=PushMessage(title=title, body=body, data=data))
+            await asyncio.to_thread(
+                get_push_provider().send, tokens=tokens, message=PushMessage(title=title, body=body, data=data),
+            )
         return len(tokens)

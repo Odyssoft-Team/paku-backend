@@ -20,6 +20,11 @@ del dueño; "Para después" ya está entendido y se programa más adelante.
 
 ## Configuración del servidor (no es código)
 
+- **`PUSH_PROVIDER=expo`** en el `.env` del servidor de pruebas para que los push salgan de verdad (C-18).
+- **Verificar `api.paku.com.pe/health`** (2026-10-05): responde `{"app": "tms-backend", "environment":
+  "development"}`. El nombre por defecto del backend de Paku es "Paku Backend": o `APP_NAME` está mal
+  configurado en el servidor, o esa URL apunta a otro servicio. Confirmarlo con quien despliega.
+
 - **`GOOGLE_ROUTES_API_KEY`** (pedido 7) — análisis del 2026-10-03, se retoma más adelante:
   - **Quién la usa:** solo `GET /tracking/orders/{id}/route` (`app/modules/tracking/use_cases/get_route.py`).
     Sin la clave responde 501; con ella llama a Google Routes (`computeRoutes`) y devuelve

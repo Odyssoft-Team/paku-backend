@@ -12,6 +12,8 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
+from app.core.timezone import LIMA_TZ
+from app.modules.orders.app.use_cases_impl.groomer_notifications import notify_groomer_assignment
 from app.modules.orders.domain.assignment import OrderAssignment
 from app.modules.orders.domain.order import Order, OrderStatus
 from app.modules.orders.infra.postgres_order_assignment_repository import PostgresOrderAssignmentRepository
@@ -28,6 +30,7 @@ logger = logging.getLogger(__name__)
 class AssignOrder:
     orders_repo: PostgresOrderRepository
     assignments_repo: PostgresOrderAssignmentRepository
+    pets_repo: Optional[object] = None  # para el nombre de la mascota en la notificación al groomer
 
     async def execute(
         self,
@@ -86,11 +89,15 @@ class AssignOrder:
                 user_id=updated_order.user_id,
                 type="order_assigned",
                 title="Servicio asignado",
-                body=f"Tu servicio fue programado. Tu groomer estará contigo el {scheduled_at.strftime('%d/%m/%Y a las %H:%M')}.",
+                # En hora de Lima: scheduled_at llega en UTC ("…Z") y se mostraba 5 h adelantado.
+                body=f"Tu servicio fue programado. Tu groomer estará contigo el {scheduled_at.astimezone(LIMA_TZ).strftime('%d/%m/%Y a las %H:%M')}.",
                 data={"order_id": str(order_id), "scheduled_at": scheduled_at.isoformat()},
             )
         except Exception as exc:
             logger.exception("Failed to send assignment notification: %s", exc)
+
+        # Notificar al groomer (C-17): nueva parada, reprogramación o retiro de su ruta.
+        await notify_groomer_assignment(self.orders_repo, self.pets_repo, before=order, after=updated_order)
 
         return updated_order, assignment
 
@@ -131,7 +138,6 @@ class ListOrdersAdmin:
 # ListGroomerOrders — órdenes asignadas al groomer autenticado
 # ------------------------------------------------------------------
 
-from app.core.timezone import LIMA_TZ  # noqa: E402
 
 
 def lima_day_range(day: date) -> tuple[datetime, datetime]:

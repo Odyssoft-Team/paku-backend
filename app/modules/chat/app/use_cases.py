@@ -56,29 +56,15 @@ class SendMessage:
 
         # Notificar al destinatario vía push (best-effort, no bloquea la respuesta)
         if recipient_id is not None:
-            try:
-                from app.core.db import engine, get_async_session
-                from app.core.settings import settings
-                from app.modules.push.domain.push import PushMessage
-                from app.modules.push.infra.postgres_device_repository import PostgresDeviceTokenRepository
-                from app.modules.push.infra.provider import ExpoPushProvider, MockPushProvider
+            from app.modules.push.app.use_cases import send_push_to_user
 
-                sender_label = "Tu groomer" if sender_role == "groomer" else "Tu cliente"
-                async with get_async_session() as session:
-                    devices_repo = PostgresDeviceTokenRepository(session=session, engine=engine)
-                    tokens = await devices_repo.get_active_tokens(recipient_id)
-                    if tokens:
-                        provider = ExpoPushProvider() if settings.ENV == "production" else MockPushProvider()
-                        provider.send(
-                            tokens=tokens,
-                            message=PushMessage(
-                                title=f"Mensaje de {sender_label}",
-                                body=body[:100],
-                                data={"order_id": str(order_id), "type": "chat_message"},
-                            ),
-                        )
-            except Exception:
-                pass  # El push es best-effort; nunca falla el endpoint
+            sender_label = "Tu groomer" if sender_role == "groomer" else "Tu cliente"
+            await send_push_to_user(  # best-effort: nunca falla el endpoint
+                recipient_id,
+                title=f"Mensaje de {sender_label}",
+                body=body[:100],
+                data={"order_id": str(order_id), "type": "chat_message"},
+            )
 
         return saved
 
