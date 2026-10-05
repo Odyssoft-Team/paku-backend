@@ -23,7 +23,6 @@ from app.modules.orders.api.schemas import (
     OrderOut,
     OrderPhotoIn,
     OrderPhotoOut,
-    PatchOrderIn,
     PayOrderIn,
     UpdateStatusIn,
 )
@@ -44,7 +43,6 @@ from app.modules.orders.app.use_cases import (
     ListGroomerOrders,
     ListOrders,
     ListOrdersAdmin,
-    PatchOrder,
     PayOrder,
     RetryOrderPayment,
     UpdateOrderStatus,
@@ -232,23 +230,6 @@ async def get_order(
     repo: PostgresOrderRepository = Depends(get_orders_repo),
 ) -> OrderOut:
     order = await GetOrder(orders_repo=repo).execute(order_id=id, user_id=current.id)
-    return _order_out(order)
-
-
-@router.patch("/{id}", response_model=OrderOut)
-async def patch_order(
-    id: UUID,
-    payload: PatchOrderIn,
-    current: CurrentUser = Depends(get_current_user),
-    repo: PostgresOrderRepository = Depends(get_orders_repo),
-) -> OrderOut:
-    """Cambia el estado de la orden. Solo admin o el groomer asignado (el cliente no)."""
-    order = await PatchOrder(orders_repo=repo).execute(
-        order_id=id,
-        actor_id=current.id,
-        actor_role=current.role,
-        status=payload.status,
-    )
     return _order_out(order)
 
 

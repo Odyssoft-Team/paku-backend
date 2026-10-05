@@ -22,8 +22,10 @@ _SKIP_REASON_TEXT = {
     SkipReason.other: "otro motivo",
 }
 
-# Estados en los que el groomer puede avisar demora (antes de llegar).
-_DELAY_STATUSES = frozenset({OrderStatus.accepted, OrderStatus.on_the_way})
+# Estados en los que el groomer puede avisar demora (antes de llegar). Incluye `created`: las órdenes
+# pasan de created a on_the_way sin `accepted`, y el groomer avisa a la siguiente parada mientras
+# termina la actual (pedido del front, 2026-10-05).
+_DELAY_STATUSES = frozenset({OrderStatus.created, OrderStatus.accepted, OrderStatus.on_the_way})
 
 
 async def _notify_admins(orders_repo, users_repo, *, title: str, body: str, data: dict) -> None:

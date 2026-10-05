@@ -137,7 +137,7 @@ tarjeta** (antes la orden quedaba trabada en `verifying`).
 
 ### 2.3 Otros
 
-- El cliente **ya no puede cambiar el estado** de su orden (`PATCH /orders/{id}` → 403).
+- `PATCH /orders/{id}` **se eliminó** (ninguna app lo usaba). El cliente no cambia estados de su orden.
 - Catálogo con `?pet_id=`: requiere token y que la mascota sea del usuario; solo muestra servicios y
   complementos aptos para su raza.
 
@@ -182,7 +182,8 @@ se corta el tracking y **se libera el cupo del día**.
 
 ### 3.5 Demora (pedido 5 — C-14)
 
-`POST /orders/{id}/delay-report { "delay_minutes": 1-180, "note"? }` — con `accepted` u `on_the_way`.
+`POST /orders/{id}/delay-report { "delay_minutes": 1-180, "note"? }` — con `created`, `accepted` u
+`on_the_way` (sirve para avisar a la siguiente parada mientras se termina la actual).
 
 ### 3.6 Otros
 

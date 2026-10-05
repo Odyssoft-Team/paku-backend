@@ -1,7 +1,7 @@
-"""Cambios de estado genéricos de órdenes (PATCH /orders/{id} y POST /orders/{id}/status).
+"""Cambio de estado genérico de órdenes (POST /orders/{id}/status; PATCH /orders/{id} se eliminó).
 
 Reglas: solo admin (cualquier orden) o el groomer asignado; el cliente no. Los errores deben
-salir como 400/403/404/409 (antes el parámetro `status` tapaba a `fastapi.status` y daba 500).
+salir como 403/404/409 (antes el parámetro `status` tapaba a `fastapi.status` y daba 500).
 """
 import asyncio
 from dataclasses import replace
@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.modules.orders.app.use_cases import PatchOrder, UpdateOrderStatus
+from app.modules.orders.app.use_cases import UpdateOrderStatus
 from app.modules.orders.domain.order import Order, OrderStatus
 
 
@@ -58,7 +58,7 @@ def test_assigned_groomer_advances_own_order():
     order = _order(groomer_id=groomer_id)
     repo = _FakeOrdersRepo(order)
 
-    out = _run(PatchOrder(repo).execute(
+    out = _run(UpdateOrderStatus(repo).execute(
         order_id=order.id, status=OrderStatus.on_the_way, actor_id=groomer_id, actor_role="groomer",
     ))
 
@@ -83,7 +83,7 @@ def test_client_owner_cannot_change_status():
     repo = _FakeOrdersRepo(order)
 
     with pytest.raises(HTTPException) as err:
-        _run(PatchOrder(repo).execute(
+        _run(UpdateOrderStatus(repo).execute(
             order_id=order.id, status=OrderStatus.done, actor_id=order.user_id, actor_role="user",
         ))
 
@@ -107,21 +107,10 @@ def test_backwards_transition_returns_409():
     repo = _FakeOrdersRepo(order)
 
     with pytest.raises(HTTPException) as err:
-        _run(PatchOrder(repo).execute(
+        _run(UpdateOrderStatus(repo).execute(
             order_id=order.id, status=OrderStatus.created, actor_id=uuid4(), actor_role="admin",
         ))
 
     assert err.value.status_code == 409
     assert repo.updated_to == []
 
-
-def test_patch_without_status_returns_400():
-    order = _order()
-    repo = _FakeOrdersRepo(order)
-
-    with pytest.raises(HTTPException) as err:
-        _run(PatchOrder(repo).execute(
-            order_id=order.id, status=None, actor_id=uuid4(), actor_role="admin",
-        ))
-
-    assert err.value.status_code == 400

@@ -12,6 +12,12 @@ del dueño; "Para después" ya está entendido y se programa más adelante.
 - **Órdenes sin pagar que ocupan cupo.** Una orden creada y nunca pagada mantiene su reserva confirmada.
   Decidir si una orden impaga se cancela sola después de cierto tiempo (y libera el cupo).
 
+## Antes de pasar a producción
+
+- **paku-user es app de tienda** (respuesta del front, 2026-10-05): los teléfonos con versión vieja no
+  entenderán el renombre `ally` → `groomer` (C-09) ni la reserva obligatoria en el carrito (C-15). Al
+  desplegar en producción, forzar la actualización de la app (versión mínima) o coordinar una ventana.
+
 ## Configuración del servidor (no es código)
 
 - **`GOOGLE_ROUTES_API_KEY`** (pedido 7) — análisis del 2026-10-03, se retoma más adelante:

@@ -29,8 +29,8 @@ Creado: 2026-10-03. Fuente de verdad del trabajo en curso. Se actualiza al cerra
 
 ## Supuestos técnicos tomados sin preguntar (revisables)
 
-- `PATCH /orders/{id}`: se restringe a admin / groomer asignado; si nadie lo usa se elimina más adelante (consulta al front).
-- Ítems de carrito `kind=product` (producto físico): `store` no tiene precios para productos físicos, así que se rechazan con un error claro. Se confirma con el front si alguien los usa.
+- ~~`PATCH /orders/{id}`~~: el front confirmó que nadie lo usa → eliminado (C-16, 2026-10-05).
+- Ítems de carrito `kind=product`: se rechazan; el front confirmó que ninguna app los envía (2026-10-05).
 - Si el precio cambió entre "agregar" y "checkout", el checkout responde 409 `PRICE_CHANGED` con precios anteriores y nuevos.
 - Compatibilidad del renombre: un token con `role: "ally"` se trata como `groomer` hasta que expire.
 - Una orden `skipped` se puede cancelar desde admin (además de reprogramarla). Al reprogramar se

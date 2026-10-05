@@ -113,8 +113,9 @@ def test_reassigning_skipped_order_returns_it_to_created():
     assert out.skip_reason == SkipReason.other  # se conserva como historial
 
 
-def test_delay_report_before_arriving_only():
-    order = _order(OrderStatus.on_the_way)
+@pytest.mark.parametrize("status", [OrderStatus.created, OrderStatus.accepted, OrderStatus.on_the_way])
+def test_delay_report_before_arriving_only(status):
+    order = _order(status)
     delays = _Delays()
     use_case = ReportDelay(_OrdersRepo(order), delays, _Users())
 

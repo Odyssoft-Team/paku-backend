@@ -267,3 +267,13 @@ se confirma al crear la orden y se libera si la compra no se concreta o la orden
 - **Rompe** la app de clientes: hay que reservar antes de armar el carrito, enviar `meta.hold_id` y manejar
   `HOLD_EXPIRED`.
 - **Apps:** Clientes, Admin.
+
+## C-16 · Respuestas del front aplicadas (2026-10-05)
+
+- **Eliminado** `PATCH /orders/{id}` (ninguna app lo usaba). Para cambiar estado: los endpoints semánticos
+  del groomer (`/accept`, `/depart`, `/arrive`, `/next-step`, `/complete`) o `POST /orders/{id}/status`
+  (admin o groomer asignado).
+- `POST /orders/{id}/delay-report` ahora acepta también órdenes en **`created`** (además de `accepted` y
+  `on_the_way`), para avisar demora a la siguiente parada.
+- **Compatible.**
+- **Apps:** Groomer.

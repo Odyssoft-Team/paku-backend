@@ -258,26 +258,6 @@ class UpdateOrderStatus:
         )
 
 
-@dataclass
-class PatchOrder:
-    orders_repo: PostgresOrderRepository
-
-    async def execute(
-        self,
-        *,
-        order_id: UUID,
-        actor_id: UUID,
-        actor_role: str,
-        status: Optional[OrderStatus] = None,
-    ) -> Order:
-        if status is None:
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail="At least one field must be provided for patch"
-            )
-        return await _change_status_as_staff(
-            self.orders_repo, order_id=order_id, status=status, actor_id=actor_id, actor_role=actor_role,
-        )
 
 
 @dataclass

@@ -1,12 +1,17 @@
 # Consultas para el front
 
-Preguntas abiertas del backend a los equipos de front. Mientras no haya respuesta, el backend
-aplica el supuesto indicado (ver también `plan-de-trabajo.md`).
+Preguntas del backend a los equipos de front. Respondidas el 2026-10-05.
 
-| # | Pregunta | App | Supuesto actual del backend |
+| # | Pregunta | Respuesta del front | Acción en backend |
 |---|---|---|---|
-| 1 | ¿Alguna app usa `PATCH /orders/{id}`? ¿Para qué? | Todas | Queda solo para admin y groomer asignado. Si nadie lo usa, se elimina. |
-| 2 | La app de clientes, ¿es web o se instala desde tiendas (iOS/Android)? | Clientes | Afecta el despliegue del renombre `ally` → `groomer`: si es de tiendas, los teléfonos con la versión vieja verán campos que ya no existen hasta actualizar. |
-| 3 | ¿Qué formato de addons envían hoy al carrito: líneas `service_addon` separadas (`meta.base_service_id` / `meta.requires_base`) o `meta.addon_ids` dentro del servicio base? | Clientes | El backend acepta las líneas `service_addon` (formato único, ver cambios) e ignora esas claves de `meta`. |
-| 4 | ¿Se venden productos físicos (ítems `kind=product`) en el carrito? | Clientes / Admin | No: `store` no tiene precios para productos físicos y el backend los rechaza. |
-| 5 | ¿Usan `POST /cart/{id}/items` (agregar de a un ítem) o solo `POST /cart/items` y `PUT /cart/{id}/items` (lote)? | Clientes | Los tres validan y cotizan igual desde ahora. |
+| 1 | ¿Alguna app usa `PATCH /orders/{id}`? | Ninguna (paku-user, paku-team, paku-web). | **Eliminado** (C-16). |
+| 2 | La app de clientes, ¿web o tienda? | Son dos: **paku-user** (móvil, tiendas) y **paku-web** (web). La móvil puede quedar con versiones viejas hasta que actualicen. | Sin cambio en desarrollo. Antes de producción: actualización forzada de paku-user (ver `pendientes.md`). |
+| 3 | ¿Qué formato de addons envían al carrito? | Líneas `service_addon` separadas con `meta.base_service_id` (se ignora). El cotizador de paku-web usa `addon_ids` en `POST /store/quote`. | Ya compatible; sin cambio. |
+| 4 | ¿Se venden productos físicos (`kind=product`)? | Ninguna app los envía. | Ya se rechazan; sin cambio. |
+| 5 | ¿Qué endpoints de carrito usan? | `POST /cart/items`, `PUT /cart/{id}/items`, `DELETE /cart/{id}/items/{item_id}`. No usan `POST /cart/{id}/items`. | Sin cambio. |
+
+## Pedidos del front
+
+| Pedido | Acción |
+|---|---|
+| Aceptar el aviso de demora también en `created` (las órdenes pasan de `created` a `on_the_way` sin `accepted`; el groomer avisa a la siguiente parada mientras termina la actual). | **Hecho** (C-16). |

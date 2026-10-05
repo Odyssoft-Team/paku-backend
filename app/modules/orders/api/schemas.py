@@ -17,10 +17,6 @@ class UpdateStatusIn(BaseModel):
     status: OrderStatus
 
 
-class PatchOrderIn(BaseModel):
-    status: Optional[OrderStatus] = None
-
-
 class OrderOut(BaseModel):
     id: UUID
     user_id: UUID
