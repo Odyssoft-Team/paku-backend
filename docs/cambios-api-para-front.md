@@ -309,3 +309,15 @@ dispara no se le notifica.
 - El envío a Expo ya no bloquea la API mientras espera la respuesta de Expo.
 - **Compatible.** Para recibir push en pruebas: `PUSH_PROVIDER=expo` en el `.env` del servidor.
 - **Apps:** todas.
+
+## C-19 · Arreglo: las respuestas de reservas daban 500 (reportado por el front, 2026-10-05)
+
+- **Bug:** en el esquema `HoldOut`, el campo `date` tapaba al tipo `date` y quedaba tipado como `null`.
+  Toda respuesta con una reserva fallaba con **500**: `POST /holds` (la reserva sí se guardaba y tomaba el
+  cupo, por eso el reintento daba `409 HOLD_ALREADY_EXISTS`), `GET /holds`, `POST /holds/{id}/confirm`,
+  `POST /holds/{id}/cancel` y `GET /admin/availability/{slot_id}/holds`.
+- **Corregido:** `date` vuelve a ser `"YYYY-MM-DD"` en la respuesta y en `/openapi.json`. Sin cambios de
+  contrato. Se agregó un test que revisa todos los esquemas de la API para que no vuelva a pasar.
+- Las reservas que quedaron tomadas por el 500 se liberan solas al vencer (2 h), o el cliente las ve con
+  `GET /holds` y puede reusarlas o cancelarlas.
+- **Apps:** Clientes, Admin.

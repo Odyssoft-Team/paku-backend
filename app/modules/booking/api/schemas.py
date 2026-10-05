@@ -1,4 +1,6 @@
-from datetime import date, datetime
+# `date` se importa con alias: HoldOut tiene un campo llamado `date` con valor por defecto, y en
+# `date: Optional[date] = None` el nombre del campo tapaba al tipo (Pydantic lo tomaba como None → 500).
+from datetime import date as date_type, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -10,7 +12,7 @@ from app.modules.booking.domain.hold import HoldStatus
 class HoldCreateIn(BaseModel):
     pet_id: UUID
     service_id: UUID
-    date: date
+    date: date_type
 
 
 class HoldOut(BaseModel):
@@ -21,14 +23,14 @@ class HoldOut(BaseModel):
     status: HoldStatus
     expires_at: datetime
     created_at: datetime
-    date: Optional[date] = None
+    date: Optional[date_type] = None
 
 
 class AvailabilityOut(BaseModel):
     id: UUID
     service_id: UUID
     service_name: Optional[str] = None
-    date: date
+    date: date_type
     capacity: int
     booked: int
     available: int
@@ -41,7 +43,7 @@ class AvailabilityOut(BaseModel):
 
 class AvailabilitySlotCreateIn(BaseModel):
     service_id: UUID
-    date: date
+    date: date_type
     capacity: int = Field(gt=0)
     is_active: bool = True
 
@@ -56,12 +58,12 @@ class AvailabilitySlotToggleIn(BaseModel):
 
 class AvailabilitySlotBulkCreateIn(BaseModel):
     service_id: UUID
-    date_from: date
-    date_to: Optional[date] = None
+    date_from: date_type
+    date_to: Optional[date_type] = None
     capacity: int = Field(gt=0)
     is_active: bool = True
 
 
 class AvailabilitySlotBulkOut(BaseModel):
     created: list[AvailabilityOut]
-    skipped: list[date]
+    skipped: list[date_type]
