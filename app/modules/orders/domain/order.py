@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 from uuid import UUID, uuid4
@@ -132,6 +132,7 @@ class Order:
     service_step: Optional[str] = None       # paso actual del proceso (SERVICE_STEPS) con in_service
     service_steps_log: Optional[list] = None  # [{"step", "started_at"}]
     addons_done: Optional[list] = None        # [{"addon_id", "done_at"}]
+    reserved_date: Optional[date] = None       # día de la reserva de cupo vigente (None si se liberó)
     skip_reason: Optional[SkipReason] = None   # solo si la parada se saltó (se conserva como historial)
     skip_note: Optional[str] = None
     skipped_at: Optional[datetime] = None
@@ -151,6 +152,7 @@ class Order:
         currency: str = "PEN",
         delivery_address_snapshot: Optional[dict[str, Any]] = None,
         hold_id: Optional[UUID] = None,
+        reserved_date: Optional[date] = None,
         parent_order_id: Optional[UUID] = None,
     ) -> "Order":
         now = datetime.now(timezone.utc)
@@ -166,6 +168,7 @@ class Order:
             created_at=now,
             updated_at=now,
             hold_id=hold_id,
+            reserved_date=reserved_date,
             payment_status=PaymentStatus.pending,
             culqi_charge_id=None,
         )

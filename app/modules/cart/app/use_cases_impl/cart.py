@@ -197,9 +197,7 @@ class ValidateCart:
 
                 if not meta.get("scheduled_date"):
                     errors.append(f"Service '{item.name}' missing required field: scheduled_date")
-
-                if not meta.get("scheduled_time"):
-                    errors.append(f"Service '{item.name}' missing required field: scheduled_time")
+                # scheduled_time es opcional (C-21): la hora la define el admin al asignar.
 
         # Que cada addon pertenezca al servicio base lo valida la cotización (store) al agregar
         # y en el checkout; meta.requires_base / base_service_id ya no se usan.

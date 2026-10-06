@@ -321,3 +321,36 @@ dispara no se le notifica.
 - Las reservas que quedaron tomadas por el 500 se liberan solas al vencer (2 h), o el cliente las ve con
   `GET /holds` y puede reusarlas o cancelarlas.
 - **Apps:** Clientes, Admin.
+
+## C-20 · Aviso a los admins: nuevo pedido por asignar (2026-10-05)
+
+- Cuando una orden **de servicio** (sin `parent_order_id`) pasa a `payment_status = "paid"` por
+  `POST /orders/{id}/pay`, por la reconciliación de `verifying` o por `confirm-payment`, todos los admins
+  reciben notificación + push:
+  - `type`: `order_paid` · title: "Nuevo pedido por asignar"
+  - body: `"<mascota> · <servicio> · <dd/mm> · <distrito>"` (el día reservado, **sin hora**: la pone el admin)
+  - `data`: `{ order_id, scheduled_date }`
+- No aplica a órdenes de ajuste ni a `confirm-cash-payment` (lo usa un admin, que ya sabe del pedido).
+- Una orden creada sin pagar no genera aviso.
+- **Compatible.** **Apps:** Admin.
+
+## C-21 · El cupo sigue al día asignado, `reserved_date` y hora opcional (2026-10-05)
+
+- **`POST /admin/orders/{id}/assign`** (regla de negocio: reprogramar lo pide el cliente y lo acepta el
+  admin, sin que el cliente compre de nuevo). Se compara el día de `scheduled_at` (hora de Lima) con la
+  **reserva vigente** (confirmada) de la orden:
+  - mismo día → solo cambia la hora;
+  - otro día → se toma cupo del día nuevo y se libera el del día original;
+  - sin reserva vigente (p. ej. venía de `skipped` y el cupo se liberó) → se toma cupo del día elegido;
+  - día sin cupo (o sin cupos habilitados) → **409 `NO_CAPACITY`**, sin cambiar nada:
+    `{"code": "NO_CAPACITY", "message": "No hay cupos disponibles para el 11/10/2026. Elige otro día o amplía la capacidad.", "date": "2026-10-11"}`.
+    El `message` está pensado para mostrarse tal cual.
+- **`OrderOut.reserved_date`** (`"YYYY-MM-DD"` o `null`): día de la reserva vigente. Se actualiza al mover
+  el cupo y pasa a `null` si el cupo se libera (orden cancelada o parada saltada). `hold_id` se conserva
+  como historial. Las órdenes existentes se rellenan con la migración `4d5e6f7a8b9c`.
+- **Carrito:** `meta.scheduled_time` del servicio base ahora es **opcional** (el cliente no elige hora). Si
+  se envía, se valida el formato `HH:MM`.
+- **Push (Android):** los push se envían con `sound: "default"`, `priority: "high"` y
+  `channel_id: "default"`. La app debe crear el canal `"default"` con importancia alta.
+- **Compatible** (campos agregados; validación relajada). El 409 `NO_CAPACITY` en `assign` es nuevo.
+- **Apps:** Admin, Clientes, Groomer.

@@ -31,6 +31,7 @@ class OrderOut(BaseModel):
     groomer_id: Optional[UUID] = None
     scheduled_at: Optional[datetime] = None
     hold_id: Optional[UUID] = None
+    reserved_date: Optional[date] = None  # día de la reserva de cupo vigente (YYYY-MM-DD); null si se liberó
     # Pago: pending → verifying → paid | failed (ver POST /orders/{id}/pay)
     payment_status: PaymentStatus = PaymentStatus.pending
     culqi_charge_id: Optional[str] = None  # chr_(test|live)_XXXXXXXXXXXXXXXX

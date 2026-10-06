@@ -21,6 +21,10 @@ del dueño; "Para después" ya está entendido y se programa más adelante.
 ## Configuración del servidor (no es código)
 
 - **`PUSH_PROVIDER=expo`** en el `.env` del servidor de pruebas para que los push salgan de verdad (C-18).
+- **Migración `4d5e6f7a8b9c`** (C-21, `orders.reserved_date` + relleno): corre sola al arrancar el contenedor.
+- **Verificar en el contenedor** que la versión instalada de `exponent_server_sdk` acepte `channel_id`
+  (no está instalado localmente). Si no lo acepta, el push se envía igual sin esos campos y queda un
+  WARNING en el log ("Expo SDK no acepta sound/priority/channel_id").
 - **Verificar `api.paku.com.pe/health`** (2026-10-05): responde `{"app": "tms-backend", "environment":
   "development"}`. El nombre por defecto del backend de Paku es "Paku Backend": o `APP_NAME` está mal
   configurado en el servidor, o esa URL apunta a otro servicio. Confirmarlo con quien despliega.

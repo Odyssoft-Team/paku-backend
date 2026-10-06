@@ -31,6 +31,48 @@ class AssignOrder:
     orders_repo: PostgresOrderRepository
     assignments_repo: PostgresOrderAssignmentRepository
     pets_repo: Optional[object] = None  # para el nombre de la mascota en la notificación al groomer
+    holds_repo: Optional[object] = None         # C-21: mover el cupo si cambia el día
+    availability_repo: Optional[object] = None
+
+    async def _sync_reservation(self, order: Order, scheduled_at: datetime) -> Optional[object]:
+        """
+        Deja el cupo en el día de `scheduled_at` (hora de Lima). Devuelve la reserva nueva si se tomó
+        una (y libera la anterior); None si el día no cambió o la orden no tiene servicio/mascota.
+        Se ejecuta antes de tocar la orden: si el día está lleno (409 NO_CAPACITY) nada cambia.
+        """
+        from app.modules.booking.app.use_cases_impl.order_reservation import reserve_day_for_order
+        from app.modules.booking.domain.hold import HoldStatus
+        from app.modules.orders.app.use_cases_impl.groomer_view import base_item, order_pet_id
+
+        if self.holds_repo is None or self.availability_repo is None:
+            return None
+        target_day = scheduled_at.astimezone(LIMA_TZ).date()
+
+        current = await self.holds_repo.get_hold(order.hold_id) if order.hold_id else None
+        vigente = current if current is not None and current.status == HoldStatus.confirmed else None
+        if vigente is not None and vigente.date == target_day:
+            return None  # mismo día: solo cambia la hora
+
+        base = base_item(order)
+        try:
+            service_id = vigente.service_id if vigente else UUID(str((base or {}).get("ref_id")))
+        except ValueError:
+            return None
+        pet_id = vigente.pet_id if vigente else order_pet_id(order)
+        if pet_id is None:
+            return None
+
+        new_hold = await reserve_day_for_order(
+            holds_repo=self.holds_repo,
+            availability_repo=self.availability_repo,
+            user_id=order.user_id,
+            pet_id=pet_id,
+            service_id=service_id,
+            day=target_day,
+        )
+        if vigente is not None:
+            await self.holds_repo.release(vigente.id)  # el día original recupera su cupo
+        return new_hold
 
     async def execute(
         self,
@@ -52,6 +94,11 @@ class AssignOrder:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"assign_invalid: no se puede asignar una orden en estado '{order.status.value}'",
             )
+
+        # C-21: el cupo sigue al día asignado (antes de tocar nada: si está lleno → 409 NO_CAPACITY).
+        new_hold = await self._sync_reservation(order, scheduled_at)
+        if new_hold is not None:
+            await self.orders_repo.set_reservation(id=order_id, hold_id=new_hold.id, reserved_date=new_hold.date)
 
         # Crear registro de asignación (historial)
         assignment = OrderAssignment.new(

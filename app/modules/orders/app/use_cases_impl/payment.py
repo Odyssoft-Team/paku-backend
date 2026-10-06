@@ -91,6 +91,14 @@ async def _notify_payment_confirmed(orders_repo: PostgresOrderRepository, order:
         logging.exception("Failed to create payment confirmation notification: %s", exc)
 
 
+async def _on_paid_via_gateway(orders_repo: PostgresOrderRepository, order: Order) -> None:
+    """Pago confirmado por la pasarela: aviso al cliente y, si es un pedido de servicio, a los admins (C-20)."""
+    from app.modules.orders.app.use_cases_impl.admin_notifications import notify_admins_order_paid
+
+    await _notify_payment_confirmed(orders_repo, order)
+    await notify_admins_order_paid(orders_repo, order)
+
+
 def _source_type_from_source_id(source_id: str) -> str:
     """Réplica local de la clasificación que hace culqi-python (routes.py:_detect_source_type)."""
     if source_id.startswith("ype_"):
@@ -183,7 +191,7 @@ class PayOrder:
             culqi_charge_id=culqi_charge_id,
             payment_method=payment_method,
         )
-        await _notify_payment_confirmed(self.orders_repo, paid_order)
+        await _on_paid_via_gateway(self.orders_repo, paid_order)
         return paid_order
 
     async def _reconcile_or_mark_verifying(self, *, order_id: UUID, user_id: UUID) -> Order:
@@ -204,7 +212,7 @@ class PayOrder:
                 culqi_charge_id=payment["culqi_charge_id"],
                 payment_method=payment_method,
             )
-            await _notify_payment_confirmed(self.orders_repo, paid_order)
+            await _on_paid_via_gateway(self.orders_repo, paid_order)
             return paid_order
         if resolution == "failed":
             return await self.orders_repo.fail_payment(id=order_id, user_id=user_id)

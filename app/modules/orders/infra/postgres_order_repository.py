@@ -39,6 +39,7 @@ class PostgresOrderRepository:
             groomer_id=r.groomer_id,
             scheduled_at=r.scheduled_at,
             hold_id=r.hold_id,
+            reserved_date=r.reserved_date,
             payment_status=PaymentStatus(r.payment_status),
             culqi_charge_id=r.culqi_charge_id,
             payment_method=PaymentMethod(r.payment_method) if r.payment_method else None,
@@ -50,6 +51,21 @@ class PostgresOrderRepository:
             skip_note=r.skip_note,
             skipped_at=r.skipped_at,
         )
+
+    async def set_reservation(self, *, id: UUID, hold_id: Optional[UUID], reserved_date) -> Order:
+        """Actualiza la reserva de cupo de la orden. hold_id=None conserva el anterior (historial)."""
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None:
+            raise ValueError("order_not_found")
+        if hold_id is not None:
+            model.hold_id = hold_id
+        model.reserved_date = reserved_date
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
 
     async def mark_skipped(self, *, id: UUID, reason: SkipReason, note: Optional[str], at: datetime) -> Order:
         """La parada se saltó: status=skipped y motivo (el paso del servicio se conserva)."""
@@ -120,6 +136,7 @@ class PostgresOrderRepository:
             groomer_id=order.groomer_id,
             scheduled_at=order.scheduled_at,
             hold_id=order.hold_id,
+            reserved_date=order.reserved_date,
             payment_status=order.payment_status.value,
             culqi_charge_id=order.culqi_charge_id,
             parent_order_id=order.parent_order_id,
@@ -144,6 +161,7 @@ class PostgresOrderRepository:
             groomer_id=order.groomer_id,
             scheduled_at=order.scheduled_at,
             hold_id=order.hold_id,
+            reserved_date=order.reserved_date,
             payment_status=order.payment_status.value,
             culqi_charge_id=order.culqi_charge_id,
             parent_order_id=order.parent_order_id,

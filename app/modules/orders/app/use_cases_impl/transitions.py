@@ -162,14 +162,21 @@ class CompleteOrder:
 # CancelOrder — admin cancela desde cualquier estado activo
 # ------------------------------------------------------------------
 
-async def release_order_hold(holds_repo, order: Order) -> None:
-    """La orden se canceló o se saltó: su reserva de cupo se libera (el día vuelve a tener cupo)."""
+async def release_order_hold(holds_repo, order: Order, orders_repo=None) -> Order:
+    """
+    La orden se canceló o se saltó: su reserva de cupo se libera (el día vuelve a tener cupo) y
+    `reserved_date` queda en null. `hold_id` se conserva como historial. Devuelve la orden actualizada.
+    """
     if holds_repo is None or order.hold_id is None:
-        return
+        return order
     try:
         await holds_repo.release(order.hold_id)
     except Exception:
         logger.exception("No se pudo liberar la reserva %s de la orden %s", order.hold_id, order.id)
+        return order
+    if orders_repo is not None and order.reserved_date is not None:
+        return await orders_repo.set_reservation(id=order.id, hold_id=None, reserved_date=None)
+    return order
 
 
 @dataclass
@@ -186,7 +193,7 @@ class CancelOrder:
                 detail=f"cancel_invalid: no se puede cancelar una orden en estado '{order.status.value}'",
             )
         updated = await self.repo.set_status(id=order_id, status=OrderStatus.cancelled)
-        await release_order_hold(self.holds_repo, updated)
+        updated = await release_order_hold(self.holds_repo, updated, self.repo)
         await _notify(self.repo, updated)
 
         # Aviso al groomer asignado (C-17). Import diferido: groomer_notifications importa este módulo.

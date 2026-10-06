@@ -105,6 +105,12 @@ def get_holds_repo(session: AsyncSession = Depends(get_async_session)):
     return PostgresHoldRepository(session=session, engine=engine)
 
 
+def get_availability_repo(session: AsyncSession = Depends(get_async_session)):
+    from app.modules.booking.infra.postgres_availability_repository import PostgresAvailabilityRepository
+
+    return PostgresAvailabilityRepository(session=session, engine=engine)
+
+
 def _order_out(order) -> OrderOut:
     return OrderOut(**order.__dict__)
 
@@ -478,15 +484,22 @@ async def admin_assign_order(
     repo: PostgresOrderRepository = Depends(get_orders_repo),
     assignments_repo: PostgresOrderAssignmentRepository = Depends(get_assignments_repo),
     pets_repo: PetRepository = Depends(get_pets_repo),
+    holds_repo=Depends(get_holds_repo),
+    availability_repo=Depends(get_availability_repo),
 ) -> AssignmentOut:
     """
     Asigna un groomer a la orden y programa la fecha/hora del servicio. Notifica al cliente y al
     groomer (nueva parada, reprogramación o, al reasignar, retiro de la ruta del anterior).
+
+    El cupo sigue al día asignado (hora de Lima): si es otro día que el reservado, se toma cupo del
+    día nuevo y se libera el original; si no hay cupo → 409 NO_CAPACITY (detail.message legible).
     """
     order, assignment = await AssignOrder(
         orders_repo=repo,
         assignments_repo=assignments_repo,
         pets_repo=pets_repo,
+        holds_repo=holds_repo,
+        availability_repo=availability_repo,
     ).execute(
         order_id=id,
         groomer_id=payload.groomer_id,

@@ -82,13 +82,14 @@ Para recuperar reservas (ej. si se cierra la app): **`GET /holds`** devuelve las
 POST /cart/items
 { "items": [
   { "kind": "service_base", "ref_id": "<id del servicio>",
-    "meta": { "pet_id": "…", "hold_id": "<id de la reserva>", "scheduled_time": "10:00" } },
+    "meta": { "pet_id": "…", "hold_id": "<id de la reserva>" } },
   { "kind": "service_addon", "ref_id": "<id del complemento>" }
 ] }
 ```
 
 - **`meta.hold_id` es obligatorio** en el servicio base. `meta.scheduled_date` ya no hace falta (sale de la
-  reserva; si la envían, debe coincidir).
+  reserva; si la envían, debe coincidir). `meta.scheduled_time` es **opcional**: el cliente no elige hora,
+  la define el admin al asignar (C-21).
 - **Complementos:** una línea `service_addon` por complemento, sin `meta`. Solo existen junto a un servicio
   base y el backend valida que sean de ese servicio y aptos para la mascota.
 - **Precios:** el backend calcula `unit_price` y `name`. Lo que envíen se ignora. Si enviaron un precio
@@ -204,6 +205,11 @@ Los push reales se activan en el servidor con `PUSH_PROVIDER=expo`.
 - **Renombre groomer** (sección 1.1): rol, `groomer_id`, filtro `?groomer_id=`.
 - **Asignar** (`POST /admin/orders/{id}/assign`): body `{ "groomer_id", "scheduled_at", "notes"? }`. Sobre una
   orden `skipped` la reprograma: vuelve a `created` y reinicia el proceso del servicio.
+  **El cupo sigue al día asignado (C-21):** mismo día de la reserva → solo cambia la hora; otro día → el
+  backend mueve el cupo; sin cupo ese día → **409 `NO_CAPACITY`** con `detail.message` listo para mostrar.
+  Usar `OrderOut.reserved_date` para saber qué día tiene reservado cada orden.
+- **Aviso de pedido nuevo (C-20):** cuando un pedido se paga, todos los admins reciben `order_paid`
+  ("Nuevo pedido por asignar") con `data.order_id` y `data.scheduled_date`.
 - **Cancelar** (`POST /admin/orders/{id}/cancel`): también acepta `skipped`; **libera el cupo** del día.
 - **Cupos:**
   - **Nuevo** `GET /admin/availability/{slot_id}/holds` — quién reservó ese día (con estado).

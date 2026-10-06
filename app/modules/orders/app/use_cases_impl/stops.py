@@ -28,7 +28,9 @@ _SKIP_REASON_TEXT = {
 _DELAY_STATUSES = frozenset({OrderStatus.created, OrderStatus.accepted, OrderStatus.on_the_way})
 
 
-async def _notify_admins(orders_repo, users_repo, *, title: str, body: str, data: dict) -> None:
+async def _notify_admins(
+    orders_repo, users_repo, *, title: str, body: str, data: dict, type: str = "order_status",
+) -> None:
     try:
         admins = await users_repo.list_by_role(role="admin")
     except Exception:
@@ -36,7 +38,7 @@ async def _notify_admins(orders_repo, users_repo, *, title: str, body: str, data
         logging.exception("No se pudo obtener la lista de admins para notificar")
         return
     for admin in admins:
-        await notify_user(orders_repo, user_id=admin.id, title=title, body=body, data=data)
+        await notify_user(orders_repo, user_id=admin.id, title=title, body=body, data=data, type=type)
 
 
 @dataclass
@@ -60,7 +62,7 @@ class SkipStop:
             id=order.id, reason=reason, note=note, at=datetime.now(timezone.utc),
         )
         # El cupo de ese día queda libre; al reprogramar, el admin asigna la nueva fecha a mano.
-        await release_order_hold(self.holds_repo, updated)
+        updated = await release_order_hold(self.holds_repo, updated, self.orders_repo)
         data = {"order_id": str(updated.id), "status": updated.status.value, "skip_reason": reason.value}
         motivo = _SKIP_REASON_TEXT[reason]
         await notify_user(

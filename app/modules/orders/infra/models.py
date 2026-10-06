@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from datetime import date as date_type
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -35,8 +36,10 @@ class OrderModel(Base):
     groomer_id: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), index=True, nullable=True)
     scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Reserva que originó esta orden (puede ser null si se crea sin hold)
+    # Reserva de cupo de la orden (se conserva aunque se libere, como historial)
     hold_id: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    # Día de la reserva vigente; null si el cupo se liberó (cancelada / parada saltada)
+    reserved_date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
 
     # Orden que originó esta (solo presente en "órdenes de ajuste" por recálculo de precio)
     parent_order_id: Mapped[Optional[UUID]] = mapped_column(

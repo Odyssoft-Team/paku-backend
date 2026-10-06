@@ -74,10 +74,10 @@ def _calc_total(items: list[Any]) -> float:
     return total
 
 
-async def _confirm_cart_hold(holds_repo, items_snapshot: list[dict[str, Any]], *, user_id: UUID) -> Optional[UUID]:
+async def _confirm_cart_hold(holds_repo, items_snapshot: list[dict[str, Any]], *, user_id: UUID):
     """
     La compra terminó en una orden: la reserva de cupo del servicio base pasa a `confirmed` (ya no
-    vence). Si venció entre el checkout y la orden → 409 HOLD_EXPIRED (elegir fecha de nuevo).
+    vence) y se devuelve (Hold | None). Si venció entre el checkout y la orden → 409 HOLD_EXPIRED.
     """
     from app.modules.booking.domain.hold import HoldStatus
     from app.modules.cart.app.use_cases_impl.hold_binding import CartHolds, base_line, hold_expired_error, line_hold_id
@@ -91,7 +91,7 @@ async def _confirm_cart_hold(holds_repo, items_snapshot: list[dict[str, Any]], *
     confirmed = await holds_repo.update_status(hold.id, HoldStatus.confirmed)
     if confirmed is None or confirmed.status != HoldStatus.confirmed:
         raise hold_expired_error(line_hold_id(base))
-    return hold.id
+    return confirmed
 
 
 @dataclass
@@ -114,7 +114,7 @@ class CreateOrderFromCart:
         items_snapshot = _snapshot_cart_items(items)
         total_snapshot = _calc_total(items)
 
-        hold_id = await _confirm_cart_hold(self.holds_repo, items_snapshot, user_id=user_id)
+        hold = await _confirm_cart_hold(self.holds_repo, items_snapshot, user_id=user_id)
 
         order = Order.new(
             user_id=user_id,
@@ -122,7 +122,8 @@ class CreateOrderFromCart:
             total_snapshot=total_snapshot,
             currency="PEN",
             delivery_address_snapshot=delivery_address_snapshot,
-            hold_id=hold_id,
+            hold_id=hold.id if hold else None,
+            reserved_date=hold.date if hold else None,
         )
         created = await self.orders_repo.create_order(order)
 
@@ -307,6 +308,10 @@ class ConfirmOrderPayment:
             import logging
             logging.exception("Failed to create payment confirmation notification: %s", exc)
 
+        # C-20: pedido de servicio pagado → aviso a los admins para que lo asignen.
+        from app.modules.orders.app.use_cases_impl.admin_notifications import notify_admins_order_paid
+
+        await notify_admins_order_paid(self.orders_repo, order)
         return order
 
 

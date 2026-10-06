@@ -58,7 +58,7 @@ async def _reconcile_verifying_payments_job() -> None:
             from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
             from app.core.culqi_client import CulqiPythonClient
             from app.modules.orders.app.use_cases_impl.payment import (
-                _notify_payment_confirmed,
+                _on_paid_via_gateway,
                 _payment_method_from_source_type,
                 _resolve_payment_records,
             )
@@ -84,7 +84,7 @@ async def _reconcile_verifying_payments_job() -> None:
                         culqi_charge_id=payment["culqi_charge_id"],
                         payment_method=payment_method,
                     )
-                    await _notify_payment_confirmed(orders_repo, paid_order)
+                    await _on_paid_via_gateway(orders_repo, paid_order)  # cliente + admins (C-20)
                     resolved += 1
                     continue
 

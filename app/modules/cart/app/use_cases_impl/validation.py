@@ -76,15 +76,11 @@ def _validate_required_meta_fields(items: list[dict[str, Any]]) -> None:
             if scheduled_date:
                 _validate_date_format(str(scheduled_date), "scheduled_date")
 
+            # Opcional (C-21): el cliente no elige hora; la define el admin al asignar. Si se envía,
+            # se valida el formato.
             scheduled_time = meta.get("scheduled_time")
-            if not scheduled_time:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"Service '{item.get('name', 'unknown')}' requires 'scheduled_time' in meta (format: HH:MM)"
-                    ),
-                )
-            _validate_time_format(str(scheduled_time), "scheduled_time")
+            if scheduled_time:
+                _validate_time_format(str(scheduled_time), "scheduled_time")
 
 
 def _validate_addon_dependencies(items: list[dict[str, Any]]) -> None:

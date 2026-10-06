@@ -219,8 +219,8 @@ def test_order_confirms_hold_and_cancel_releases_it():
         assert await _booked(ctx) == 1
 
         # Crear la orden confirma la reserva: ya no vence aunque pase el tiempo del carrito.
-        hold_id = await _confirm_cart_hold(ctx.holds, [_base_line(hold)], user_id=hold.user_id)
-        assert hold_id == hold.id
+        confirmed = await _confirm_cart_hold(ctx.holds, [_base_line(hold)], user_id=hold.user_id)
+        assert confirmed.id == hold.id and confirmed.date == DAY
         assert await ctx.holds.expire_holds(now=datetime.now(timezone.utc) + timedelta(hours=5)) == 0
         assert (await ctx.holds.get_hold(hold.id)).status == HoldStatus.confirmed
         assert await _booked(ctx) == 1

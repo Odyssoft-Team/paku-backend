@@ -36,15 +36,22 @@ class ExpoPushProvider(PushProvider):
             PushTicketError,
         )
 
-        push_messages = [
-            ExpoPushMessage(
-                to=token,
-                title=message.title,
-                body=message.body,
-                data=message.data or {},
-            )
-            for token in tokens
-        ]
+        # sound/priority/channel_id: sin esto, en Android el aviso puede llegar sin sonido y sin
+        # mostrarse arriba de la pantalla. La app crea el canal "default" con importancia alta.
+        android_alert = {"sound": "default", "priority": "high", "channel_id": "default"}
+
+        def _build(extra: dict) -> list:
+            return [
+                ExpoPushMessage(to=token, title=message.title, body=message.body, data=message.data or {}, **extra)
+                for token in tokens
+            ]
+
+        try:
+            push_messages = _build(android_alert)
+        except TypeError:
+            # Versión del SDK sin alguno de esos campos: enviar igual, sin ellos.
+            logger.warning("Expo SDK no acepta sound/priority/channel_id; se envía sin ellos")
+            push_messages = _build({})
         try:
             responses = PushClient().publish_multiple(push_messages)
             for response in responses:

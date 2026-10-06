@@ -226,7 +226,7 @@ async def validate_cart(
     - Carrito existe y está activo
     - Tiene al menos 1 servicio base
     - Items tienen precios válidos
-    - Meta contiene campos requeridos (pet_id, scheduled_date, scheduled_time)
+    - Meta contiene campos requeridos (pet_id, hold_id; scheduled_date sale de la reserva)
     - Addons referencian correctamente al servicio base
     
     Útil para:
@@ -276,7 +276,7 @@ async def checkout(
     - Carrito activo con items
     - Servicio base presente
     - Precios válidos
-    - Meta completa (pet_id, scheduled_date, scheduled_time)
+    - Meta completa (pet_id, hold_id; scheduled_time es opcional)
     - Addons correctamente referenciados
     
     Flujo:
