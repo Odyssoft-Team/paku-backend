@@ -13,6 +13,7 @@ from app.core.scheduler import start_scheduler, stop_scheduler
 from app.modules.booking.api.router import router as booking_router
 from app.modules.cart.api.router import router as cart_router
 from app.modules.geo.api.router import router as geo_router
+from app.modules.geo.api.places_router import router as geo_places_router
 from app.modules.iam.api.router import (
     router as iam_router,
     admin_router as iam_admin_router,
@@ -114,6 +115,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RequestIDMiddleware)
 
 app.include_router(geo_router, prefix="/geo")
+app.include_router(geo_places_router, prefix="/geo")
 app.include_router(catalog_router)
 app.include_router(iam_router)
 app.include_router(iam_social_router)

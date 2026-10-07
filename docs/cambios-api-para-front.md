@@ -354,3 +354,25 @@ dispara no se le notifica.
   `channel_id: "default"`. La app debe crear el canal `"default"` con importancia alta.
 - **Compatible** (campos agregados; validación relajada). El 409 `NO_CAPACITY` en `assign` es nuevo.
 - **Apps:** Admin, Clientes, Groomer.
+
+## C-22 · Búsqueda de direcciones: sugerencias y ubicación real (2026-10-07)
+
+- **Endpoints nuevos** (todos con sesión, `Authorization: Bearer`):
+  - `GET /geo/places/autocomplete?q=&district_id=&session_token=` →
+    `[{ "place_id", "main_text", "secondary_text" }]`. Con menos de 3 letras devuelve `[]` sin costo.
+    Máximo 5 sugerencias de Perú, priorizando el distrito enviado.
+  - `GET /geo/places/{place_id}?session_token=` →
+    `{ "place_id", "lat", "lng", "formatted_address", "address_line", "building_number", "district_id", "district_name", "district_active" }`.
+    `district_id` es el de `GET /geo/districts` (o `null` si no coincide ninguno); `district_active: false`
+    si Paku aún no atiende ese distrito.
+  - `GET /geo/geocode?q=&district_id=` → `{ "lat", "lng" }`. Respaldo cuando no se eligió sugerencia.
+- **`session_token`:** la app genera uno por formulario de dirección (UUID) y lo envía en autocomplete y
+  en el detalle de la sugerencia elegida; así Google cobra la búsqueda como una sola sesión.
+- **Errores:** 404 `GEO_NOT_FOUND`, 422 `DISTRICT_NOT_FOUND`, 429 `GEO_RATE_LIMITED` (límite por
+  usuario), 503 `GEO_UNAVAILABLE` (sin clave configurada, Google caído o sin cuota). Con 429/503 la app
+  debe seguir funcionando como antes: sin sugerencias y con el pin en el centro del distrito.
+- **Servidor:** requiere `GOOGLE_PLACES_API_KEY` (Places API (New) + Geocoding). Límites ajustables con
+  `GEO_AUTOCOMPLETE_PER_MINUTE` (60), `GEO_AUTOCOMPLETE_PER_DAY` (300), `GEO_LOOKUP_PER_DAY` (30) y
+  `GEO_CACHE_TTL_SECONDS` (86400). Sin la clave, solo estos endpoints responden 503.
+- **Compatible** (solo endpoints nuevos; `GET /geo/districts` no cambia).
+- **Apps:** Clientes. Spec: `specs/features/0002-busqueda-direcciones/`.
