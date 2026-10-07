@@ -60,6 +60,16 @@ class Settings:
     # Obtener en: https://console.cloud.google.com/apis/credentials
     GOOGLE_ROUTES_API_KEY: Optional[str] = os.getenv("GOOGLE_ROUTES_API_KEY")
 
+    # Geo — búsqueda de direcciones con Google Places API (New) + Geocoding (feature 0002).
+    # Clave de servidor restringida a esas dos APIs. Vacía → /geo/places/* y /geo/geocode
+    # responden 503 GEO_UNAVAILABLE y la app sigue sin sugerencias.
+    GOOGLE_PLACES_API_KEY: Optional[str] = os.getenv("GOOGLE_PLACES_API_KEY")
+    # Límites por usuario para controlar el gasto (contadores en memoria, una instancia).
+    GEO_AUTOCOMPLETE_PER_MINUTE: int = int(os.getenv("GEO_AUTOCOMPLETE_PER_MINUTE", "60"))
+    GEO_AUTOCOMPLETE_PER_DAY: int = int(os.getenv("GEO_AUTOCOMPLETE_PER_DAY", "300"))
+    GEO_LOOKUP_PER_DAY: int = int(os.getenv("GEO_LOOKUP_PER_DAY", "30"))
+    GEO_CACHE_TTL_SECONDS: int = int(os.getenv("GEO_CACHE_TTL_SECONDS", "86400"))
+
     # culqi-python — microservicio de pagos (server-to-server, ver POST /orders/{id}/pay)
     # Producción: nombre del servicio en docker-compose.yml (platform/) + su puerto INTERNO
     # de contenedor (no el publicado al host para nginx) — ver servicio "culqi-backend".

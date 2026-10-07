@@ -195,3 +195,9 @@ All in Lima Metropolitana, Lima, Perú.
 - The `active` flag controls service availability (can disable districts without deleting)
 - `user_addresses` table has FK to `geo_districts.id` but currently validation is done via hardcoded list
 - When a district is inactive, users cannot create new addresses there (existing addresses remain valid)
+
+## Búsqueda de direcciones (feature 0002)
+
+`GET /geo/places/autocomplete`, `GET /geo/places/{place_id}` y `GET /geo/geocode` (con sesión).
+Proxy hacia Google Places API (New) + Geocoding con cache de 24 h y límites por usuario en memoria.
+Sin `GOOGLE_PLACES_API_KEY` responden 503 `GEO_UNAVAILABLE`. Ver `specs/features/0002-busqueda-direcciones/`.
