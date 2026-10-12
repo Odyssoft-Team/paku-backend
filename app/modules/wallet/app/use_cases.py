@@ -30,7 +30,20 @@ class AddCard:
         *,
         user_id: UUID,
         token_id: str,
+        expiration_month: int,
+        expiration_year: int,
     ) -> Card:
+        if (
+            type(expiration_month) is not int
+            or not 1 <= expiration_month <= 12
+            or type(expiration_year) is not int
+            or not 1000 <= expiration_year <= 9999
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Invalid card expiration",
+            )
+
         provider = "culqi"
         payment_customer = await self.customers_repo.get_by_user_and_provider(
             user_id=user_id,
@@ -182,18 +195,6 @@ class AddCard:
                 },
             )
 
-        try:
-            exp_month = int(source.get("expiration_month") or 0)
-            exp_year = int(source.get("expiration_year") or 0)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "code": "CARD_CREATION_AMBIGUOUS",
-                    "message": "El resultado de la tarjeta es incierto; verifica el Wallet antes de reintentar.",
-                },
-            ) from exc
-
         existing_cards = await self.repo.list_cards(user_id)
 
         card = Card.new(
@@ -202,8 +203,8 @@ class AddCard:
             payment_method_id=card_id,
             brand=str(brand),
             last4=str(last4),
-            exp_month=exp_month,
-            exp_year=exp_year,
+            exp_month=expiration_month,
+            exp_year=expiration_year,
             is_default=len(existing_cards) == 0,
             culqi_card_id=card_id,
         )

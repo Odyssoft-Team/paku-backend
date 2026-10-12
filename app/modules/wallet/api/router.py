@@ -34,6 +34,8 @@ async def add_card(
     ).execute(
         user_id=current.id,
         token_id=payload.token_id,
+        expiration_month=payload.expiration_month,
+        expiration_year=payload.expiration_year,
     )
     return CardOut(**card.__dict__)
 
@@ -64,4 +66,3 @@ async def set_default_card(
 ) -> CardOut:
     card = await SetDefaultCard(repo=repo).execute(card_id=id, user_id=current.id)
     return CardOut(**card.__dict__)
-

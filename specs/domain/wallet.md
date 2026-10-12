@@ -29,7 +29,7 @@ Wallet relaciona los métodos de pago guardados con el usuario Paku. El backend 
 
 | Método | Ruta | Auth | Descripción |
 |--------|------|------|-------------|
-| POST | `/wallet/cards` | user | Recibe un token de proveedor, crea/asocia una tarjeta y la guarda en el wallet autenticado. |
+| POST | `/wallet/cards` | user | Recibe token y vencimiento validado, crea/asocia una tarjeta y la guarda en el wallet autenticado. |
 | GET | `/wallet/cards` | user | Lista las tarjetas del usuario autenticado. |
 | DELETE | `/wallet/cards/{id}` | user | Elimina una tarjeta del wallet del usuario. |
 | PUT | `/wallet/cards/{id}/default` | user | Marca una tarjeta propia como predeterminada. |
@@ -38,11 +38,11 @@ Errores de negocio: `404` tarjeta o usuario no encontrado; `409` tarjeta Culqi y
 
 ## Consumidores
 
-- **paku-web**: envía token de tarjeta a `POST /wallet/cards`; usa el identificador de tarjeta devuelto para pagos posteriores. No administra el Customer externo.
+- **paku-web**: envía token y vencimiento de tarjeta a `POST /wallet/cards`; usa el identificador devuelto para pagos posteriores. No envía PAN/CVV ni administra el Customer externo.
 - **paku-admin**: sin uso identificado.
 - **paku-vet-dev**: sin uso identificado.
 
 ## Preguntas abiertas
 
-- [ ] Coordinar el cambio de request de `POST /wallet/cards` con los clientes antes del despliegue.
+- [x] Coordinar el contrato de `POST /wallet/cards`: requiere `token_id`, `expiration_month` (1–12) y `expiration_year` (cuatro dígitos). Requests antiguos que envían solo `token_id` se rechazan antes de crear recursos externos.
 - [ ] Definir el procedimiento operativo para reconciliar reservas `provisioning` y altas de Card con resultado ambiguo; no hay endpoint de búsqueda en el contrato actual de `culqi-python`.

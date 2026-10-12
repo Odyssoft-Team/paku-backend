@@ -22,8 +22,7 @@ flowchart LR
     FE -->|PAN, CVV, vencimiento + public key| SEC
     SEC -->|tkn_*| FE
 
-    FE -.->|Código web aún llama POST customers / cards<br/>no alineado con el contrato nuevo| CP
-    FE -->|POST /wallet/cards<br/>JWT Paku + token_id| PK
+    FE -->|POST /wallet/cards<br/>JWT Paku + token_id + vencimiento| PK
     FE -->|POST /orders, GET /orders/{id}<br/>POST /orders/{id}/pay| PK
 
     PK -->|POST customers / cards / charges<br/>GET payments<br/>Bearer service API key| CP
@@ -38,7 +37,7 @@ flowchart LR
     class FE risk;
 ```
 
-La línea discontinua representa el código de wallet que todavía existe en `paku-web`; no está alineado con el contrato nuevo del backend. El camino implementado en Paku recibe JWT + `token_id` y llama a `culqi-python` servidor-a-servidor. No se modificó el frontend en esta tarea.
+El frontend tokeniza directamente con Culqi y envía a Paku el JWT, `token_id` y los campos de vencimiento del token. PAN y CVV no se envían a Paku. Paku envía a `culqi-python` solamente `customer_id` y `token_id`; conserva el vencimiento para su propia persistencia.
 
 ## Responsabilidades actuales
 
@@ -46,7 +45,7 @@ La línea discontinua representa el código de wallet que todavía existe en `pa
 |---|---|
 | `paku-backend` | Fuente de verdad de usuario, mapping usuario-proveedor-Customer, propiedad de órdenes, monto/estado de pago y relación de wallet card con el usuario. Orquesta alta de Customer/Card y el cobro principal. |
 | `culqi-python` | Adaptador HTTP de Culqi: usa la secret key, opcionalmente cifra solicitudes, valida payloads de proveedor, normaliza errores, crea Customer/Card/Charge y mantiene registros auxiliares de tarjetas y pagos. |
-| `paku-web` | Recoge datos de tarjeta y los tokeniza directamente con la public key de Culqi; inicia login, crea órdenes, envía el token o ID de tarjeta y presenta estados. Para guardar tarjetas también llama directamente a rutas de `culqi-python`. |
+| `paku-web` | Recoge datos de tarjeta y los tokeniza directamente con la public key de Culqi; inicia login, crea órdenes, envía el token o ID de tarjeta y presenta estados. Para guardar tarjetas envía a Paku el token y su vencimiento, nunca PAN/CVV. |
 | Culqi | Procesador externo y autoridad de los objetos `cus_*`, `crd_*`, `tkn_*` y `chr_*`. |
 
 En términos de separación de responsabilidades, la identidad Paku, la autorización de qué wallet/card puede usar un usuario, el precio que se cobra y el estado de la orden pertenecen al dominio de `paku-backend`. La comunicación con endpoints y credenciales específicas de Culqi, el cifrado exigido por el proveedor y la traducción de errores son responsabilidad de `culqi-python`. Esto describe el límite que el código ya intenta establecer, no una propuesta de cambio.
@@ -64,7 +63,7 @@ Las rutas del backend FastAPI no declaran por sí mismas un prefijo global `/api
 | `POST /orders` | Crear orden desde carrito y dirección; Paku calcula/congela el total | JWT Paku |
 | `GET /orders`, `GET /orders/{id}` | Consultar órdenes y estado de pago | JWT Paku; consulta de orden limitada al dueño |
 | `POST /orders/{id}/pay` | Solicitar cobro de una orden enviando solo `source_id` | JWT Paku; orden limitada al dueño |
-| `POST /wallet/cards` | Recibir `token_id`, resolver Customer por usuario autenticado, crear Card y guardarla en wallet | JWT Paku; user ID solo de `CurrentUser` |
+| `POST /wallet/cards` | Recibir `token_id` y el vencimiento validado, resolver Customer por usuario autenticado, crear Card y guardarla en wallet | JWT Paku; user ID solo de `CurrentUser` |
 | `POST /orders/{id}/confirm-payment` | Confirmación manual/fallback con `culqi_charge_id` | JWT Paku; no es el flujo normal del web |
 | `POST /orders/{id}/fail-payment`, `POST /orders/{id}/retry-payment` | Fallback de estado y reintento | JWT Paku |
 | `GET /wallet/cards`, `DELETE /wallet/cards/{id}`, `PUT /wallet/cards/{id}/default` | Consultar y administrar las tarjetas del wallet Paku | JWT Paku; operaciones limitadas al usuario autenticado |
@@ -109,7 +108,7 @@ La intención documentada del servicio es que sus rutas `/api` sean internas. El
 1. El formulario de tarjeta envía número, CVV, vencimiento y email directamente desde el navegador a `https://secure.culqi.com/v2/tokens`, con la public key de Culqi.
 2. Culqi devuelve un token temporal `tkn_*`. El PAN/CVV no pasa por ninguno de los dos backends según el código.
 3. En checkout, el web envía ese `tkn_*` a Paku como `source_id` en `POST /orders/{id}/pay`; Paku lo reenvía a `culqi-python` para el cargo.
-4. En el nuevo contrato de Wallet, el token se envía a Paku como `POST /wallet/cards`; Paku lo reenvía a `culqi-python` para asociarlo al Customer resuelto server-side.
+4. Para Wallet, el frontend envía `token_id`, `expiration_month` y `expiration_year` a Paku. Paku valida y persiste el vencimiento y reenvía solo `customer_id` y `token_id` a `culqi-python`.
 
 ### 4. Asociar tarjeta al Culqi Customer
 
@@ -120,10 +119,10 @@ La intención documentada del servicio es que sus rutas `/api` sean internas. El
 
 ### 5. Guardar tarjeta en el wallet Paku
 
-1. El frontend nuevo debe enviar solo `token_id`; `CardIn` rechaza campos extra como `user_id` o `customer_id`.
+1. El frontend envía `token_id`, `expiration_month` y `expiration_year`. Los dos campos de vencimiento son obligatorios y se validan antes de cualquier llamada al proveedor; `CardIn` rechaza campos extra como `user_id`, `customer_id`, PAN y CVV.
 2. Paku determina `user_id` exclusivamente desde `CurrentUser`, crea la Card por servicio interno y persiste `wallet_cards` con metadatos no sensibles. `payment_method_id` conserva el `crd_*` que el checkout usa como source.
 3. `CardOut` no expone `culqi_customer_id` ni `culqi_card_id`; mantiene `payment_method_id` por compatibilidad de consumo.
-4. **El frontend actual aún usa el request anterior** (metadatos e IDs proporcionados por cliente) y no está alineado con `CardIn`; requiere migración separada antes de desplegar juntos los cambios.
+4. La referencia oficial de Culqi para crear y consultar Cards muestra `source` como resumen del Token, sin vencimiento documentado. Paku no depende de esos campos en la respuesta de `/cards` y no los reenvía a Culqi.
 5. `wallet_cards` tiene índice único parcial `(provider, culqi_card_id)` para impedir guardar localmente dos veces el mismo ID externo. El delete de wallet no revoca Card en Culqi.
 
 ### 6. Crear orden y realizar pago
@@ -167,11 +166,11 @@ No hay una base de datos compartida ni transacción distribuida. Paku persiste m
 ## Proxy, duplicación e inconsistencias observadas
 
 1. **`POST /orders/{id}/pay` no es un proxy transparente.** Reenvía el cargo a Culqi Python, pero también autoriza al dueño, fija monto/moneda, deriva datos antifraude, decide estados de pago y dispara notificación. Es una orquestación del dominio Paku.
-2. **El proxy de dominio para Customer/Card ya existe en `POST /wallet/cards`, pero el web no está migrado.** El endpoint valida JWT, decide Customer y orquesta tarjeta; `paku-web` conserva llamadas directas antiguas y un payload incompatible. El backend no acepta campos Customer enviados por el cliente.
+2. **El proxy de dominio para Customer/Card está implementado en `POST /wallet/cards`.** El endpoint valida JWT, valida el vencimiento, decide Customer y orquesta la tarjeta; rechaza campos de tarjeta sensibles y campos de Customer enviados por el cliente.
 3. **Autenticación incompatible en las llamadas browser → Culqi Python heredadas.** El código aún presente en `paymentFetch` envía `Authorization: Bearer <JWT Paku>` cuando hay sesión; `require_service_api_key` no valida ese JWT. En configuración que exige API key la llamada obtiene 401; sin keys configuradas y con el requerimiento apagado puede pasar sin autenticar identidad Paku. El nuevo camino del backend usa Bearer de servicio.
 4. **Persistencia auxiliar duplicada.** Culqi Python continúa guardando PaymentMethod best-effort; las llamadas internas actuales no pasan `metadata.user_id`, por lo que esa tabla no queda ligada al usuario. El mapping autoritativo está en Paku. El backend tampoco revoca Card externa al borrar localmente.
-5. **El frontend antiguo mantiene Customer ID en localStorage.** Esto es código de cliente sin migrar; el endpoint nuevo no lo consume ni lo expone.
-6. **Tokenización duplicada al guardar tarjeta.** `usePayments.saveCard` tokeniza una vez, pero llama a `paymentsService.saveCard` con los datos raw, y esa función vuelve a tokenizar. El primer token no se usa para la asociación.
+5. El flujo actual de guardar tarjeta no usa un Customer ID de `localStorage`; el backend resuelve el Customer desde la identidad autenticada.
+6. La asociación de tarjeta utiliza el token recién recibido de Culqi. El vencimiento se propaga como metadata validada de Paku y no se reenvía al proveedor.
 7. **No se comprueba pertenencia de una Card al wallet al cobrar.** `PayOrder` valida que la orden pertenezca al usuario, pero pasa el `source_id` recibido sin verificar que un `crd_*` esté en sus `wallet_cards`. El endpoint de wallet sí filtra por `user_id` para listar/borrar, pero ese control no participa en el cobro.
 8. **Idempotencia de reintento potencialmente incompatible.** Paku genera una misma `Idempotency-Key` para todos los intentos de una orden. Culqi Python cachea éxitos y rechazos y responde 409 si esa misma key llega con otro payload. Por ello, tras un rechazo y un `retry-payment` con otro token/source, el nuevo payload puede chocar con la key anterior durante el TTL de 24 horas; el cliente Paku clasifica respuestas no 200/502 como ambiguas y vuelve a consultar el registro previo.
 9. **Clasificación de fuente duplicada con distinta granularidad.** Culqi Python distingue `token`, `yape` y `card`; Paku reduce la clasificación a `card` o `yape` para el dominio de órdenes. En particular, un `tkn_*` se registra como `token` en Culqi Python y como método `card` en Paku.
@@ -182,7 +181,7 @@ No hay una base de datos compartida ni transacción distribuida. Paku persiste m
 
 - `culqi-python` es un adaptador/proxy de proveedor para sus rutas Customer, Card y Charge: valida y transforma el payload, llama a Culqi y devuelve el resultado; para cargos añade idempotencia y persistencia auxiliar. `GET /api/culqi/payments` no consulta Culqi: lee su propia base para reconciliación.
 - `paku-backend` expone orquestación de Customer/Card por `POST /wallet/cards`, no un proxy genérico. `/orders/{id}/pay` delega el efecto externo y además mantiene decisiones de negocio de pago.
-- El código actual de `paku-web` todavía evita ese endpoint para guardar tarjetas y accede directamente a Culqi Python; está pendiente alinear el cliente.
+- El flujo actual de `paku-web` guarda mediante `POST /wallet/cards`; `culqi-python` sigue siendo una integración servidor-a-servidor.
 
 ## Referencias de código
 

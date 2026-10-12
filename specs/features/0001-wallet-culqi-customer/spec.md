@@ -36,7 +36,7 @@ Hacer que Paku autentique y orqueste el alta de tarjeta, mantenga la asociación
 
 - [ ] Existe una asociación persistente extensible por proveedor, única por usuario/proveedor y con FK a users.
 - [ ] `POST /wallet/cards` exige JWT Paku y toma `user_id` solo de la identidad autenticada.
-- [ ] El cliente entrega el token de tarjeta; no decide Customer ID ni datos visibles persistidos.
+- [x] El cliente entrega el token y su mes/año de vencimiento; no decide Customer ID ni envía PAN/CVV.
 - [ ] El caso de uso reutiliza o crea Customer mediante el servicio de pagos, crea Card y persiste el método en el wallet.
 - [ ] La migración Alembic tiene upgrade y downgrade reproducibles.
 - [ ] Los tests cubren creación, reutilización, errores de proveedor y aislamiento de identidad.
@@ -50,4 +50,4 @@ La reconciliación automática de Customer/Card tras perder una respuesta no est
 
 ## Preguntas abiertas
 
-- [x] El token de tarjeta es responsabilidad de la capa cliente; el backend solo recibe el token.
+- [x] El token y su vencimiento provienen de la tokenización del lado cliente. El backend exige y valida mes 1–12 y año de cuatro dígitos antes de crear recursos externos; no depende de que la respuesta de creación de Card incluya esos campos.

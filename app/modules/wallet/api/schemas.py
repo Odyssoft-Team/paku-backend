@@ -14,6 +14,8 @@ class CardIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     token_id: str = Field(pattern=r"^tkn_(test|live)_[A-Za-z0-9]{16}$")
+    expiration_month: int = Field(strict=True, ge=1, le=12)
+    expiration_year: int = Field(strict=True, ge=1000, le=9999)
 
 
 # [TECH]
