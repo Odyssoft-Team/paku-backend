@@ -14,6 +14,8 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.core.culqi_client import (
+    CulqiAuthenticationRequired,
+    CulqiChargeNotAttempted,
     CulqiChargeRejected,
     CulqiPythonClient,
     CulqiResultAmbiguous,
@@ -54,17 +56,48 @@ async def _build_antifraud_details(
         address_city = district.get("province_name") if district else None
         if not address_city:
             return None
-        return {
+        return _fit_antifraud_limits({
             "first_name": user.first_name,
             "last_name": user.last_name,
             "address": address_line,
             "address_city": address_city,
             "phone_number": user.phone,
-        }
+        })
     except Exception:
         import logging
         logging.exception("Failed to build antifraud_details for user %s", user_id)
         return None
+
+
+# Límites de AntifraudDetails en culqi-python (app/api/schemas.py): (mínimo, máximo) de caracteres.
+# Un campo fuera de rango hace que culqi-python responda 422 y el cargo nunca llega a Culqi.
+_ANTIFRAUD_LIMITS: dict[str, tuple[int, int]] = {
+    "first_name": (2, 50),
+    "last_name": (2, 50),
+    "address": (5, 100),
+    "address_city": (2, 30),
+    "phone_number": (5, 15),
+}
+
+
+def _fit_antifraud_limits(details: dict[str, str]) -> Optional[dict[str, str]]:
+    """
+    Ajusta antifraud_details a los límites de culqi-python: recorta textos largos y quita espacios del
+    teléfono. Si un campo no cabe ni así (nombre de 1 letra, teléfono de más de 15), devuelve None: el
+    cobro sigue sin esa señal, igual que con el perfil incompleto.
+    """
+    out: dict[str, str] = {}
+    for field, (min_len, max_len) in _ANTIFRAUD_LIMITS.items():
+        value = str(details.get(field) or "").strip()
+        if field == "phone_number":
+            value = "".join(value.split())
+            if len(value) > max_len:
+                return None
+        value = value[:max_len].strip()
+        if len(value) < min_len:
+            return None
+        out[field] = value
+    return out
 
 
 def _payment_method_from_source_type(source_type: str) -> PaymentMethod:
@@ -181,6 +214,26 @@ class PayOrder:
             )
         except CulqiChargeRejected:
             return await self.orders_repo.fail_payment(id=order_id, user_id=user_id)
+        except CulqiChargeNotAttempted as exc:
+            # No hubo cargo: la orden sigue pending y el cliente puede reintentar. Antes caía en
+            # "verifying" y la reconciliación nunca la resolvía (culqi-python no registra nada).
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={
+                    "code": "PAYMENT_PROVIDER_ERROR",
+                    "message": "No pudimos procesar el pago. No se realizó ningún cobro; inténtalo de nuevo.",
+                    "provider_status_code": exc.status_code,
+                },
+            ) from exc
+        except CulqiAuthenticationRequired as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "PAYMENT_3DS_REQUIRED",
+                    "message": "Tu banco pide una validación adicional (3D Secure) que aún no soportamos. "
+                               "No se realizó ningún cobro; prueba con otra tarjeta o con Yape.",
+                },
+            ) from exc
         except CulqiResultAmbiguous:
             return await self._reconcile_or_mark_verifying(order_id=order_id, user_id=user_id)
 

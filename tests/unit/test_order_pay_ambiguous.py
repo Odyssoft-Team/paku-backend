@@ -369,3 +369,111 @@ def test_successful_charge_path_still_marks_order_paid(monkeypatch):
     assert order.culqi_charge_id == "chr_test_1234567890123456"
     assert orders_repo.calls == [("paid", "chr_test_1234567890123456", PaymentMethod.card)]
     assert culqi_client.create_calls == 1
+
+# --- Respuestas de culqi-python que no son cobro ni rechazo (pruebas 2026-10-12) ---
+
+def _charge_with_response(monkeypatch, status_code, body):
+    _HTTPClient.response = _Response(status_code, body)
+    _HTTPClient.exception = None
+    _HTTPClient.calls = []
+    monkeypatch.setattr("app.core.culqi_client.httpx.AsyncClient", _HTTPClient)
+    return asyncio.run(
+        CulqiPythonClient().create_charge(
+            order_id="order-123",
+            amount=2500,
+            currency_code="PEN",
+            email="owner@example.test",
+            source_id="tkn_test_1234567890123456",
+        )
+    )
+
+
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404, 422])
+def test_culqi_python_client_errors_mean_no_charge(monkeypatch, status_code):
+    from app.core.culqi_client import CulqiChargeNotAttempted
+
+    with pytest.raises(CulqiChargeNotAttempted) as err:
+        _charge_with_response(monkeypatch, status_code, {"detail": "invalid"})
+    assert err.value.status_code == status_code
+
+
+def test_culqi_python_409_stays_ambiguous(monkeypatch):
+    with pytest.raises(CulqiResultAmbiguous):
+        _charge_with_response(monkeypatch, 409, {"detail": "Hay una operación en progreso con ese Idempotency-Key"})
+
+
+def test_http_200_with_review_requires_3ds(monkeypatch):
+    from app.core.culqi_client import CulqiAuthenticationRequired
+
+    with pytest.raises(CulqiAuthenticationRequired):
+        _charge_with_response(monkeypatch, 200, {"action_code": "REVIEW", "user_message": "Validación 3DS"})
+
+
+def test_http_200_without_id_or_review_stays_ambiguous(monkeypatch):
+    with pytest.raises(CulqiResultAmbiguous):
+        _charge_with_response(monkeypatch, 200, {"object": "unknown"})
+
+
+def test_not_attempted_charge_keeps_order_pending():
+    from fastapi import HTTPException
+    from app.core.culqi_client import CulqiChargeNotAttempted
+
+    user_id, orders_repo, culqi_client, use_case = _pay_order(
+        create_error=CulqiChargeNotAttempted(422, [{"loc": ["body", "email"]}]),
+    )
+
+    with pytest.raises(HTTPException) as err:
+        _execute(use_case, user_id)
+
+    assert err.value.status_code == 502
+    assert err.value.detail["code"] == "PAYMENT_PROVIDER_ERROR"
+    assert orders_repo.calls == []
+    assert orders_repo.order.payment_status == PaymentStatus.pending
+    assert culqi_client.find_calls == 0
+
+
+def test_3ds_required_keeps_order_pending():
+    from fastapi import HTTPException
+    from app.core.culqi_client import CulqiAuthenticationRequired
+
+    user_id, orders_repo, _, use_case = _pay_order(
+        create_error=CulqiAuthenticationRequired({"action_code": "REVIEW"}),
+    )
+
+    with pytest.raises(HTTPException) as err:
+        _execute(use_case, user_id)
+
+    assert err.value.status_code == 409
+    assert err.value.detail["code"] == "PAYMENT_3DS_REQUIRED"
+    assert orders_repo.calls == []
+
+
+def test_antifraud_details_fit_culqi_python_limits():
+    fitted = payment_module._fit_antifraud_limits({
+        "first_name": "Ana",
+        "last_name": "Pérez",
+        "address": "Av. José Larco 1234, Miraflores 15074, Lima, Perú — " + "x" * 120,
+        "address_city": "Lima",
+        "phone_number": "+51 987 654 321",
+    })
+
+    assert fitted is not None
+    assert len(fitted["address"]) <= 100
+    assert fitted["phone_number"] == "+51987654321"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [{"first_name": "A"}, {"phone_number": "+5198765432101234"}, {"address": "Av"}],
+)
+def test_antifraud_details_dropped_when_a_field_cannot_fit(override):
+    details = {
+        "first_name": "Ana",
+        "last_name": "Pérez",
+        "address": "Av. José Larco 1234",
+        "address_city": "Lima",
+        "phone_number": "987654321",
+        **override,
+    }
+
+    assert payment_module._fit_antifraud_limits(details) is None

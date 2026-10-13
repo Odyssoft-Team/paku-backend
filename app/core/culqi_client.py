@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from typing import Any, Optional
 
 import httpx
 
 from app.core.settings import settings
+
+logger = logging.getLogger(__name__)
+
+# Respuestas de culqi-python que prueban que el cargo no llegó a Culqi: su propia validación (422),
+# Idempotency-Key ausente (400), API key inválida (401/403) o ruta inexistente (404).
+_NOT_CHARGED_STATUS_CODES = frozenset({400, 401, 403, 404, 422})
 
 
 class CulqiChargeRejected(Exception):
@@ -20,12 +27,37 @@ class CulqiResultAmbiguous(Exception):
     """No se pudo determinar si Culqi completó el cargo."""
 
 
+class CulqiChargeNotAttempted(Exception):
+    """culqi-python rechazó la petición antes de llamar a Culqi: no hubo cargo."""
+
+    def __init__(self, status_code: int, detail: Any) -> None:
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(f"{status_code}: {detail}")
+
+
+class CulqiAuthenticationRequired(Exception):
+    """Culqi respondió 200 sin cargo: la tarjeta necesita autenticación 3D Secure."""
+
+    def __init__(self, detail: Any) -> None:
+        self.detail = detail
+        super().__init__(str(detail))
+
+
 class CulqiOperationFailed(Exception):
     """El servicio de pagos devolvió un rechazo explícito para Customer o Card."""
 
 
 class CulqiOperationAmbiguous(CulqiOperationFailed):
     """No se pudo determinar si Culqi creó el Customer o la Card."""
+
+
+def _summary(result: Any) -> Any:
+    """Campos de diagnóstico de una respuesta 200 sin cargo (sin datos de la tarjeta)."""
+    if not isinstance(result, dict):
+        return type(result).__name__
+    keys = ("object", "action_code", "user_message", "merchant_message", "culqi_tracking_id")
+    return {k: result.get(k) for k in keys if k in result}
 
 
 class CulqiPythonClient:
@@ -135,22 +167,32 @@ class CulqiPythonClient:
                     json=payload,
                     headers=self._headers(idempotency_key=idempotency_key),
                 )
-        except (httpx.TimeoutException, httpx.TransportError):
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            logger.warning("culqi-python charge order=%s sin respuesta: %r", order_id, exc)
             raise CulqiResultAmbiguous()
 
         try:
             result = response.json()
         except ValueError as exc:
+            logger.warning("culqi-python charge order=%s status=%s respuesta no JSON", order_id, response.status_code)
             raise CulqiResultAmbiguous() from exc
 
         if response.status_code == 200:
             if isinstance(result, dict) and result.get("id"):
                 return result
+            # Culqi responde 200 (no 201) sin cargo cuando la tarjeta exige 3D Secure
+            # (action_code=REVIEW); culqi-python lo reenvía tal cual.
+            logger.warning("culqi-python charge order=%s 200 sin id: %s", order_id, _summary(result))
+            if isinstance(result, dict) and result.get("action_code") == "REVIEW":
+                raise CulqiAuthenticationRequired(result)
             raise CulqiResultAmbiguous()
 
         detail = result.get("detail") if isinstance(result, dict) else None
+        logger.warning("culqi-python charge order=%s status=%s detail=%s", order_id, response.status_code, detail)
         if isinstance(detail, dict) and detail.get("outcome") == "rejected":
             raise CulqiChargeRejected(detail)
+        if response.status_code in _NOT_CHARGED_STATUS_CODES:
+            raise CulqiChargeNotAttempted(response.status_code, detail)
         raise CulqiResultAmbiguous()
 
     async def find_payments(self, *, order_id: str, timeout: float = 10.0) -> Optional[list[dict[str, Any]]]:
