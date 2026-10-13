@@ -376,3 +376,45 @@ dispara no se le notifica.
   `GEO_CACHE_TTL_SECONDS` (86400). Sin la clave, solo estos endpoints responden 503.
 - **Compatible** (solo endpoints nuevos; `GET /geo/districts` no cambia).
 - **Apps:** Clientes. Spec: `specs/features/0002-busqueda-direcciones/`.
+
+## C-23 · Pago: errores que no cobran ya no dejan la orden en `verifying` (2026-10-12)
+
+- **Endpoint:** `POST /orders/{id}/pay`
+- **Qué cambia:** antes, cualquier respuesta de culqi-python que no fuera cobro ni rechazo explícito
+  dejaba la orden en `verifying` para siempre. Ahora:
+  - **502 `PAYMENT_PROVIDER_ERROR`** si culqi-python rechaza la petición antes de llamar a Culqi
+    (validación 422, API key, etc.). La orden **sigue `pending`**: no hubo cobro y se puede reintentar.
+  - **409 `PAYMENT_3DS_REQUIRED`** si Culqi pide 3D Secure (responde 200 sin cargo). La orden sigue
+    `pending`. El 3DS todavía no está soportado: el cliente debe usar otra tarjeta o Yape.
+  - `antifraud_details` se recortan a los límites de culqi-python (dirección de máximo 100 caracteres,
+    teléfono de máximo 15, etc.), que antes podían provocar el 422.
+  - El backend registra en el log qué respondió culqi-python en cada caso que no es éxito.
+- **Compatible.** El front ya trata los errores de `/pay`; puede mostrar `detail.message`.
+- **Apps:** Clientes (web y app).
+
+## C-24 · Saldo por diferencia de peso (feature 0003, 2026-10-12) ⚠️
+
+- **Endpoints:** `GET /pets`, `GET /pets/{id}`, `POST /pets/{id}/records`, `GET /orders/my-assignments`,
+  `POST /orders/{id}/create-adjustment`, `GET /orders/pending-balance` (nuevo), `POST /holds`,
+  `POST /orders`, `OrderOut` en general.
+- **Qué cambia:**
+  - La orden guarda el peso con que se cotizó (`declared_weight_kg` en `OrderOut`; viene de
+    `meta.pet_weight_kg` del servicio base).
+  - `GET /orders/my-assignments`: `pet.weight_kg` es el **peso declarado** al comprar, no el actual.
+  - `PetOut.weight_locked`: `true` mientras la mascota tenga un servicio solicitado (pagado o en
+    verificación, sin terminar ni cancelar). Con `true`, el dueño recibe **409 `PET_WEIGHT_LOCKED`** al
+    registrar peso.
+  - Cuando el groomer (o un admin) registra el peso en el servicio, la orden guarda
+    `measured_weight_kg`, `measured_weight_at` y, si el precio sube, `extra_charge`. Se avisa al
+    cliente (`weight_difference`) y a los admins. Si el precio baja o queda igual, no hay devolución.
+  - `POST /orders/{id}/create-adjustment`: **solo admin** (antes también el groomer). Cobra
+    `extra_charge`, una sola vez por orden (**409 `ADJUSTMENT_EXISTS`**; **409 `NO_EXTRA_CHARGE`** si
+    no hay monto). El body se ignora. La orden queda con `adjustment_order_id`.
+  - `GET /orders/pending-balance` → `{amount, currency, orders}`: órdenes de ajuste sin pagar. Se paga
+    cada una con `POST /orders/{id}/pay` (tarjeta guardada, nueva o Yape).
+  - Con saldo pendiente, `POST /holds` y `POST /orders` responden **409 `PENDING_BALANCE`**
+    (`amount`, `currency`, `order_ids`).
+- **Rompe** a la app Groomer si llamaba a `create-adjustment` (ahora 403).
+- **Qué debe hacer el front:** ver `docs/guia-groomer-saldo-por-peso.md` (app Groomer). Web y admin se
+  adaptan en la misma feature.
+- **Apps:** Clientes, Groomer, Admin.

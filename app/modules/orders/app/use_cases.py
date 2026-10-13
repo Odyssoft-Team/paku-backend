@@ -106,6 +106,10 @@ class CreateOrderFromCart:
         from app.modules.notifications.infra.postgres_notification_repository import PostgresNotificationRepository
         from app.modules.notifications.app.use_cases import CreateNotification
 
+        from app.modules.orders.app.use_cases_impl.weight_balance import assert_no_pending_balance
+
+        await assert_no_pending_balance(self.orders_repo, user_id=user_id)
+
         cart = await self.cart_repo.get_cart(cart_id=cart_id, user_id=user_id)
         if cart.status != CartStatus.checked_out:
             raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="Cart must be checked_out")

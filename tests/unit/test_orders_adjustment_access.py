@@ -1,4 +1,4 @@
-"""Cargo extra por peso: solo el groomer asignado a la orden o un admin pueden crearlo."""
+"""Cargo extra por peso: solo un admin lo genera, por el monto guardado en la orden y una sola vez."""
 import asyncio
 from dataclasses import replace
 from uuid import uuid4
@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
+from app.modules.orders.app.use_cases_impl import adjustment as adjustment_module
 from app.modules.orders.app.use_cases_impl.adjustment import CreateAdjustmentOrder
 from app.modules.orders.domain.order import Order
 
@@ -13,55 +14,97 @@ from app.modules.orders.domain.order import Order
 class _FakeOrdersRepo:
     def __init__(self, order: Order | None):
         self.order = order
+        self.created: list[Order] = []
+        self.order_pets: list = []
 
     async def get_order_admin(self, *, id):
         return self.order
 
+    async def create_order(self, order):
+        self.created.append(order)
+        return order
 
-class _FakePetsRepo:
-    def __init__(self):
-        self.calls = 0
+    async def set_adjustment_order(self, *, id, adjustment_order_id):
+        self.order = replace(self.order, adjustment_order_id=adjustment_order_id)
+        return self.order
 
-    async def get_by_id(self, pet_id):
-        self.calls += 1
-        return None  # corta el flujo con 404 una vez superada la autorización
-
-
-def _use_case(order):
-    pets = _FakePetsRepo()
-    return CreateAdjustmentOrder(orders_repo=_FakeOrdersRepo(order), pets_repo=pets, store_repo=None), pets
+    async def add_order_pets(self, *, order_id, pet_ids):
+        self.order_pets.append((order_id, pet_ids))
 
 
-def test_unassigned_groomer_gets_403_before_touching_the_pet():
-    order = replace(Order.new(user_id=uuid4(), items_snapshot=[], total_snapshot=80.0), groomer_id=uuid4())
-    use_case, pets = _use_case(order)
+@pytest.fixture(autouse=True)
+def _notifications(monkeypatch):
+    sent = []
+
+    async def _notify(_repo, **kwargs):
+        sent.append(kwargs)
+
+    monkeypatch.setattr(adjustment_module, "notify_user", _notify)
+    return sent
+
+
+def _order(**fields) -> Order:
+    pet_id = uuid4()
+    base = {"kind": "service_base", "ref_id": str(uuid4()), "name": "Baño", "qty": 1, "unit_price": 90.0,
+            "meta": {"pet_id": str(pet_id), "pet_weight_kg": 15.0}}
+    return replace(Order.new(user_id=uuid4(), items_snapshot=[base], total_snapshot=90.0), **fields)
+
+
+def _run(repo, *, role="admin", order_id=None):
+    return asyncio.run(CreateAdjustmentOrder(orders_repo=repo).execute(
+        order_id=order_id or (repo.order.id if repo.order else uuid4()), actor_role=role,
+    ))
+
+
+def test_groomer_cannot_create_adjustment():
+    repo = _FakeOrdersRepo(_order(extra_charge=5.0, groomer_id=uuid4()))
 
     with pytest.raises(HTTPException) as err:
-        asyncio.run(use_case.execute(order_id=order.id, pet_id=uuid4(), actor_id=uuid4(), actor_role="groomer"))
+        _run(repo, role="groomer")
 
     assert err.value.status_code == 403
-    assert pets.calls == 0
-
-
-@pytest.mark.parametrize("role", ["groomer", "admin"])
-def test_assigned_groomer_and_admin_pass_authorization(role):
-    groomer_id = uuid4()
-    order = replace(Order.new(user_id=uuid4(), items_snapshot=[], total_snapshot=80.0), groomer_id=groomer_id)
-    use_case, pets = _use_case(order)
-    actor_id = groomer_id if role == "groomer" else uuid4()
-
-    with pytest.raises(HTTPException) as err:
-        asyncio.run(use_case.execute(order_id=order.id, pet_id=uuid4(), actor_id=actor_id, actor_role=role))
-
-    # Pasó la autorización y llegó a buscar la mascota (inexistente en el fake → 404).
-    assert err.value.status_code == 404
-    assert pets.calls == 1
+    assert repo.created == []
 
 
 def test_missing_order_returns_404():
-    use_case, _ = _use_case(None)
-
     with pytest.raises(HTTPException) as err:
-        asyncio.run(use_case.execute(order_id=uuid4(), pet_id=uuid4(), actor_id=uuid4(), actor_role="admin"))
+        _run(_FakeOrdersRepo(None))
 
     assert err.value.status_code == 404
+
+
+def test_without_extra_charge_returns_409():
+    repo = _FakeOrdersRepo(_order(extra_charge=None))
+
+    with pytest.raises(HTTPException) as err:
+        _run(repo)
+
+    assert err.value.status_code == 409
+    assert err.value.detail["code"] == "NO_EXTRA_CHARGE"
+
+
+def test_admin_creates_adjustment_for_stored_amount(_notifications):
+    repo = _FakeOrdersRepo(_order(extra_charge=5.0, measured_weight_kg=17.0))
+
+    adjustment = _run(repo)
+
+    assert adjustment.parent_order_id == repo.order.id
+    assert adjustment.total_snapshot == 5.0
+    assert adjustment.user_id == repo.order.user_id
+    assert adjustment.items_snapshot[0]["kind"] == "price_adjustment"
+    assert repo.order.adjustment_order_id == adjustment.id
+    assert len(repo.order_pets) == 1
+    assert _notifications[0]["user_id"] == repo.order.user_id
+    assert _notifications[0]["type"] == "pending_balance"
+
+
+def test_second_adjustment_is_rejected():
+    repo = _FakeOrdersRepo(_order(extra_charge=5.0))
+    _run(repo)
+
+    with pytest.raises(HTTPException) as err:
+        _run(repo)
+
+    assert err.value.status_code == 409
+    assert err.value.detail["code"] == "ADJUSTMENT_EXISTS"
+    assert len(repo.created) == 1

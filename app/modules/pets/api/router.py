@@ -24,11 +24,24 @@ def get_breed_repo(session: AsyncSession = Depends(get_async_session)) -> Postgr
     return PostgresBreedRepository(session=session, engine=engine)
 
 
-def _pet_to_out(pet: Pet) -> PetOut:
+def get_orders_repo(session: AsyncSession = Depends(get_async_session)):
+    from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
+
+    return PostgresOrderRepository(session=session, engine=engine)
+
+
+def _pet_to_out(pet: Pet, *, weight_locked: bool = False) -> PetOut:
     """Construye PetOut resolviendo photo_url (object key en BD) a una signed read URL fresca."""
     data = pet.__dict__.copy()
     data["photo_url"] = to_signed_read_url_or_none(pet.photo_url)
+    data["weight_locked"] = weight_locked
     return PetOut(**data)
+
+
+async def _pets_to_out(pets: list[Pet], orders_repo) -> list[PetOut]:
+    """PetOut con weight_locked resuelto en una sola query (mascotas con servicio solicitado)."""
+    locked = await orders_repo.pets_with_requested_service(pet_ids=[p.id for p in pets])
+    return [_pet_to_out(p, weight_locked=p.id in locked) for p in pets]
 
 
 @router.post("/pets", response_model=PetOut, status_code=status.HTTP_201_CREATED)
@@ -71,13 +84,15 @@ async def patch_pet_optional(
     payload: PatchPetOptionalIn,
     current: CurrentUser = Depends(get_current_user),
     repo: PetRepository = Depends(get_pet_repo),
+    orders_repo=Depends(get_orders_repo),
 ) -> PetOut:
     pet = await PatchPetOptional(repo=repo).execute(
         pet_id=id,
         owner_id=current.id,
         **{k: v for k, v in payload.dict().items() if v is not None},
     )
-    return _pet_to_out(pet)
+    [out] = await _pets_to_out([pet], orders_repo)
+    return out
 
 
 @router.get("/pets", response_model=list[PetOut])
@@ -86,13 +101,14 @@ async def list_pets(
     offset: int = Query(default=0, ge=0, description="Number of pets to skip"),
     current: CurrentUser = Depends(get_current_user),
     repo: PetRepository = Depends(get_pet_repo),
+    orders_repo=Depends(get_orders_repo),
 ) -> list[PetOut]:
     pets = await ListPets(repo=repo).execute(
         owner_id=current.id,
         limit=limit,
         offset=offset,
     )
-    return [_pet_to_out(pet) for pet in pets]
+    return await _pets_to_out(pets, orders_repo)
 
 
 @router.get("/pets/{id}", response_model=PetOut)
@@ -109,7 +125,8 @@ async def get_pet(
     pet = await GetPet(repo=repo, orders_repo=orders_repo).execute(
         id, requester_id=current.id, requester_role=current.role,
     )
-    return _pet_to_out(pet)
+    [out] = await _pets_to_out([pet], orders_repo)
+    return out
 
 
 @router.put("/pets/{id}", response_model=PetOut)
@@ -119,6 +136,7 @@ async def update_pet(
     current: CurrentUser = Depends(get_current_user),
     repo: PetRepository = Depends(get_pet_repo),
     breed_repo: PostgresBreedRepository = Depends(get_breed_repo),
+    orders_repo=Depends(get_orders_repo),
 ) -> PetOut:
     pet = await UpdatePet(repo=repo, breed_repo=breed_repo).execute(
         pet_id=id,
@@ -130,7 +148,8 @@ async def update_pet(
         notes=payload.notes,
         photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
     )
-    return _pet_to_out(pet)
+    [out] = await _pets_to_out([pet], orders_repo)
+    return out
 
 
 @router.delete("/pets/{id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -155,6 +174,7 @@ async def admin_list_user_pets(
     user_id: UUID,
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PetRepository = Depends(get_pet_repo),
+    orders_repo=Depends(get_orders_repo),
 ) -> list[PetOut]:
     pets = await ListPets(repo=repo).execute(owner_id=user_id, limit=100, offset=0)
-    return [_pet_to_out(pet) for pet in pets]
+    return await _pets_to_out(pets, orders_repo)

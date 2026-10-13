@@ -6,7 +6,8 @@ nombre salen de `store` con la misma lógica que `POST /store/quote` (`price_ser
 especie, la raza y el peso de la mascota del servicio base.
 
 Formato único de ítems:
-- `service_base`: `ref_id` = id del servicio (store product), `meta.pet_id` obligatorio.
+- `service_base`: `ref_id` = id del servicio (store product), `meta.pet_id` obligatorio. El backend le
+  completa `meta.pet_weight_kg` (peso con que se cotizó).
 - `service_addon`: `ref_id` = id del addon; se liga al único servicio base del carrito. No necesita
   meta (`requires_base`, `base_service_id`, `addon_ids` se aceptan y se ignoran). El backend le
   completa `meta.pet_id` (lo usa el ajuste de precio por peso).
@@ -115,7 +116,13 @@ class CartPricing:
             quote_line = priced[UUID(str(line.get("ref_id")))]
             new["unit_price"] = float(quote_line.price)
             new["name"] = quote_line.name
-            if _kind_value(line.get("kind")) == CartItemKind.service_addon.value:
+            if line is base:
+                # Peso con que se cotizó: la orden lo conserva aunque el cliente cambie el peso después
+                # (lo ve el groomer; feature 0003-saldo-por-peso).
+                meta = dict(_meta_dict(line.get("meta")))
+                meta["pet_weight_kg"] = float(pet.weight_kg) if pet.weight_kg is not None else None
+                new["meta"] = meta
+            elif _kind_value(line.get("kind")) == CartItemKind.service_addon.value:
                 meta = dict(_meta_dict(line.get("meta")))
                 meta["pet_id"] = str(pet_id)
                 new["meta"] = meta

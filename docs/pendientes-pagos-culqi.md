@@ -64,9 +64,8 @@ una prueba normal (tarjeta rechazada y reintento con otra).
    encuentra el éxito anterior). El daño es dejar el estado de pago incorrecto. Propuesta: solo desde
    `pending`/`verifying`; decidir si queda para admin.
 9. **`PayOrder` no rechaza órdenes canceladas** (ni total 0). La app no ofrece pagar una cancelada.
-10. **Cargo extra por peso repetible.** `POST /orders/{id}/create-adjustment` compara contra la orden
-   original sin descontar ajustes previos: dos llamadas = dos cargos extra. (Desde C-03 solo lo puede
-   hacer el groomer asignado o un admin.)
+10. ~~**Cargo extra por peso repetible.**~~ **Corregido el 2026-10-12** (feature 0003, C-24): solo un
+   admin genera el cobro, por el monto guardado en la orden, y una sola vez (`adjustment_order_id`).
 11. **Pago en efectivo** (`confirm-cash-payment`): el groomer asignado puede marcarlo en cualquier estado
    del servicio. **Decisión pendiente:** ¿solo el groomer, también admin, y en qué momento?
 

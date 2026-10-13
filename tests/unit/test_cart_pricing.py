@@ -204,7 +204,9 @@ def test_checkout_with_current_prices_goes_through():
     pet = _pet(user)
     cart_id = uuid4()
     nails_meta = {"pet_id": str(pet.id)}
-    items = [_cart_item(cart_id, _base(pet.id), 65.0, "Baño completo"),
+    base = _base(pet.id)
+    base["meta"]["pet_weight_kg"] = pet.weight_kg  # como lo guarda el servidor al cotizar
+    items = [_cart_item(cart_id, base, 65.0, "Baño completo"),
              _cart_item(cart_id, _addon(meta=nails_meta), 15.0, "Corte de uñas")]
     repo = _FakeCartRepo(user, items)
     pricing = CartPricing(store_repo=_FakeStore(), pets_repo=_FakePets(pet))
@@ -213,6 +215,18 @@ def test_checkout_with_current_prices_goes_through():
 
     assert repo.checked_out
     assert repo.updated is None
+
+
+def test_base_line_keeps_declared_weight():
+    """Feature 0003: el servicio base guarda el peso con que se cotizó (lo ve el groomer)."""
+    user = uuid4()
+    pet = _pet(user, weight=15.0)
+    pricing = CartPricing(store_repo=_FakeStore(), pets_repo=_FakePets(pet))
+
+    [base, addon] = _run(pricing.price_lines([_base(pet.id), _addon()], user_id=user))
+
+    assert base["meta"]["pet_weight_kg"] == 15.0
+    assert "pet_weight_kg" not in addon["meta"]
 
 
 def test_checkout_with_changed_price_returns_409_and_saves_new_prices():

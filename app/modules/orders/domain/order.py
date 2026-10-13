@@ -94,6 +94,29 @@ def next_service_step(step: str) -> Optional[str]:
     return SERVICE_STEPS[idx + 1] if idx + 1 < len(SERVICE_STEPS) else None
 
 
+# "Servicio solicitado" (feature 0003): orden de servicio pagada (o en verificación) que no terminó ni
+# se canceló. Mientras exista, el dueño no puede cambiar el peso de la mascota. Las órdenes sin pagar no
+# cuentan: nadie las limpia y bloquearían el peso para siempre.
+REQUESTED_SERVICE_STATUSES: frozenset[OrderStatus] = frozenset({
+    OrderStatus.created,
+    OrderStatus.accepted,
+    OrderStatus.on_the_way,
+    OrderStatus.in_service,
+    OrderStatus.skipped,
+})
+REQUESTED_SERVICE_PAYMENT_STATUSES: frozenset[PaymentStatus] = frozenset({
+    PaymentStatus.paid,
+    PaymentStatus.verifying,
+})
+
+# Estados en los que el groomer (o un admin) registra el peso real de la orden, por prioridad.
+MEASURABLE_STATUSES: tuple[OrderStatus, ...] = (
+    OrderStatus.in_service,
+    OrderStatus.on_the_way,
+    OrderStatus.accepted,
+)
+
+
 # Estados desde los que se puede cancelar
 _CANCELLABLE_STATUSES: frozenset[OrderStatus] = frozenset({
     OrderStatus.created,
@@ -136,6 +159,11 @@ class Order:
     skip_reason: Optional[SkipReason] = None   # solo si la parada se saltó (se conserva como historial)
     skip_note: Optional[str] = None
     skipped_at: Optional[datetime] = None
+    # Peso real registrado en el servicio y cobro extra (feature 0003-saldo-por-peso)
+    measured_weight_kg: Optional[float] = None
+    measured_weight_at: Optional[datetime] = None
+    extra_charge: Optional[float] = None          # monto a cobrar por peso mayor; None si no hay
+    adjustment_order_id: Optional[UUID] = None    # orden de ajuste ya generada
 
     # [TECH]
     # Factory creating Order with created status and timestamps.

@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.modules.orders.domain.order import OrderStatus, PaymentMethod, PaymentStatus, SkipReason
 from app.modules.orders.domain.photo import OrderPhotoKind
@@ -45,11 +45,37 @@ class OrderOut(BaseModel):
     skip_reason: Optional[SkipReason] = None
     skip_note: Optional[str] = None
     skipped_at: Optional[datetime] = None
+    # Peso y saldo por diferencia (feature 0003-saldo-por-peso)
+    declared_weight_kg: Optional[float] = None   # peso con que se cotizó (meta.pet_weight_kg); null en órdenes antiguas
+    measured_weight_kg: Optional[float] = None   # peso registrado en el servicio por el groomer o un admin
+    measured_weight_at: Optional[datetime] = None
+    extra_charge: Optional[float] = None         # monto a cobrar por peso mayor; null si no hay
+    adjustment_order_id: Optional[UUID] = None   # orden de ajuste generada por el admin
 
     @field_validator("service_steps_log", "addons_done", mode="before")
     @classmethod
     def _none_as_empty(cls, value):
         return value or []
+
+    @model_validator(mode="after")
+    def _fill_declared_weight(self):
+        if self.declared_weight_kg is None:
+            for item in self.items_snapshot or []:
+                if isinstance(item, dict) and item.get("kind") == "service_base":
+                    raw = (item.get("meta") or {}).get("pet_weight_kg")
+                    try:
+                        self.declared_weight_kg = float(raw) if raw is not None else None
+                    except (TypeError, ValueError):
+                        pass
+                    break
+        return self
+
+
+class PendingBalanceOut(BaseModel):
+    """Saldo por pagar del cliente (GET /orders/pending-balance)."""
+    amount: float
+    currency: str
+    orders: list[OrderOut]
 
 
 class GroomerPetOut(BaseModel):
@@ -59,7 +85,7 @@ class GroomerPetOut(BaseModel):
     breed_name: Optional[str] = None
     sex: Optional[str] = None
     birth_date: Optional[date] = None
-    weight_kg: Optional[float] = None
+    weight_kg: Optional[float] = None  # peso declarado al comprar (el actual solo en órdenes antiguas)
     photo_url: Optional[str] = None  # signed read URL
     notes: Optional[str] = None
     skin_sensitivity: Optional[bool] = None
@@ -139,8 +165,8 @@ class ConfirmPaymentIn(BaseModel):
 
 
 class CreateAdjustmentIn(BaseModel):
-    """Payload para POST /orders/{id}/create-adjustment — qué mascota disparó el recálculo."""
-    pet_id: UUID
+    """Payload de POST /orders/{id}/create-adjustment. Ya no se usa: la mascota sale de la orden."""
+    pet_id: Optional[UUID] = None
 
 
 class PayOrderIn(BaseModel):

@@ -50,6 +50,10 @@ class PostgresOrderRepository:
             skip_reason=SkipReason(r.skip_reason) if r.skip_reason else None,
             skip_note=r.skip_note,
             skipped_at=r.skipped_at,
+            measured_weight_kg=float(r.measured_weight_kg) if r.measured_weight_kg is not None else None,
+            measured_weight_at=r.measured_weight_at,
+            extra_charge=float(r.extra_charge) if r.extra_charge is not None else None,
+            adjustment_order_id=r.adjustment_order_id,
         )
 
     async def set_reservation(self, *, id: UUID, hold_id: Optional[UUID], reserved_date) -> Order:
@@ -425,15 +429,16 @@ class PostgresOrderRepository:
         return [self._row_to_order(r) for r in rows]
 
     # ------------------------------------------------------------------
-    # Read — pets (recálculo de precio por peso)
+    # Peso de la mascota y saldo por diferencia (feature 0003-saldo-por-peso)
     # ------------------------------------------------------------------
 
-    async def find_recalculation_candidate(self, *, pet_id: UUID) -> Optional[Order]:
+    async def find_order_for_measurement(self, *, pet_id: UUID, groomer_id: Optional[UUID]) -> Optional[Order]:
         """
-        Busca una orden de esta mascota que sea candidata a recálculo de precio:
-        pagada (payment_status=paid) y con el servicio aún no terminado (status != done).
-        Si hay varias, devuelve la más reciente.
+        Orden de servicio de la mascota en la que se registra el peso real: la que está en servicio, si no
+        la que va en camino, si no la aceptada (MEASURABLE_STATUSES); a igual estado, la más próxima.
+        Con groomer_id, solo entre sus órdenes (un admin pasa None). No exige pago: cubre efectivo.
         """
+        from app.modules.orders.domain.order import MEASURABLE_STATUSES
         from app.modules.orders.infra.models import OrderModel, OrderPetModel
         await self._ensure_ready()
         stmt = (
@@ -441,14 +446,86 @@ class PostgresOrderRepository:
             .join(OrderPetModel, OrderPetModel.order_id == OrderModel.id)
             .where(
                 OrderPetModel.pet_id == pet_id,
-                OrderModel.payment_status == PaymentStatus.paid.value,
-                OrderModel.status != OrderStatus.done.value,
+                OrderModel.parent_order_id.is_(None),
+                OrderModel.status.in_([s.value for s in MEASURABLE_STATUSES]),
             )
-            .order_by(desc(OrderModel.created_at))
+            .order_by(OrderModel.scheduled_at.asc().nulls_last())
         )
-        result = await self._session.execute(stmt)
-        model = result.scalars().first()
-        return self._row_to_order(model) if model is not None else None
+        if groomer_id is not None:
+            stmt = stmt.where(OrderModel.groomer_id == groomer_id)
+        rows = (await self._session.execute(stmt)).scalars().all()
+        if not rows:
+            return None
+        priority = {s.value: i for i, s in enumerate(MEASURABLE_STATUSES)}
+        best = min(rows, key=lambda r: priority[r.status])  # min es estable: conserva el orden por fecha
+        return self._row_to_order(best)
+
+    async def set_measured_weight(
+        self, *, id: UUID, weight_kg: float, at: datetime, extra_charge: Optional[float],
+    ) -> Order:
+        """Guarda el peso real registrado en el servicio y el monto extra (None si no hay)."""
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None:
+            raise ValueError("order_not_found")
+        model.measured_weight_kg = Decimal(str(weight_kg))
+        model.measured_weight_at = at
+        model.extra_charge = Decimal(str(extra_charge)) if extra_charge is not None else None
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
+
+    async def set_adjustment_order(self, *, id: UUID, adjustment_order_id: UUID) -> Order:
+        """Liga la orden con su orden de ajuste (una sola por orden)."""
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None:
+            raise ValueError("order_not_found")
+        model.adjustment_order_id = adjustment_order_id
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
+
+    async def pets_with_requested_service(self, *, pet_ids: list[UUID]) -> set[UUID]:
+        """De estas mascotas, las que tienen un servicio solicitado (REQUESTED_SERVICE_*)."""
+        from app.modules.orders.domain.order import REQUESTED_SERVICE_PAYMENT_STATUSES, REQUESTED_SERVICE_STATUSES
+        from app.modules.orders.infra.models import OrderModel, OrderPetModel
+        if not pet_ids:
+            return set()
+        await self._ensure_ready()
+        stmt = (
+            select(OrderPetModel.pet_id)
+            .join(OrderModel, OrderPetModel.order_id == OrderModel.id)
+            .where(
+                OrderPetModel.pet_id.in_(pet_ids),
+                OrderModel.parent_order_id.is_(None),
+                OrderModel.status.in_([s.value for s in REQUESTED_SERVICE_STATUSES]),
+                OrderModel.payment_status.in_([s.value for s in REQUESTED_SERVICE_PAYMENT_STATUSES]),
+            )
+            .distinct()
+        )
+        return set((await self._session.execute(stmt)).scalars().all())
+
+    async def list_unpaid_adjustments(self, *, user_id: UUID) -> list[Order]:
+        """Órdenes de ajuste del cliente sin pagar ni cancelar: su saldo pendiente."""
+        from app.modules.orders.infra.models import OrderModel
+        await self._ensure_ready()
+        stmt = (
+            select(OrderModel)
+            .where(
+                OrderModel.user_id == user_id,
+                OrderModel.parent_order_id.is_not(None),
+                OrderModel.status != OrderStatus.cancelled.value,
+                OrderModel.payment_status != PaymentStatus.paid.value,
+            )
+            .order_by(OrderModel.created_at.asc())
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [self._row_to_order(r) for r in rows]
 
     async def is_groomer_assigned_to_pet(self, *, groomer_id: UUID, pet_id: UUID) -> bool:
         """

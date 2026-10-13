@@ -18,6 +18,7 @@ from app.modules.orders.api.schemas import (
     DelayReportIn,
     DelayReportOut,
     GroomerOrderOut,
+    PendingBalanceOut,
     SkipIn,
     NextStepIn,
     OrderOut,
@@ -56,6 +57,7 @@ from app.modules.orders.app.use_cases_impl.service_flow import (
     NextServiceStep,
 )
 from app.modules.orders.app.use_cases_impl.stops import ListDelayReports, ReportDelay, SkipStop
+from app.modules.orders.app.use_cases_impl.weight_balance import pending_balance
 from app.modules.orders.infra.postgres_delay_report_repository import PostgresDelayReportRepository
 from app.modules.orders.infra.postgres_order_photo_repository import PostgresOrderPhotoRepository
 from app.modules.orders.domain.order import OrderStatus
@@ -176,6 +178,19 @@ async def list_orders(
 ) -> list[OrderOut]:
     orders = await ListOrders(orders_repo=repo).execute(user_id=current.id)
     return [_order_out(o) for o in orders]
+
+
+@router.get("/pending-balance", response_model=PendingBalanceOut)
+async def get_pending_balance(
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+) -> PendingBalanceOut:
+    """
+    Saldo por pagar del cliente: órdenes de ajuste por diferencia de peso sin pagar. Con saldo > 0 no
+    puede reservar cupo ni crear órdenes (409 PENDING_BALANCE). Se paga cada orden con POST /orders/{id}/pay.
+    """
+    amount, currency, orders = await pending_balance(repo, user_id=current.id)
+    return PendingBalanceOut(amount=amount, currency=currency, orders=[_order_out(o) for o in orders])
 
 
 # IMPORTANTE: esta ruta debe ir ANTES de /{id} para que FastAPI no intente
@@ -539,21 +554,16 @@ async def admin_cancel_order(
 @router.post("/{id}/create-adjustment", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 async def create_adjustment_order(
     id: UUID,
-    payload: CreateAdjustmentIn,
-    current: CurrentUser = Depends(require_roles("admin", "groomer")),
+    payload: Optional[CreateAdjustmentIn] = None,
+    current: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresOrderRepository = Depends(get_orders_repo),
-    pets_repo: PetRepository = Depends(get_pets_repo),
-    store_repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> OrderOut:
     """
-    Crea la orden de ajuste (parent_order_id={id}) por la diferencia de precio detectada
-    tras registrar un peso real distinto al declarado. El precio se recalcula aquí de
-    nuevo del lado del servidor (no se confía en ningún monto que mande el front) —
-    requiere confirmación explícita de admin/groomer, no se genera automáticamente.
+    Solo admin. Crea la orden de ajuste (parent_order_id={id}) por el monto extra que quedó en la orden
+    (`extra_charge`) cuando el peso registrado en el servicio dio un precio mayor. Una sola por orden:
+    409 ADJUSTMENT_EXISTS si ya existe, 409 NO_EXTRA_CHARGE si no hay monto. El body se ignora.
     """
-    adjustment = await CreateAdjustmentOrder(
-        orders_repo=repo, pets_repo=pets_repo, store_repo=store_repo,
-    ).execute(order_id=id, pet_id=payload.pet_id, actor_id=current.id, actor_role=current.role)
+    adjustment = await CreateAdjustmentOrder(orders_repo=repo).execute(order_id=id, actor_role=current.role)
     return _order_out(adjustment)
 
 

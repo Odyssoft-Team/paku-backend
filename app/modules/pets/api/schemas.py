@@ -46,6 +46,9 @@ class PetOut(BaseModel):
     created_at: datetime
     photo_url: Optional[str] = None
     weight_kg: Optional[float] = None
+    # true mientras la mascota tenga un servicio solicitado: el dueño no puede cambiar el peso
+    # (POST /pets/{id}/records type=weight_record responde 409 PET_WEIGHT_LOCKED). Feature 0003.
+    weight_locked: bool = False
     updated_at: Optional[datetime] = None
 
     # Nuevos campos en la salida

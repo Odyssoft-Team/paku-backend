@@ -75,6 +75,7 @@ async def create_record(
         pets_repo=pets_repo,
         orders_repo=orders_repo,
         store_repo=store_repo,
+        users_repo=users_repo,
     ).execute(
         pet_id=pet_id,
         user_id=current.id,

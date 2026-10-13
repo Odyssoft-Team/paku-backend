@@ -16,10 +16,8 @@ from app.modules.pet_records.domain.record import (
 from app.modules.pet_records.infra.postgres_pet_records_repository import PostgresPetRecordsRepository
 from app.modules.pets.domain.pet import PetRepository
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
-from app.modules.orders.app.use_cases_impl.price_recalc import compute_price_check
+from app.modules.orders.app.use_cases_impl.weight_balance import register_measured_weight
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
-from app.modules.store.domain.models import Species
-from app.modules.store.app.use_cases_impl.quote import _breed_category
 
 
 @dataclass
@@ -34,6 +32,7 @@ class CreateRecord:
     pets_repo: PetRepository
     orders_repo: PostgresOrderRepository
     store_repo: PostgresStoreRepository
+    users_repo: Optional[object] = None  # PostgresUserRepository: avisos a admins por diferencia de peso
 
     async def execute(
         self,
@@ -70,6 +69,19 @@ class CreateRecord:
                 detail=f"Invalid record data. Missing or invalid fields: {', '.join(missing)}",
             )
 
+        if type == RecordType.weight_record and role not in ("admin", "groomer"):
+            # El dueño no cambia el peso con un servicio solicitado: el groomer pesa a la mascota en el
+            # servicio y ese peso es el que vale (feature 0003-saldo-por-peso).
+            locked = await self.orders_repo.pets_with_requested_service(pet_ids=[pet_id])
+            if pet_id in locked:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "PET_WEIGHT_LOCKED",
+                        "message": "No puedes cambiar el peso mientras la mascota tenga un servicio solicitado.",
+                    },
+                )
+
         if role == "admin":
             recorded_by_role = RecordRole.admin
         elif role == "groomer":
@@ -103,21 +115,17 @@ class CreateRecord:
             updated_pet = replace(pet, weight_kg=new_weight, updated_at=datetime.now(timezone.utc))
             await self.pets_repo.update(updated_pet)
 
-            # Detección de candidato a recálculo de precio (ver plan): solo si quien registra
-            # es admin/groomer (no el dueño autoreportando en casa) y hay una orden pagada de
-            # esta mascota cuyo servicio aún no termina.
+            # Peso real del servicio: queda en la orden que se atiende, con el monto extra si el precio
+            # sube (solo groomer/admin; el dueño autoreportando en casa no cuenta).
             if recorded_by_role in (RecordRole.admin, RecordRole.groomer):
-                order = await self.orders_repo.find_recalculation_candidate(pet_id=pet_id)
-                if order is not None:
-                    species = Species(str(pet.species.value if hasattr(pet.species, "value") else pet.species))
-                    breed_category = _breed_category(pet.breed_id, pet.breed_name)
-                    price_check = await compute_price_check(
-                        store_repo=self.store_repo,
-                        order=order,
-                        pet_id=pet_id,
-                        species=species,
-                        breed_category=breed_category,
-                        new_weight=new_weight,
-                    )
+                price_check = await register_measured_weight(
+                    orders_repo=self.orders_repo,
+                    store_repo=self.store_repo,
+                    users_repo=self.users_repo,
+                    pet=updated_pet,
+                    weight_kg=new_weight,
+                    actor_id=user_id,
+                    actor_role=role,
+                )
 
         return CreateRecordResult(record=saved, price_check=price_check)

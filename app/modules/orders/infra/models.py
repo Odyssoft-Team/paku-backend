@@ -65,6 +65,12 @@ class OrderModel(Base):
     skip_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     skipped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Peso real registrado en el servicio y cobro extra por diferencia (feature 0003-saldo-por-peso)
+    measured_weight_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2), nullable=True)
+    measured_weight_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    extra_charge: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    adjustment_order_id: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 

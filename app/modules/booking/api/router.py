@@ -94,11 +94,17 @@ async def create(
     hold_repo: PostgresHoldRepository = Depends(get_hold_repo),
     availability_repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
     pets_repo=Depends(get_pets_repo),
+    session: AsyncSession = Depends(get_async_session),
 ) -> HoldOut:
     """
     Reserva un cupo del día antes de comprar. Dura lo mismo que el carrito (2 h); al agregarla al
     carrito (meta.hold_id del servicio base) vence junto con él, y al crear la orden se confirma.
+    409 PENDING_BALANCE si el cliente tiene un saldo por diferencia de peso sin pagar.
     """
+    from app.modules.orders.app.use_cases_impl.weight_balance import assert_no_pending_balance
+    from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
+
+    await assert_no_pending_balance(PostgresOrderRepository(session=session, engine=engine), user_id=current.id)
     hold = await CreateHold(hold_repo=hold_repo, availability_repo=availability_repo, pets_repo=pets_repo).execute(
         user_id=current.id,
         pet_id=payload.pet_id,

@@ -31,6 +31,15 @@ def order_pet_id(order: Order) -> Optional[UUID]:
         return None
 
 
+def declared_weight(order: Order) -> Optional[float]:
+    """Peso con que se cotizó la orden: `meta.pet_weight_kg` del servicio base (None en órdenes antiguas)."""
+    raw = ((base_item(order) or {}).get("meta") or {}).get("pet_weight_kg")
+    try:
+        return float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def purchased_addons(order: Order) -> list[dict[str, Any]]:
     """
     Addons comprados en la orden: líneas `service_addon` (formato actual) y, para órdenes antiguas,
@@ -68,6 +77,9 @@ async def build_groomer_view(
     if pet_id is not None:
         pet = await pets_repo.get_by_id(pet_id, include_deleted=True)
         if pet is not None:
+            # El groomer ve el peso con que se cotizó el servicio, no el actual: si el cliente lo cambió
+            # después, no aplica a esta orden (el groomer pesa a la mascota igual).
+            declared = declared_weight(order)
             pet_out = {
                 "id": pet.id,
                 "name": pet.name,
@@ -75,7 +87,7 @@ async def build_groomer_view(
                 "breed_name": pet.breed_name,
                 "sex": getattr(pet.sex, "value", pet.sex),
                 "birth_date": pet.birth_date,
-                "weight_kg": pet.weight_kg,
+                "weight_kg": declared if declared is not None else pet.weight_kg,
                 "photo_url": signed_url(pet.photo_url),
                 "notes": pet.notes,
                 "skin_sensitivity": pet.skin_sensitivity,
