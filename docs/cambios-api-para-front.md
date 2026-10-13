@@ -418,3 +418,22 @@ dispara no se le notifica.
 - **Qué debe hacer el front:** ver `docs/guia-groomer-saldo-por-peso.md` (app Groomer). Web y admin se
   adaptan en la misma feature.
 - **Apps:** Clientes, Groomer, Admin.
+
+## C-25 · Precios por tipo de pelaje y tabla de precios del admin (feature 0004, 2026-10-13)
+
+- **Qué cambia en la cotización** (`POST /store/quote`, catálogo con `pet_id`, carrito, saldo por peso):
+  la categoría de precio vuelve a ser el **tipo de pelaje** de la raza del catálogo (`simple_short`,
+  `simple_medium_long`, `curly_no_undercoat`, `double_short`, `double_long`, `mixed_curly_undercoat`).
+  Mestizos, razas escritas a mano y gatos usan `mestizo`, que es también el respaldo si un producto no
+  tiene precio para ese pelaje. Antes se usaba `official`/`otros`/`mestizo` y las reglas por pelaje no
+  aplicaban. **Los montos que ve el cliente pueden cambiar** (ahora sí se usan las tablas por pelaje).
+- **Admin:**
+  - `POST /admin/store/price-rules` acepta los 6 pelajes + `mestizo` (ya no `official`/`otros`).
+  - **Nuevo** `GET /admin/store/price-config`: filas (categorías con etiqueta) y tramos de peso sugeridos.
+  - **Nuevo** `PUT /admin/store/price-matrix/{target_id}` `{target_type, cells:[{breed_category, weight_min, weight_max, price}], currency}`:
+    reemplaza la tabla completa del producto/addon (las reglas anteriores quedan inactivas). 422 con
+    `PRICE_CATEGORY_INVALID`, `PRICE_INVALID`, `WEIGHT_RANGE_INVALID`, `WEIGHT_RANGE_OVERLAP`.
+  - **Nuevo** `GET /admin/store/price-simulation?category_id=&weight=&species=&breed_id=&breed_name=`:
+    precio de cada producto y addon para esa mascota, la categoría usada y si se usó el respaldo.
+- **Compatible** para las apps (no cambian contratos). Sin migraciones.
+- **Apps:** Admin. Spec: `specs/features/0004-precios-por-pelaje/`.

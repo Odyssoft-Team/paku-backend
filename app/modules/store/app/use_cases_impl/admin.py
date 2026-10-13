@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.modules.store.domain.models import Addon, Category, PriceRule, Product, Species
+from app.modules.store.domain.pricing import VALID_PRICE_CATEGORIES
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 
 
@@ -253,11 +254,11 @@ class CreatePriceRule:
         price: float,
         currency: str = "PEN",
     ) -> PriceRule:
-        _VALID_BREED_CATEGORIES = {"official", "otros", "mestizo"}
-        if breed_category not in _VALID_BREED_CATEGORIES:
+        # Tipos de pelaje + "mestizo" (feature 0004). "official"/"otros" ya no se crean.
+        if breed_category not in VALID_PRICE_CATEGORIES:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"breed_category_invalid: debe ser uno de {sorted(_VALID_BREED_CATEGORIES)}",
+                detail=f"breed_category_invalid: debe ser uno de {sorted(VALID_PRICE_CATEGORIES)}",
             )
         if price < 0:
             raise HTTPException(
