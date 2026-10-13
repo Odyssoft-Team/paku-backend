@@ -164,3 +164,54 @@ class PriceRuleUpdateIn(BaseModel):
     weight_min: Optional[float] = Field(default=None, ge=0)
     weight_max: Optional[float] = Field(default=None, ge=0)
     is_active: Optional[bool] = None
+
+
+# ------------------------------------------------------------------
+# Tabla de precios (feature 0004)
+# ------------------------------------------------------------------
+
+class PriceMatrixCellIn(BaseModel):
+    breed_category: str        # tipo de pelaje o "mestizo" (GET /admin/store/price-config)
+    weight_min: float = Field(ge=0)
+    weight_max: Optional[float] = Field(default=None, ge=0)   # null = sin tope
+    price: float = Field(ge=0)   # soles con decimales
+
+
+class PriceMatrixIn(BaseModel):
+    target_type: str           # "product" | "addon"
+    cells: List[PriceMatrixCellIn]
+    currency: str = "PEN"
+
+
+class PriceCategoryOut(BaseModel):
+    key: str
+    label: str
+
+
+class WeightTierOut(BaseModel):
+    weight_min: float
+    weight_max: Optional[float]
+
+
+class PriceConfigOut(BaseModel):
+    categories: List[PriceCategoryOut]
+    fallback_category: str
+    weight_tiers: List[WeightTierOut]
+
+
+class SimulatedPriceOut(BaseModel):
+    id: UUID
+    name: str
+    price: Optional[float]           # null = sin precio: no se puede comprar
+    category_used: Optional[str]     # categoría de la regla aplicada
+    used_fallback: bool              # true = se usó la fila "mestizo" por falta del pelaje
+
+
+class SimulatedProductOut(SimulatedPriceOut):
+    addons: List[SimulatedPriceOut]
+
+
+class PriceSimulationOut(BaseModel):
+    price_category: str
+    price_category_label: str
+    products: List[SimulatedProductOut]

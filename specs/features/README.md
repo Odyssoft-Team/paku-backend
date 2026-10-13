@@ -26,6 +26,7 @@ El slug es corto y en kebab-case: `0007-culqi-checkout`.
 | 0001 | `wallet-culqi-customer` | paku-backend | in-progress |
 | 0002 | `busqueda-direcciones` | paku-backend, paku-monorepo | in-progress |
 | 0003 | `saldo-por-peso` | paku-backend, paku-admin, paku-web | in-progress |
+| 0004 | `precios-por-pelaje` | paku-backend, paku-admin | in-progress |
 
 ## Cross-repo
 

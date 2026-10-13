@@ -397,6 +397,25 @@ class PostgresStoreRepository:
         breed_category: str,
         weight: float,
     ) -> Optional[float]:
+        price, _ = await self.price_detail_for(
+            target_id=target_id,
+            target_type=target_type,
+            species=species,
+            breed_category=breed_category,
+            weight=weight,
+        )
+        return price
+
+    async def price_detail_for(
+        self,
+        *,
+        target_id: UUID,
+        target_type: str,
+        species: Species,
+        breed_category: str,
+        weight: float,
+    ) -> tuple[Optional[float], Optional[str]]:
+        """Precio y categoría de la regla usada (la del pelaje o el respaldo "mestizo")."""
         from app.modules.store.infra.db_models import StorePriceRuleModel
 
         async def _find(cat: str) -> Optional[StorePriceRuleModel]:
@@ -423,6 +442,54 @@ class PostgresStoreRepository:
             rule = await _find("mestizo")
 
         if rule is None:
-            return None
+            return None, None
 
-        return float(rule.price)   # Decimal("120.00") → 120.0 (soles)
+        return float(rule.price), rule.breed_category   # Decimal("120.00") → 120.0 (soles)
+
+    async def replace_price_rules(
+        self,
+        *,
+        target_id: UUID,
+        target_type: str,
+        species: Species,
+        rules: list[dict],
+        currency: str = "PEN",
+    ) -> List[PriceRule]:
+        """Reemplaza la tabla de precios de un producto/addon en una sola transacción:
+        desactiva sus reglas activas (quedan como historial) y crea las nuevas."""
+        from sqlalchemy import update
+
+        from app.modules.store.infra.db_models import StorePriceRuleModel, _utcnow
+
+        now = _utcnow()
+        await self._session.execute(
+            update(StorePriceRuleModel)
+            .where(
+                and_(
+                    StorePriceRuleModel.target_id == target_id,
+                    StorePriceRuleModel.is_active.is_(True),
+                )
+            )
+            .values(is_active=False, updated_at=now)
+        )
+        rows = [
+            StorePriceRuleModel(
+                target_id=target_id,
+                target_type=target_type,
+                species=species.value,
+                breed_category=r["breed_category"],
+                weight_min=r["weight_min"],
+                weight_max=r["weight_max"],
+                price=Decimal(str(round(r["price"], 2))),
+                currency=currency,
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            )
+            for r in rules
+        ]
+        self._session.add_all(rows)
+        await self._session.commit()
+        for row in rows:
+            await self._session.refresh(row)
+        return [self._to_price_rule(row) for row in rows]

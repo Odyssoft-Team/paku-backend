@@ -7,25 +7,15 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.modules.store.domain.models import Species, breed_allowed
+from app.modules.store.domain.pricing import price_category
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 from app.modules.pets.domain.pet import PetRepository
 
-_MIXED_BREED_SUFFIX = "_mixed"
-
-
 def _breed_category(breed_id: Optional[str], breed_name: Optional[str]) -> str:
-    """Categoriza la raza de la mascota para el pricing.
-
-    breed_id viene validado por FK contra `breeds.id` (o es None si el usuario
-    escribió una raza que no está en el catálogo, o no seleccionó ninguna).
-
-    - "mestizo": sin breed_id ni breed_name, o breed_id mestizo (ej. "dog_mixed"/"cat_mixed")
-    - "official": breed_id apunta a una raza reconocida del catálogo
-    - "otros": hay breed_name pero no matcheó ninguna raza del catálogo (breed_id vacío)
-    """
-    if breed_id:
-        return "mestizo" if breed_id.strip().lower().endswith(_MIXED_BREED_SUFFIX) else "official"
-    return "otros" if breed_name and str(breed_name).strip() else "mestizo"
+    """Categoría de precio de la mascota (feature 0004): el tipo de pelaje de su raza
+    del catálogo, o "mestizo" (mestizo, raza escrita a mano o sin pelaje conocido).
+    Ver `app/modules/store/domain/pricing.py`."""
+    return price_category(breed_id, breed_name)
 
 
 @dataclass

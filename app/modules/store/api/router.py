@@ -15,9 +15,12 @@ from app.modules.store.api.schemas import (
     CategoryCreateIn,
     CategoryOut,
     CategoryUpdateIn,
+    PriceConfigOut,
+    PriceMatrixIn,
     PriceRuleCreateIn,
     PriceRuleOut,
     PriceRuleUpdateIn,
+    PriceSimulationOut,
     ProductCreateIn,
     ProductDetailOut,
     ProductOut,
@@ -46,6 +49,11 @@ from app.modules.store.app.use_cases import (
     UpdateCategory,
     UpdatePriceRule,
     UpdateProduct,
+)
+from app.modules.store.app.use_cases_impl.pricing_admin import (
+    ReplacePriceMatrix,
+    SimulatePrices,
+    pricing_config,
 )
 from app.modules.store.domain.models import Species
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
@@ -343,3 +351,64 @@ async def admin_update_price_rule(
         is_active=payload.is_active,
     )
     return PriceRuleOut(**rule.__dict__)
+
+
+# ------------------------------------------------------------------
+# Admin — tabla de precios (feature 0004)
+# ------------------------------------------------------------------
+
+@admin_router.get("/store/price-config", response_model=PriceConfigOut)
+async def admin_price_config(
+    _: CurrentUser = Depends(require_roles("admin")),
+) -> PriceConfigOut:
+    """Filas (categorías de precio: pelajes + "mestizo") y tramos de peso sugeridos."""
+    return PriceConfigOut(**pricing_config())
+
+
+@admin_router.put("/store/price-matrix/{target_id}", response_model=List[PriceRuleOut])
+async def admin_replace_price_matrix(
+    target_id: UUID,
+    payload: PriceMatrixIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresStoreRepository = Depends(get_store_repo),
+) -> List[PriceRuleOut]:
+    """Reemplaza la tabla de precios del producto/addon: desactiva sus reglas activas y crea
+    las de `cells` en una sola transacción."""
+    rules = await ReplacePriceMatrix(repo=repo).execute(
+        target_id=target_id,
+        target_type=payload.target_type,
+        cells=[c.model_dump() for c in payload.cells],
+        currency=payload.currency,
+    )
+    return [PriceRuleOut(**r.__dict__) for r in rules]
+
+
+@admin_router.get("/store/price-simulation", response_model=PriceSimulationOut)
+async def admin_price_simulation(
+    category_id: UUID = Query(...),
+    weight: float = Query(..., gt=0),
+    species: Species = Query(Species.dog),
+    breed_id: Optional[str] = Query(None),
+    breed_name: Optional[str] = Query(None),
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresStoreRepository = Depends(get_store_repo),
+) -> PriceSimulationOut:
+    """Lo que pagaría una mascota (raza + peso) por cada producto y addon de la categoría."""
+    result = await SimulatePrices(repo=repo).execute(
+        category_id=category_id,
+        species=species,
+        weight=weight,
+        breed_id=breed_id,
+        breed_name=breed_name,
+    )
+    return PriceSimulationOut(
+        price_category=result.price_category,
+        price_category_label=result.price_category_label,
+        products=[
+            {
+                **{k: v for k, v in p.__dict__.items() if k != "addons"},
+                "addons": [a.__dict__ for a in p.addons],
+            }
+            for p in result.products
+        ],
+    )
