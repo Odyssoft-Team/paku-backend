@@ -105,8 +105,8 @@ def upgrade() -> None:
             sa.text(
                 "INSERT INTO breeds (id, name, species, is_active, coat_group, coat_type, is_mixed, description, "
                 "created_at, updated_at) "
-                "SELECT :id, :name, 'dog', true, :g, :c, :m, :d, :now, :now "
-                "WHERE NOT EXISTS (SELECT 1 FROM breeds WHERE id = :id)"
+                "SELECT CAST(:id AS VARCHAR), :name, 'dog', true, :g, :c, :m, :d, :now, :now "
+                "WHERE NOT EXISTS (SELECT 1 FROM breeds WHERE id = CAST(:id AS VARCHAR))"
             ),
             {"id": breed_id, "name": name, "g": group, "c": coat, "m": mixed, "d": desc, "now": now},
         )
