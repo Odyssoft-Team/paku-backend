@@ -485,3 +485,14 @@ dispara no se le notifica.
 - **Migración:** `6f7a8b9c0d1e` (la misma de C-26). Setting opcional `PET_WEIGHT_CHANGE_COOLDOWN_DAYS` (30).
 - **Compatible** para las apps. **Apps:** Admin (razas), app de clientes (mestizos, peso, perfil), app de
   groomers (alertas). Spec: `specs/features/0006-razas-mestizos-peso/`.
+
+## C-28 · Cupo diario compartido por categoría (2026-10-14)
+
+- El cupo de un día es **uno para toda la categoría** (p. ej. 10 para PAKU Spa), no uno por servicio.
+  Internamente se guarda en el servicio más antiguo de la categoría (el "ancla"); cualquier reserva de
+  cualquier servicio de la categoría descuenta de él y cancelarla lo devuelve.
+- Contratos iguales. `GET /availability?service_id=X` y `GET /admin/availability?service_id=X` devuelven el cupo
+  compartido de la categoría de X; `service_name` ahora es "<categoría> · todos los servicios". Sin
+  `service_id`, el admin solo ve los cupos compartidos. `POST /admin/availability(/bulk)` con cualquier servicio
+  crea el cupo de su categoría. `GET /admin/availability/{id}/holds` lista las reservas de todos sus servicios.
+- **Sin migración.** Los cupos que ya existían en otros servicios dejan de usarse.

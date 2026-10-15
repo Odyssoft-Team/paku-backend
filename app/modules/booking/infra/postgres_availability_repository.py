@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.booking.domain.hold import AvailabilitySlot
+from app.modules.booking.infra.pool import anchor_ids, pool_service_id
 
 
 class PostgresAvailabilityRepository:
@@ -39,6 +40,8 @@ class PostgresAvailabilityRepository:
         from sqlalchemy.exc import IntegrityError
 
         now = utcnow()
+        # Cupo compartido por categoría (feature 0007): se guarda en el servicio ancla
+        service_id = await pool_service_id(self._session, service_id)
         model = AvailabilitySlotModel(
             service_id=service_id,
             date=date,
@@ -69,6 +72,7 @@ class PostgresAvailabilityRepository:
     ) -> Optional[AvailabilitySlot]:
         from app.modules.booking.infra.models import AvailabilitySlotModel
 
+        service_id = await pool_service_id(self._session, service_id)
         stmt = select(AvailabilitySlotModel).where(
             AvailabilitySlotModel.service_id == service_id,
             AvailabilitySlotModel.date == date,
@@ -83,6 +87,7 @@ class PostgresAvailabilityRepository:
         """SELECT FOR UPDATE — use inside a transaction before incrementing booked."""
         from app.modules.booking.infra.models import AvailabilitySlotModel
 
+        service_id = await pool_service_id(self._session, service_id)
         stmt = (
             select(AvailabilitySlotModel)
             .where(
@@ -166,7 +171,11 @@ class PostgresAvailabilityRepository:
             AvailabilitySlotModel.date.asc()
         )
         if service_id is not None:
+            service_id = await pool_service_id(self._session, service_id)
             stmt = stmt.where(AvailabilitySlotModel.service_id == service_id)
+        else:
+            # Solo los cupos de las anclas: los de otros servicios (antes de 0007) ya no se usan
+            stmt = stmt.where(AvailabilitySlotModel.service_id.in_(await anchor_ids(self._session)))
         if date_from is not None:
             date_to = date_from + timedelta(days=days)
             stmt = stmt.where(

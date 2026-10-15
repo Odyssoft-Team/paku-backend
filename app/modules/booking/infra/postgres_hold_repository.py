@@ -119,6 +119,9 @@ class PostgresHoldRepository:
 
         if date is None:
             return  # reservas sin fecha no ocuparon cupo
+        from app.modules.booking.infra.pool import pool_service_id
+
+        service_id = await pool_service_id(self._session, service_id)  # cupo compartido (0007)
         stmt = (
             update(AvailabilitySlotModel)
             .where(
@@ -201,13 +204,15 @@ class PostgresHoldRepository:
         return [await self._maybe_expire(self._row_to_hold(r)) for r in rows]
 
     async def list_by_slot(self, *, service_id: UUID, date) -> List[Hold]:
-        """Reservas de un día y servicio (para el admin), más recientes primero."""
+        """Reservas de un día del cupo (todos los servicios que lo comparten), más recientes primero."""
         from app.modules.booking.infra.models import HoldModel
+        from app.modules.booking.infra.pool import pool_member_ids
 
         await self._ensure_ready()
+        members = await pool_member_ids(self._session, service_id)
         stmt = (
             select(HoldModel)
-            .where(HoldModel.service_id == service_id, HoldModel.date == date)
+            .where(HoldModel.service_id.in_(members), HoldModel.date == date)
             .order_by(HoldModel.created_at.desc())
         )
         rows = (await self._session.execute(stmt)).scalars().all()

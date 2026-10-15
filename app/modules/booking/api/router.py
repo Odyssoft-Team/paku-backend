@@ -49,9 +49,11 @@ def get_store_repo(session: AsyncSession = Depends(get_async_session)) -> Postgr
 
 
 async def _to_availability_out(slots, store_repo: PostgresStoreRepository) -> list[AvailabilityOut]:
-    """Resuelve service_name en batch (una sola query) para no golpear la BD por fila."""
+    """Nombre del cupo en batch: "<categoría> · todos los servicios" (cupo compartido, feature 0007)."""
+    from app.modules.booking.infra.pool import pool_labels
+
     service_ids = {s.service_id for s in slots}
-    names = await store_repo.get_product_names_by_ids(list(service_ids))
+    names = await pool_labels(store_repo._session, list(service_ids))
     return [
         AvailabilityOut(
             id=s.id,
