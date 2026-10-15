@@ -504,3 +504,29 @@ dispara no se le notifica.
     y/o abre/cierra los días ya creados del rango. Responde `{updated, below_booked}` (días donde no se bajó la
     capacidad porque hay más reservas). 422 `NOTHING_TO_UPDATE`, `DATE_RANGE_INVALID`.
   - `GET /admin/availability/{id}/holds`: cada reserva trae `service_name`.
+
+## C-29 · Recomendaciones (documento V2), fotos previas, revisión del admin y sin cobro por peso (feature 0008, 2026-10-15)
+
+- **Nuevo** `POST /store/recommendations` `{pet_id, product_id?, answers?}` →
+  `{version, segment, service, questions, addons, review}`:
+  - `service`: `{product_id, code, name, rule_id, text}` o null. Mostrar badge "Recomendado" con `text`; el
+    cliente puede elegir cualquier servicio.
+  - `questions`: `[{id, text, required, options:[{code,label}]}]` (Q-SHEDDING, Q-MATTING, Q-STYLING,
+    Q-TOOTHBRUSH) según pelaje y, con `product_id`, solo las que disparan algo en ese servicio.
+  - `addons` (con `product_id`): `[{addon_id, code, name, price, action, rule_id, text, requires_photo}]`.
+    `action`: `RECOMENDAR` | `OFRECER` | null (disponible). Los no disponibles no vienen.
+  - `review`: `{rule_id, text, requires_photo}` si las respuestas exigen revisión previa (manto muy apelmazado).
+  - 422 `ANSWER_INVALID` (pregunta o código desconocido).
+- **Carrito:** la línea `service_base` acepta `meta.answers` (`{"Q-MATTING": "LOCALIZED", …}`). El servidor guarda
+  `meta.recommendation` (versión, reglas, si requiere fotos o revisión).
+- **Orden** (`OrderOut`): `review_status` (`pending` | `approved` | `rejected` | null), `review_note`,
+  `reviewed_at`, `requires_photos`, `recommendation`.
+- **Fotos previas:** el dueño sube con `POST /media/signed-upload` (`entity_type: "order"`, `entity_id`: su orden)
+  y registra con `POST /orders/{id}/photos` (se guarda como `kind: "pre_service"`). `POST /orders/{id}/pay`
+  sin fotos cuando `requires_photos` → 409 `PHOTOS_REQUIRED`.
+- **Admin:** `POST /admin/orders/{id}/review` `{approved, note?}` (rechazar cancela y libera el cupo; 409
+  `REVIEW_NOT_PENDING`). `POST /admin/orders/{id}/assign` con revisión pendiente → 409 `REVIEW_PENDING`.
+  Productos: `code`; adicionales: `code`, `requires_photo`, `duration_extra_min` (PATCH, solo lo enviado).
+- **Peso:** registrar el peso en el servicio ya **no** genera cobro (`extra_charge` queda null) ni avisos;
+  `price_check` viene null. Los saldos anteriores siguen como estaban.
+- **Migración:** `7a8b9c0d1e2f`. **Apps:** cliente, admin, groomer. Spec: `specs/features/0008-recomendaciones-v2/`.

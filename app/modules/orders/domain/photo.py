@@ -11,6 +11,7 @@ class OrderPhotoKind(str, Enum):
     initial = "initial"    # en recepción (obligatoria para avanzar desde "reception")
     final = "final"        # antes de devolver a la mascota
     incident = "incident"  # "Registrar incidencia/foto", en cualquier momento
+    pre_service = "pre_service"  # del cliente antes de pagar (corte, desmotado extendido, revisión) — 0008
 
 
 @dataclass(frozen=True)

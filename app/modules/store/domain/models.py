@@ -33,6 +33,7 @@ class Product:
     # Requisitos de la mascota (feature 0005); None = sin límite. Ver domain/eligibility.py
     max_weight_kg: Optional[float] = None
     max_age_months: Optional[int] = None
+    code: Optional[str] = None  # Clásico | Medicado | Premium | Seco (reglas de recomendación, 0008)
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,9 @@ class Addon:
     allowed_breeds: Optional[List[str]]
     is_active: bool
     description: Optional[str] = None
+    code: Optional[str] = None               # ADD_DESLANADO_INT… (hoja 18, 0008)
+    requires_photo: bool = False
+    duration_extra_min: Optional[int] = None
 
 
 @dataclass(frozen=True)

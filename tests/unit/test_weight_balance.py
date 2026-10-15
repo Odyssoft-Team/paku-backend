@@ -121,17 +121,17 @@ def _measure(orders, pet, weight, *, role="groomer", actor_id=None):
 
 # --- Peso medido en el servicio ---
 
-def test_heavier_pet_stores_extra_charge_and_notifies(notices):
+def test_heavier_pet_stores_weight_without_charge(notices):
+    # Feature 0008 (BR-029): se respeta el precio pagado; el peso real queda para el futuro
     pet = _pet(17.0)
     orders = _Orders(_order(pet))
 
     check = _measure(orders, pet, 17.0)
 
-    assert check["difference"] == 5.0
+    assert check is None
     assert orders.order.measured_weight_kg == 17.0
-    assert orders.order.extra_charge == 5.0
-    assert [who for who, _ in notices] == ["user", "admins"]
-    assert notices[0][1]["user_id"] == pet.owner_id
+    assert orders.order.extra_charge is None
+    assert notices == []
 
 
 def test_lighter_or_same_price_stores_weight_without_charge(notices):
@@ -156,14 +156,14 @@ def test_groomer_only_measures_own_orders_admin_any(notices):
     assert orders.find_calls == [groomer, None]
 
 
-def test_same_weight_twice_notifies_once(notices):
+def test_measuring_twice_never_notifies_a_charge(notices):
     pet = _pet()
     orders = _Orders(_order(pet))
 
     _measure(orders, pet, 17.0)
-    _measure(orders, pet, 17.0)
+    _measure(orders, pet, 18.0)
 
-    assert len([n for n in notices if n[0] == "user"]) == 1
+    assert notices == [] and orders.order.measured_weight_kg == 18.0
 
 
 def test_order_with_adjustment_is_not_changed(notices):
@@ -237,7 +237,7 @@ def test_groomer_changes_weight_during_cooldown(notices):
     pet = replace(_pet(), weight_updated_at=datetime.now(timezone.utc) - timedelta(days=1))
     orders = _Orders(_order(pet))
     result = _record(pet, orders, role="admin", user_id=uuid4())
-    assert result.price_check["difference"] == 5.0
+    assert result.price_check is None and orders.order.measured_weight_kg == 18.0
 
 
 def test_admin_records_weight_even_if_locked(notices):
@@ -246,8 +246,8 @@ def test_admin_records_weight_even_if_locked(notices):
 
     result = _record(pet, orders, role="admin", user_id=uuid4())
 
-    assert result.price_check["difference"] == 5.0
-    assert orders.order.extra_charge == 5.0
+    assert result.price_check is None
+    assert orders.order.measured_weight_kg == 18.0 and orders.order.extra_charge is None
 
 
 # --- Saldo pendiente ---

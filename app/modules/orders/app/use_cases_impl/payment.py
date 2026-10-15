@@ -171,12 +171,29 @@ def _resolve_payment_records(
     return "verifying", None
 
 
+async def _assert_required_photos(order: Order, photos_repo) -> None:
+    """Corte estético, desmotado extendido o revisión manual exigen fotos antes de pagar (0008)."""
+    from app.modules.orders.domain.photo import OrderPhotoKind
+    from app.modules.store.app.use_cases_impl.recommendation_snapshot import recommendation_of
+
+    rec = recommendation_of(order.items_snapshot) or {}
+    if not rec.get("requires_photos") or photos_repo is None:
+        return
+    if not await photos_repo.has_kind(order.id, OrderPhotoKind.pre_service):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+            "code": "PHOTOS_REQUIRED",
+            "message": "Sube al menos una foto de tu mascota antes de pagar: la necesitamos para "
+                       + ", ".join(rec.get("photo_addons") or ["preparar el servicio"]) + ".",
+        })
+
+
 @dataclass
 class PayOrder:
     orders_repo: PostgresOrderRepository
     culqi_client: CulqiPythonClient
     users_repo: PostgresUserRepository
     districts_repo: PostgresDistrictRepository
+    photos_repo: Optional[object] = None  # fotos previas requeridas (feature 0008)
 
     async def execute(self, *, order_id: UUID, user_id: UUID, email: str, source_id: str) -> Order:
         try:
@@ -190,6 +207,8 @@ class PayOrder:
         # cobro — se devuelve el estado actual tal cual.
         if order.payment_status.value != "pending":
             return order
+
+        await _assert_required_photos(order, self.photos_repo)
 
         amount_centavos = int(round(order.total_snapshot * 100))
         source_type = _source_type_from_source_id(source_id)

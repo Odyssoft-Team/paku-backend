@@ -164,6 +164,10 @@ class Order:
     measured_weight_at: Optional[datetime] = None
     extra_charge: Optional[float] = None          # monto a cobrar por peso mayor; None si no hay
     adjustment_order_id: Optional[UUID] = None    # orden de ajuste ya generada
+    # Revisión previa del admin (feature 0008): "pending" | "approved" | "rejected"; None si no aplica
+    review_status: Optional[str] = None
+    review_note: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
 
     # [TECH]
     # Factory creating Order with created status and timestamps.
@@ -182,6 +186,7 @@ class Order:
         hold_id: Optional[UUID] = None,
         reserved_date: Optional[date] = None,
         parent_order_id: Optional[UUID] = None,
+        review_status: Optional[str] = None,
     ) -> "Order":
         now = datetime.now(timezone.utc)
         return Order(
@@ -197,6 +202,7 @@ class Order:
             updated_at=now,
             hold_id=hold_id,
             reserved_date=reserved_date,
+            review_status=review_status,
             payment_status=PaymentStatus.pending,
             culqi_charge_id=None,
         )

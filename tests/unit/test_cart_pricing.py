@@ -1,5 +1,6 @@
 """Precios del carrito calculados por el backend (store), formato único de addons y PRICE_CHANGED."""
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -45,6 +46,19 @@ class _FakeStore:
 
     async def price_for(self, *, target_id, target_type, species, breed_category, weight):
         return self.prices.get(target_id)
+
+    # Motor de recomendaciones (0008): sin reglas en estos tests
+    async def list_recommendation_rules(self):
+        return []
+
+    async def breed_coat_type(self, breed_id):
+        return None
+
+    async def list_products(self, *, category_id, species=None):
+        return [p for p in self.products.values() if p.category_id == category_id]
+
+    async def list_addons(self, *, product_id):
+        return [a for a in self.addons.values() if a.product_id == product_id]
 
 
 class _FakePets:
@@ -214,8 +228,11 @@ def test_checkout_with_current_prices_goes_through():
     base["meta"]["pet_weight_kg"] = pet.weight_kg  # como lo guarda el servidor al cotizar
     items = [_cart_item(cart_id, base, 65.0, "Baño completo"),
              _cart_item(cart_id, _addon(meta=nails_meta), 15.0, "Corte de uñas")]
-    repo = _FakeCartRepo(user, items)
     pricing = CartPricing(store_repo=_FakeStore(), pets_repo=_FakePets(pet))
+    # Meta tal como la guarda el servidor al cotizar (incluye respuestas y recomendación, 0008)
+    priced = _run(pricing.price_lines([{"kind": i.kind, "ref_id": i.ref_id, "meta": i.meta} for i in items], user_id=user))
+    items = [replace(item, meta=line["meta"]) for item, line in zip(items, priced)]
+    repo = _FakeCartRepo(user, items)
 
     _run(Checkout(repo=repo, pricing=pricing).execute(cart_id=cart_id, user_id=user))
 

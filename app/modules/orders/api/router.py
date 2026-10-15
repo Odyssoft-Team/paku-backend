@@ -10,6 +10,7 @@ from app.core.db import engine, get_async_session
 from app.modules.geo.infra.repository import PostgresDistrictRepository
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
 from app.modules.orders.api.schemas import (
+    OrderReviewIn,
     AssignmentOut,
     AssignOrderIn,
     ConfirmPaymentIn,
@@ -376,11 +377,21 @@ def _photo_out(photo) -> OrderPhotoOut:
 async def add_photo(
     id: UUID,
     payload: OrderPhotoIn,
-    current: CurrentUser = Depends(require_roles("groomer", "admin")),
+    current: CurrentUser = Depends(get_current_user),
     repo: PostgresOrderRepository = Depends(get_orders_repo),
     photos_repo: PostgresOrderPhotoRepository = Depends(get_photos_repo),
 ) -> OrderPhotoOut:
-    """Registra una foto ya subida con POST /media/signed-upload (entity_type="order")."""
+    """Registra una foto ya subida con POST /media/signed-upload (entity_type="order").
+
+    Groomer/admin: fotos del servicio. Cliente (feature 0008): fotos previas de su orden antes de pagar
+    (siempre se guardan como kind="pre_service")."""
+    if current.role not in ("groomer", "admin"):
+        from app.modules.orders.app.use_cases_impl.service_flow import AddPreServicePhoto
+
+        photo = await AddPreServicePhoto(orders_repo=repo, photos_repo=photos_repo).execute(
+            order_id=id, object_name=payload.object_name, note=payload.note, actor_id=current.id,
+        )
+        return _photo_out(photo)
     photo = await AddOrderPhoto(orders_repo=repo, photos_repo=photos_repo).execute(
         order_id=id, object_name=payload.object_name, kind=payload.kind, note=payload.note,
         actor_id=current.id, actor_role=current.role,
@@ -534,6 +545,30 @@ async def admin_assign_order(
     )
 
 
+@admin_router.post("/orders/{id}/review", response_model=OrderOut)
+async def admin_review_order(
+    id: UUID,
+    payload: OrderReviewIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+    holds_repo=Depends(get_holds_repo),
+    pets_repo: PetRepository = Depends(get_pets_repo),
+) -> OrderOut:
+    """Revisión previa (feature 0008): aprobar habilita la asignación; rechazar cancela la orden y libera
+    el cupo (la devolución del pago se gestiona aparte)."""
+    order = await repo.get_order_admin(id=id)
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+    if order.review_status != "pending":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+            "code": "REVIEW_NOT_PENDING", "message": "Esta orden no tiene una revisión pendiente."})
+    order = await repo.set_review(id=id, review_status="approved" if payload.approved else "rejected",
+                                  note=payload.note)
+    if not payload.approved:
+        order = await CancelOrder(repo=repo, holds_repo=holds_repo, pets_repo=pets_repo).execute(order_id=id)
+    return _order_out(order)
+
+
 @admin_router.post("/orders/{id}/cancel", response_model=OrderOut)
 async def admin_cancel_order(
     id: UUID,
@@ -579,6 +614,7 @@ async def pay_order(
     repo: PostgresOrderRepository = Depends(get_orders_repo),
     users_repo: PostgresUserRepository = Depends(get_users_repo),
     districts_repo: PostgresDistrictRepository = Depends(get_districts_repo),
+    photos_repo: PostgresOrderPhotoRepository = Depends(get_photos_repo),
 ) -> OrderOut:
     """
     Camino principal de pago: paku-backend orquesta el cobro contra culqi-python
@@ -596,6 +632,7 @@ async def pay_order(
         culqi_client=CulqiPythonClient(),
         users_repo=users_repo,
         districts_repo=districts_repo,
+        photos_repo=photos_repo,
     ).execute(
         order_id=id,
         user_id=current.id,

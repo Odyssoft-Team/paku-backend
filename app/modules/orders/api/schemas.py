@@ -51,6 +51,12 @@ class OrderOut(BaseModel):
     measured_weight_at: Optional[datetime] = None
     extra_charge: Optional[float] = None         # monto a cobrar por peso mayor; null si no hay
     adjustment_order_id: Optional[UUID] = None   # orden de ajuste generada por el admin
+    # Recomendación y revisión (feature 0008)
+    review_status: Optional[str] = None          # pending | approved | rejected | null
+    review_note: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    requires_photos: bool = False                # el cliente debe subir fotos antes de pagar
+    recommendation: Optional[dict] = None        # respuestas, reglas y versión (auditoría)
 
     @field_validator("service_steps_log", "addons_done", mode="before")
     @classmethod
@@ -59,6 +65,13 @@ class OrderOut(BaseModel):
 
     @model_validator(mode="after")
     def _fill_declared_weight(self):
+        for item in self.items_snapshot or []:
+            if isinstance(item, dict) and item.get("kind") == "service_base":
+                rec = (item.get("meta") or {}).get("recommendation")
+                if isinstance(rec, dict):
+                    self.recommendation = rec
+                    self.requires_photos = bool(rec.get("requires_photos"))
+                break
         if self.declared_weight_kg is None:
             for item in self.items_snapshot or []:
                 if isinstance(item, dict) and item.get("kind") == "service_base":
@@ -198,3 +211,9 @@ class AssignmentOut(BaseModel):
     created_at: datetime
     # Orden actualizada con los nuevos datos
     order: OrderOut
+
+
+class OrderReviewIn(BaseModel):
+    """Revisión previa del admin (feature 0008): aprobar o rechazar (rechazar cancela la orden)."""
+    approved: bool
+    note: Optional[str] = Field(None, max_length=500)

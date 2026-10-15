@@ -107,6 +107,7 @@ class CreateOrderFromCart:
         from app.modules.notifications.app.use_cases import CreateNotification
 
         from app.modules.orders.app.use_cases_impl.weight_balance import assert_no_pending_balance
+        from app.modules.store.app.use_cases_impl.recommendation_snapshot import recommendation_of
 
         await assert_no_pending_balance(self.orders_repo, user_id=user_id)
 
@@ -128,6 +129,7 @@ class CreateOrderFromCart:
             delivery_address_snapshot=delivery_address_snapshot,
             hold_id=hold.id if hold else None,
             reserved_date=hold.date if hold else None,
+            review_status="pending" if (recommendation_of(items_snapshot) or {}).get("review_required") else None,
         )
         created = await self.orders_repo.create_order(order)
 

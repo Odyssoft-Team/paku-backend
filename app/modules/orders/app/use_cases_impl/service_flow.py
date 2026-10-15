@@ -153,6 +153,32 @@ class AddOrderPhoto:
 
 
 @dataclass
+class AddPreServicePhoto:
+    """El cliente sube fotos de su mascota a su orden antes de pagar (feature 0008)."""
+    orders_repo: object
+    photos_repo: object
+
+    async def execute(self, *, order_id: UUID, object_name: str, note: Optional[str], actor_id: UUID) -> OrderPhoto:
+        from app.media.gcs import parse_object_name
+
+        order = await self.orders_repo.get_order_admin(id=order_id)
+        if order is None or order.user_id != actor_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        if order.payment_status.value != "pending" and order.review_status != "pending":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+                "code": "PHOTOS_CLOSED", "message": "Ya no se pueden agregar fotos a esta reserva."})
+        try:
+            prefix, entity_id = parse_object_name(object_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        if prefix != "orders" or entity_id != order.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="object_name does not belong to this order")
+        photo = OrderPhoto.new(order_id=order.id, kind=OrderPhotoKind.pre_service, object_name=object_name,
+                               uploaded_by=actor_id, note=note)
+        return await self.photos_repo.add(photo)
+
+
+@dataclass
 class ListOrderPhotos:
     orders_repo: object
     photos_repo: object

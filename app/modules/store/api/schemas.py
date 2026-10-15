@@ -31,6 +31,7 @@ class ProductOut(BaseModel):
     included_items: Optional[List[str]] = None
     max_weight_kg: Optional[float] = None   # requisito de la mascota; null = sin límite
     max_age_months: Optional[int] = None    # requisito de la mascota; null = sin límite
+    code: Optional[str] = None              # Clásico | Medicado | Premium | Seco (0008)
 
 
 class AddonOut(BaseModel):
@@ -43,6 +44,9 @@ class AddonOut(BaseModel):
     is_active: bool
     price: Optional[float] = None   # soles con decimales, ej: 15.0
     currency: str = "PEN"
+    code: Optional[str] = None                 # ADD_DESLANADO_INT… (hoja 18, 0008)
+    requires_photo: bool = False               # el cliente sube fotos antes de pagar
+    duration_extra_min: Optional[int] = None   # pendiente del negocio
 
 
 class ProductDetailOut(ProductOut):
@@ -117,6 +121,7 @@ class ProductUpdateIn(BaseModel):
     # Enviar null quita el límite; omitir el campo lo deja como está.
     max_weight_kg: Optional[float] = None
     max_age_months: Optional[int] = None
+    code: Optional[str] = None
 
 
 # ------------------------------------------------------------------
@@ -136,6 +141,10 @@ class AddonUpdateIn(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     allowed_breeds: Optional[List[str]] = None
+    # Catálogo (0008): solo cambia lo enviado
+    code: Optional[str] = None
+    requires_photo: Optional[bool] = None
+    duration_extra_min: Optional[int] = None
 
 
 # ------------------------------------------------------------------
@@ -222,3 +231,59 @@ class PriceSimulationOut(BaseModel):
     price_category: str
     price_category_label: str
     products: List[SimulatedProductOut]
+
+
+# ------------------------------------------------------------------
+# Recomendaciones (feature 0008)
+# ------------------------------------------------------------------
+
+class RecommendationIn(BaseModel):
+    pet_id: UUID
+    product_id: Optional[UUID] = None          # con servicio elegido: también evalúa sus adicionales
+    answers: Optional[dict[str, str]] = None   # {"Q-MATTING": "LOCALIZED", …}
+
+
+class QuestionOptionOut(BaseModel):
+    code: str
+    label: str
+
+
+class QuestionOut(BaseModel):
+    id: str
+    text: str
+    options: List[QuestionOptionOut]
+    required: bool
+
+
+class RecommendedServiceOut(BaseModel):
+    product_id: UUID
+    code: Optional[str]
+    name: str
+    rule_id: str
+    text: Optional[str]
+
+
+class AddonRecommendationOut(BaseModel):
+    addon_id: UUID
+    code: Optional[str]
+    name: str
+    price: Optional[float]
+    action: Optional[str]        # RECOMENDAR | OFRECER | null (disponible)
+    rule_id: Optional[str]
+    text: Optional[str]
+    requires_photo: bool
+
+
+class ReviewOut(BaseModel):
+    rule_id: str
+    text: Optional[str]
+    requires_photo: bool
+
+
+class RecommendationOut(BaseModel):
+    version: str
+    segment: Optional[str]
+    service: Optional[RecommendedServiceOut]
+    questions: List[QuestionOut]
+    addons: List[AddonRecommendationOut]
+    review: Optional[ReviewOut]
