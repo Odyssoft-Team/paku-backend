@@ -530,3 +530,8 @@ dispara no se le notifica.
 - **Peso:** registrar el peso en el servicio ya **no** genera cobro (`extra_charge` queda null) ni avisos;
   `price_check` viene null. Los saldos anteriores siguen como estaban.
 - **Migración:** `7a8b9c0d1e2f`. **Apps:** cliente, admin, groomer. Spec: `specs/features/0008-recomendaciones-v2/`.
+
+## C-30 · Seguridad y perfume en la ficha del groomer (2026-10-15)
+
+- `GET /orders/my-assignments[/{id}]`: `pet` agrega `reactive`, `bite_history`, `muzzle_required` y `fragrance`
+  (bool o null), para mostrar alertas en la ficha del servicio. Sin migración. **Apps:** groomer.

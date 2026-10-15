@@ -95,6 +95,11 @@ async def build_groomer_view(
                 "tolerates_drying": pet.tolerates_drying,
                 "tolerates_nail_clipping": pet.tolerates_nail_clipping,
                 "special_shampoo": pet.special_shampoo,
+                # Seguridad y perfume (C-27): alertas para el groomer
+                "reactive": getattr(pet, "reactive", None),
+                "bite_history": getattr(pet, "bite_history", None),
+                "muzzle_required": getattr(pet, "muzzle_required", None),
+                "fragrance": getattr(pet, "fragrance", None),
             }
 
     client_out = None
