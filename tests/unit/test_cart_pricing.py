@@ -37,6 +37,12 @@ class _FakeStore:
     async def get_addon(self, addon_id):
         return self.addons.get(addon_id)
 
+    async def price_category_for(self, breed_id):
+        from app.modules.catalog.domain.breeds_data import BREEDS_CATALOG
+        from app.modules.store.domain.pricing import category_for_coat
+        coats = {b["id"]: b.get("coat_type") for g in BREEDS_CATALOG for b in g["breeds"]}
+        return category_for_coat(coats.get((breed_id or "").strip().lower()))
+
     async def price_for(self, *, target_id, target_type, species, breed_category, weight):
         return self.prices.get(target_id)
 

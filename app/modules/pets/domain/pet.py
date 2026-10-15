@@ -78,6 +78,13 @@ class Pet:
     antiparasitic: Optional[bool] = None
     antiparasitic_interval: Optional[AntiparasiticInterval] = None
     special_shampoo: Optional[bool] = None
+    # Seguridad y preferencias (feature 0006, BR-014/BR-019 del documento de precios)
+    reactive: Optional[bool] = None          # comportamiento reactivo/agresivo
+    bite_history: Optional[bool] = None      # ha mordido antes
+    muzzle_required: Optional[bool] = None   # requiere bozal
+    fragrance: Optional[bool] = None         # quiere perfume al final del servicio
+    # Último cambio de peso (dueño, groomer o admin). El dueño espera PET_WEIGHT_CHANGE_COOLDOWN_DAYS.
+    weight_updated_at: Optional[datetime] = None
 
     @staticmethod
     def new(

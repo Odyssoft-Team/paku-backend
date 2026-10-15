@@ -59,6 +59,10 @@ async def create_signed_upload(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot upload media for another user",
             )
+    elif payload.entity_type == MediaEntityType.catalog:
+        # Fotos del catálogo (mestizos, feature 0006): solo admin. Se guardan con PATCH /admin/breeds/{id}.
+        if current.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins upload catalog media")
     elif payload.entity_type == MediaEntityType.order:
         # Fotos del servicio: solo el groomer asignado o un admin.
         order = await _get_order(session, payload.entity_id)

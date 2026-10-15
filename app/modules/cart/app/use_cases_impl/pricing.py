@@ -106,7 +106,9 @@ class CartPricing:
         if len(set(addon_ids)) != len(addon_ids):
             raise _error(status.HTTP_400_BAD_REQUEST, "DUPLICATE_ADDON", "Un complemento está repetido en el carrito.")
 
-        quote = await price_service(self.store_repo, pet=pet, product_id=product_id, addon_ids=addon_ids)
+        quote = await price_service(
+            self.store_repo, pet=pet, product_id=product_id, addon_ids=addon_ids, check_requirements=True
+        )
         priced = {quote.product.target_id: quote.product}
         priced.update({a.target_id: a for a in quote.addons})
 

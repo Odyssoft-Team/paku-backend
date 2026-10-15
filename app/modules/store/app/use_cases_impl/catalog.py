@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
+from app.modules.store.domain.eligibility import ineligibility
 from app.modules.store.domain.models import Addon, Category, Product, Species, breed_allowed
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 from app.modules.store.app.use_cases_impl.quote import _breed_category
@@ -48,14 +49,20 @@ class ListProducts:
         if not category or not category.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
 
-        pet_species, breed_cat, weight = await _resolve_pet(self.pets_repo, pet_id)
+        pet_species, breed_cat, weight = await _resolve_pet(self.repo, self.pets_repo, pet_id)
         effective_species = pet_species or species
 
         products = await self.repo.list_products(category_id=category.id, species=effective_species)
         if pet_id is not None:
-            # Con mascota, solo lo que su raza puede comprar (el carrito rechazaría el resto).
-            breed_id, breed_name = await _pet_breed(self.pets_repo, pet_id)
-            products = [p for p in products if breed_allowed(p.allowed_breeds, breed_id, breed_name)]
+            # Con mascota, solo lo que puede comprar: su raza, y peso/edad dentro de los requisitos
+            # del servicio (feature 0005). El carrito rechazaría el resto.
+            pet = await self.pets_repo.get_by_id(pet_id)
+            breed_id, breed_name = getattr(pet, "breed_id", None), getattr(pet, "breed_name", None)
+            products = [
+                p for p in products
+                if breed_allowed(p.allowed_breeds, breed_id, breed_name)
+                and ineligibility(p, weight=weight, birth_date=getattr(pet, "birth_date", None)) is None
+            ]
         result = []
         for p in products:
             price = None
@@ -67,6 +74,8 @@ class ListProducts:
                     breed_category=breed_cat,
                     weight=weight,
                 )
+                if price is None:
+                    continue  # sin precio para su pelaje y peso: no se puede comprar
             result.append(ResolvedProduct(product=p, price=price))
         return result
 
@@ -83,7 +92,7 @@ class GetProduct:
         if not product or not product.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-        pet_species, breed_cat, weight = await _resolve_pet(self.pets_repo, pet_id)
+        pet_species, breed_cat, weight = await _resolve_pet(self.repo, self.pets_repo, pet_id)
 
         product_price = None
         if breed_cat is not None and weight is not None:
@@ -113,6 +122,8 @@ class GetProduct:
                     breed_category=breed_cat,
                     weight=weight,
                 )
+                if addon_price is None:
+                    continue  # no aplica a su pelaje o peso (p. ej. deslanado solo en doble manto)
             resolved_addons.append(ResolvedAddon(addon=a, price=addon_price))
 
         return ResolvedProduct(product=product, price=product_price), resolved_addons
@@ -124,7 +135,7 @@ async def _pet_breed(pets_repo: PetRepository, pet_id: UUID) -> tuple[Optional[s
 
 
 async def _resolve_pet(
-    pets_repo: PetRepository, pet_id: Optional[UUID]
+    repo: PostgresStoreRepository, pets_repo: PetRepository, pet_id: Optional[UUID]
 ) -> tuple[Optional[Species], Optional[str], Optional[float]]:
     """Returns (species, breed_category, weight_kg) for the pet, or (None, None, None) if no pet."""
     if pet_id is None:
@@ -133,6 +144,6 @@ async def _resolve_pet(
     if not pet:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
     weight = float(pet.weight_kg) if pet.weight_kg else None
-    breed_cat = _breed_category(pet.breed_id, pet.breed_name) if weight is not None else None
+    breed_cat = await _breed_category(repo, pet.breed_id, pet.breed_name) if weight is not None else None
     raw_species = getattr(pet.species, "value", pet.species)
     return Species(str(raw_species)), breed_cat, weight

@@ -29,6 +29,8 @@ class ProductOut(BaseModel):
     price: Optional[float] = None   # soles con decimales, ej: 120.0
     currency: str = "PEN"
     included_items: Optional[List[str]] = None
+    max_weight_kg: Optional[float] = None   # requisito de la mascota; null = sin límite
+    max_age_months: Optional[int] = None    # requisito de la mascota; null = sin límite
 
 
 class AddonOut(BaseModel):
@@ -103,6 +105,8 @@ class ProductCreateIn(BaseModel):
     allowed_breeds: Optional[List[str]] = None
     is_active: bool = True
     included_items: Optional[List[str]] = None
+    max_weight_kg: Optional[float] = None
+    max_age_months: Optional[int] = None
 
 
 class ProductUpdateIn(BaseModel):
@@ -110,6 +114,9 @@ class ProductUpdateIn(BaseModel):
     description: Optional[str] = None
     allowed_breeds: Optional[List[str]] = None
     included_items: Optional[List[str]] = None
+    # Enviar null quita el límite; omitir el campo lo deja como está.
+    max_weight_kg: Optional[float] = None
+    max_age_months: Optional[int] = None
 
 
 # ------------------------------------------------------------------

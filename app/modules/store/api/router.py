@@ -216,6 +216,8 @@ async def admin_create_product(
         allowed_breeds=payload.allowed_breeds,
         is_active=payload.is_active,
         included_items=payload.included_items,
+        max_weight_kg=payload.max_weight_kg,
+        max_age_months=payload.max_age_months,
     )
     return ProductOut(**product.__dict__)
 
@@ -233,6 +235,7 @@ async def admin_update_product(
         description=payload.description,
         allowed_breeds=payload.allowed_breeds,
         included_items=payload.included_items,
+        limits={k: getattr(payload, k) for k in ("max_weight_kg", "max_age_months") if k in payload.model_fields_set},
     )
     return ProductOut(**product.__dict__)
 

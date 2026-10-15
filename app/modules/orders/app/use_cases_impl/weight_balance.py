@@ -57,7 +57,7 @@ async def register_measured_weight(
         order=order,
         pet_id=pet.id,
         species=species,
-        breed_category=_breed_category(pet.breed_id, pet.breed_name),
+        breed_category=await _breed_category(store_repo, pet.breed_id, pet.breed_name),
         new_weight=weight_kg,
     )
 

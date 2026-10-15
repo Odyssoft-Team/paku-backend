@@ -437,3 +437,51 @@ dispara no se le notifica.
     precio de cada producto y addon para esa mascota, la categoría usada y si se usó el respaldo.
 - **Compatible** para las apps (no cambian contratos). Sin migraciones.
 - **Apps:** Admin. Spec: `specs/features/0004-precios-por-pelaje/`.
+
+## C-26 · Requisitos del servicio (peso y edad) y ocultar lo que no aplica (feature 0005, 2026-10-14)
+
+- **Admin:** `POST /admin/store/products` y `PATCH /admin/store/products/{id}` aceptan
+  `max_weight_kg` (kg) y `max_age_months` (meses); `null` = sin límite. En el PATCH, enviar `null`
+  quita el límite y omitir el campo lo deja igual. `ProductOut` los devuelve en todos los endpoints.
+- **Reservar** (`POST /store/quote`, carrito): si la mascota no cumple, 422 con
+  `detail: {code, message}`:
+  - `PET_TOO_HEAVY`: pesa más del máximo.
+  - `PET_TOO_OLD`: tiene más meses del máximo.
+  - `PET_AGE_UNKNOWN`: el servicio tiene edad máxima y la mascota no tiene `birth_date`.
+  Mostrar `detail.message` (ya viene en español para el cliente).
+- **Con `pet_id`**, `GET /store/categories/{slug}/products` ya no devuelve los servicios que la mascota
+  no puede reservar (requisitos o sin precio para su pelaje/peso) y `GET /store/products/{id}` ya no
+  devuelve en `available_addons` los adicionales sin precio para ella. Sin `pet_id`, todo igual.
+- `GET /admin/store/price-simulation` omite los servicios que superan el peso máximo.
+- **Razas:** Pug pasa a doble manto corto y Pekinés a doble manto largo (su precio cambia); nuevas
+  `lagotto_romagnolo`, `perro_agua_portugues`, `aussiedoodle`.
+- **Migración:** `6f7a8b9c0d1e` (columnas en `store_products` + razas). **Compatible** para las apps.
+- **Apps:** Admin (campos del producto), app de clientes (mensaje del 422). Spec:
+  `specs/features/0005-requisitos-servicio/`.
+
+## C-27 · Pelaje administrable, mestizos por foto, variantes y reglas de peso (feature 0006, 2026-10-14)
+
+- **Precio por pelaje desde la base de datos:** la categoría de precio es el `coat_type` de la raza en
+  `breeds`, que ahora edita el admin. Antes estaba fijo en código. Sin pelaje → fila `mestizo`.
+- **Razas** (`GET /catalog/breeds`, `GET /admin/breeds`): cada raza trae `is_mixed`, `photo_url`,
+  `description`. Nuevas: `dog_mixed_1`…`dog_mixed_6` (un mestizo por pelaje, `is_mixed: true`, para elegir
+  por foto), variantes `dachshund_largo`, `chihuahua_largo`, `pastor_aleman_largo`, `chow_chow_largo`,
+  `cocker_spaniel_largo`, y `lagotto_romagnolo`, `perro_agua_portugues`, `aussiedoodle`. `dog_mixed`
+  ("Mestizo") queda **inactivo**: ya no aparece en el catálogo público (las mascotas que lo tienen siguen
+  igual). Cambian de pelaje: Pug, Pekinés y Cocker Spaniel (ahora "corte corto").
+- **Admin:** `POST /admin/breeds` y `PATCH /admin/breeds/{id}` aceptan `coat_type` (uno de los 6 o null),
+  `is_mixed`, `photo_url`, `description`; `coat_group` se deriva. En el PATCH solo cambia lo enviado (null
+  quita). `name` ya es opcional en el PATCH. 422 `COAT_TYPE_INVALID`.
+- **Fotos de razas:** `POST /media/signed-upload` acepta `entity_type: "catalog"` (solo admin; `entity_id`
+  cualquier UUID). Subir con el `upload_url` y guardar el `object_name` en `photo_url` de la raza
+  (`PATCH /admin/breeds/{id}`); también se acepta una URL `https://`. Las respuestas devuelven la URL
+  firmada. 422 `PHOTO_URL_INVALID` si no es ni una ni otra.
+- **Peso:** `POST /pets/{id}/records` (weight_record) del dueño → 409 `PET_WEIGHT_COOLDOWN` si lo cambió hace
+  menos de 30 días (`detail.message` con la fecha, `detail.available_at`). El peso del registro inicial no
+  cuenta. Groomer/admin sin límite. `PetOut` agrega `weight_updated_at` y `weight_editable_from` (null =
+  puede cambiarlo).
+- **Perfil:** `PetOut` y `PATCH /pets/{id}/optional` agregan `reactive`, `bite_history`, `muzzle_required`,
+  `fragrance` (bool, opcionales).
+- **Migración:** `6f7a8b9c0d1e` (la misma de C-26). Setting opcional `PET_WEIGHT_CHANGE_COOLDOWN_DAYS` (30).
+- **Compatible** para las apps. **Apps:** Admin (razas), app de clientes (mestizos, peso, perfil), app de
+  groomers (alertas). Spec: `specs/features/0006-razas-mestizos-peso/`.

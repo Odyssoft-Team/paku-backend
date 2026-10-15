@@ -167,6 +167,10 @@ class PatchPetOptional:
             antiparasitic=kwargs.get('antiparasitic', pet.antiparasitic),
             antiparasitic_interval=kwargs.get('antiparasitic_interval', pet.antiparasitic_interval),
             special_shampoo=kwargs.get('special_shampoo', pet.special_shampoo),
+            reactive=kwargs.get('reactive', pet.reactive),
+            bite_history=kwargs.get('bite_history', pet.bite_history),
+            muzzle_required=kwargs.get('muzzle_required', pet.muzzle_required),
+            fragrance=kwargs.get('fragrance', pet.fragrance),
         )
         try:
             await self.repo.update(updated)

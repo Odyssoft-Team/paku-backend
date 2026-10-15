@@ -30,6 +30,9 @@ class Product:
     is_active: bool
     description: Optional[str] = None
     included_items: Optional[List[str]] = None
+    # Requisitos de la mascota (feature 0005); None = sin límite. Ver domain/eligibility.py
+    max_weight_kg: Optional[float] = None
+    max_age_months: Optional[int] = None
 
 
 @dataclass(frozen=True)

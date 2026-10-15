@@ -37,7 +37,10 @@ def _group_by_species(breeds) -> list[dict]:
     """Agrupa lista de Breed por species — mantiene el contrato de respuesta original."""
     groups: dict[str, list] = defaultdict(list)
     for b in breeds:
-        groups[b.species].append({"id": b.id, "name": b.name, "coat_group": b.coat_group, "coat_type": b.coat_type})
+        groups[b.species].append({
+            "id": b.id, "name": b.name, "coat_group": b.coat_group, "coat_type": b.coat_type,
+            "is_mixed": b.is_mixed, "photo_url": _photo_out(b.photo_url), "description": b.description,
+        })
     # orden estable: dog primero, cat segundo
     order = ["dog", "cat"]
     result = []
@@ -77,7 +80,7 @@ async def admin_list_breeds(
 ):
     """Lista todas las razas (activas e inactivas)."""
     breeds = await ListBreedsAdmin(repo=repo).execute(species=species)
-    return [BreedOut(id=b.id, name=b.name, species=b.species, is_active=b.is_active, coat_group=b.coat_group, coat_type=b.coat_type) for b in breeds]
+    return [_breed_out(b) for b in breeds]
 
 
 @admin_router.post("/breeds", response_model=BreedOut, status_code=status.HTTP_201_CREATED)
@@ -91,8 +94,9 @@ async def admin_create_breed(
         id=payload.id.strip().lower(),
         name=payload.name,
         species=payload.species,
+        fields={k: getattr(payload, k) for k in ("coat_type", "is_mixed", "photo_url", "description")},
     )
-    return BreedOut(id=breed.id, name=breed.name, species=breed.species, is_active=breed.is_active)
+    return _breed_out(breed)
 
 
 @admin_router.patch("/breeds/{breed_id}", response_model=BreedOut)
@@ -102,9 +106,15 @@ async def admin_update_breed(
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresBreedRepository = Depends(_get_repo),
 ):
-    """Actualiza el nombre de una raza."""
-    breed = await UpdateBreed(repo=repo).execute(breed_id, name=payload.name)
-    return BreedOut(id=breed.id, name=breed.name, species=breed.species, is_active=breed.is_active)
+    """Actualiza nombre, pelaje (define el precio), foto y descripción de una raza."""
+    sent = payload.model_fields_set
+    breed = await UpdateBreed(repo=repo).execute(
+        breed_id,
+        name=payload.name,
+        fields={k: getattr(payload, k) for k in ("coat_type", "is_mixed", "photo_url", "description")
+                if k in sent and not (k == "is_mixed" and payload.is_mixed is None)},
+    )
+    return _breed_out(breed)
 
 
 @admin_router.post("/breeds/{breed_id}/toggle", response_model=BreedOut)
@@ -116,4 +126,22 @@ async def admin_toggle_breed(
 ):
     """Activa o desactiva una raza del catálogo."""
     breed = await ToggleBreed(repo=repo).execute(breed_id, is_active=payload.is_active)
-    return BreedOut(id=breed.id, name=breed.name, species=breed.species, is_active=breed.is_active)
+    return _breed_out(breed)
+
+
+def _breed_out(b) -> BreedOut:
+    return BreedOut(
+        id=b.id, name=b.name, species=b.species, is_active=b.is_active, coat_group=b.coat_group,
+        coat_type=b.coat_type, is_mixed=b.is_mixed, photo_url=_photo_out(b.photo_url), description=b.description,
+    )
+
+
+def _photo_out(photo_url):
+    """Foto subida (object_name "catalog/…") → URL firmada; una URL externa se devuelve tal cual."""
+    if not photo_url or photo_url.startswith(("http://", "https://")):
+        return photo_url
+    from app.media.gcs import to_signed_read_url_or_none
+    try:
+        return to_signed_read_url_or_none(photo_url)
+    except Exception:
+        return None  # una foto que no se puede firmar no debe tumbar el catálogo (ya quedó en el log)

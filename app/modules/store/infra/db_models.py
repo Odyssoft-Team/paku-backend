@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, Index, JSON, Numeric, String, Text, ForeignKey
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, JSON, Numeric, String, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -37,6 +37,8 @@ class ProductModel(Base):
     species: Mapped[str] = mapped_column(String(20), nullable=False)
     allowed_breeds: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     included_items: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    max_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_age_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)

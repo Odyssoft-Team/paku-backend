@@ -49,6 +49,11 @@ class PetModel(Base):
     antiparasitic: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     antiparasitic_interval: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     special_shampoo: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    reactive: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    bite_history: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    muzzle_required: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    fragrance: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    weight_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)

@@ -14,7 +14,9 @@ from app.modules.pet_records.domain.record import (
     validate_record_data,
 )
 from app.modules.pet_records.infra.postgres_pet_records_repository import PostgresPetRecordsRepository
+from app.core.timezone import LIMA_TZ
 from app.modules.pets.domain.pet import PetRepository
+from app.modules.pets.domain.weight_policy import weight_editable_from
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.orders.app.use_cases_impl.weight_balance import register_measured_weight
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
@@ -81,6 +83,18 @@ class CreateRecord:
                         "message": "No puedes cambiar el peso mientras la mascota tenga un servicio solicitado.",
                     },
                 )
+            # Y no a cada rato: una vez cada PET_WEIGHT_CHANGE_COOLDOWN_DAYS días (feature 0006).
+            available = weight_editable_from(getattr(pet, "weight_updated_at", None))
+            if available is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "PET_WEIGHT_COOLDOWN",
+                        "message": "Podrás volver a actualizar el peso desde el "
+                        + available.astimezone(LIMA_TZ).strftime("%d/%m/%Y") + ".",
+                        "available_at": available.isoformat(),
+                    },
+                )
 
         if role == "admin":
             recorded_by_role = RecordRole.admin
@@ -112,7 +126,8 @@ class CreateRecord:
 
         if type == RecordType.weight_record:
             new_weight = float(data["weight_kg"])
-            updated_pet = replace(pet, weight_kg=new_weight, updated_at=datetime.now(timezone.utc))
+            now = datetime.now(timezone.utc)
+            updated_pet = replace(pet, weight_kg=new_weight, updated_at=now, weight_updated_at=now)
             await self.pets_repo.update(updated_pet)
 
             # Peso real del servicio: queda en la orden que se atiende, con el monto extra si el precio

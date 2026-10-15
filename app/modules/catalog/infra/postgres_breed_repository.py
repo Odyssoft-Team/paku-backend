@@ -49,9 +49,11 @@ class PostgresBreedRepository:
                         id=b["id"],
                         name=b["name"],
                         species=species,
-                        is_active=True,
+                        is_active=b.get("is_active", True),
                         coat_group=b.get("coat_group"),
                         coat_type=b.get("coat_type"),
+                        is_mixed=b.get("is_mixed", False),
+                        description=b.get("description"),
                         created_at=now,
                         updated_at=now,
                     )
@@ -78,6 +80,9 @@ class PostgresBreedRepository:
             is_active=m.is_active,
             coat_group=m.coat_group,
             coat_type=m.coat_type,
+            is_mixed=bool(m.is_mixed),
+            photo_url=m.photo_url,
+            description=m.description,
         )
 
     async def list_active(self, *, species: Optional[str] = None) -> list[Breed]:
@@ -104,11 +109,11 @@ class PostgresBreedRepository:
         m = await self._session.get(BreedModel, breed_id)
         return self._to_domain(m) if m else None
 
-    async def create(self, *, id: str, name: str, species: str) -> Breed:
+    async def create(self, *, id: str, name: str, species: str, extra: Optional[dict] = None) -> Breed:
         await self.seed_if_empty()
         now = _utcnow()
         m = BreedModel(id=id, name=name, species=species, is_active=True,
-                       created_at=now, updated_at=now)
+                       created_at=now, updated_at=now, **(extra or {}))
         self._session.add(m)
         try:
             await self._session.commit()

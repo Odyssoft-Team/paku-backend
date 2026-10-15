@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Index, String
+from sqlalchemy import Boolean, DateTime, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
@@ -23,6 +23,9 @@ class BreedModel(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     coat_group: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     coat_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    is_mixed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    photo_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

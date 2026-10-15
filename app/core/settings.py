@@ -39,6 +39,9 @@ class Settings:
     # STREAMING_DEV: replace static TURN credentials with dynamic generation in production.
     STREAMING_SIGNALING_URL: str = os.getenv("STREAMING_SIGNALING_URL", "wss://stream.paku.com.pe/ws")
     STREAMING_SECRET: str = os.getenv("STREAMING_SECRET", "streaming-secret-change-in-production")
+
+    # Cada cuántos días puede el dueño cambiar el peso de su mascota (feature 0006)
+    PET_WEIGHT_CHANGE_COOLDOWN_DAYS: int = int(os.getenv("PET_WEIGHT_CHANGE_COOLDOWN_DAYS", "30"))
     STREAMING_STUN_URL: str = os.getenv(
         "STREAMING_STUN_URL",
         "stun:stream.paku.com.pe:5349,stun:stream.paku.com.pe:3478",
