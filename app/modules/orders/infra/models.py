@@ -71,6 +71,11 @@ class OrderModel(Base):
     extra_charge: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     adjustment_order_id: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
 
+    # Revisión previa del admin (feature 0008, p. ej. manto muy apelmazado)
+    review_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
+    review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 

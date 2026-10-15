@@ -40,40 +40,18 @@ async def register_measured_weight(
     actor_role: str,
 ) -> Optional[dict[str, Any]]:
     """
-    Registra el peso real en la orden que se está atendiendo (si la hay y aún no tiene ajuste) y devuelve
-    el `price_check` ({order_id, old_price, new_price, difference}) o None si el precio no cambia.
+    Registra el peso real en la orden que se está atendiendo (si la hay). Feature 0008 (decisión del
+    cliente, BR-029): **no se cobra la diferencia**; el precio pagado se respeta y el peso real queda en
+    el perfil para las próximas reservas. Devuelve siempre None (no hay monto por cobrar).
     """
-    from app.modules.store.app.use_cases_impl.quote import _breed_category
-    from app.modules.store.domain.models import Species
-
     groomer_id = actor_id if actor_role == "groomer" else None
     order = await orders_repo.find_order_for_measurement(pet_id=pet.id, groomer_id=groomer_id)
-    if order is None:
+    if order is None or order.adjustment_order_id is not None:
         return None
-
-    species = Species(str(getattr(pet.species, "value", pet.species)))
-    price_check = await compute_price_check(
-        store_repo=store_repo,
-        order=order,
-        pet_id=pet.id,
-        species=species,
-        breed_category=await _breed_category(store_repo, pet.breed_id, pet.breed_name),
-        new_weight=weight_kg,
+    await orders_repo.set_measured_weight(
+        id=order.id, weight_kg=weight_kg, at=datetime.now(timezone.utc), extra_charge=None,
     )
-
-    if order.adjustment_order_id is not None:
-        # Ya se generó el cobro: el peso de la mascota se actualiza, pero la orden no cambia.
-        return price_check
-
-    extra = price_check["difference"] if price_check and price_check["difference"] > 0 else None
-    had_extra = order.extra_charge
-    updated = await orders_repo.set_measured_weight(
-        id=order.id, weight_kg=weight_kg, at=datetime.now(timezone.utc), extra_charge=extra,
-    )
-
-    if extra is not None and extra != had_extra:
-        await _notify_extra_charge(orders_repo, users_repo, order=updated, pet=pet, weight_kg=weight_kg)
-    return price_check
+    return None
 
 
 async def _notify_extra_charge(orders_repo, users_repo, *, order: Order, pet, weight_kg: float) -> None:

@@ -215,9 +215,10 @@ class UpdateAddon:
     repo: PostgresStoreRepository
 
     async def execute(
-        self, addon_id: UUID, *, name: Optional[str] = None, description: Optional[str] = None, allowed_breeds: Optional[List[str]] = None
+        self, addon_id: UUID, *, name: Optional[str] = None, description: Optional[str] = None, allowed_breeds: Optional[List[str]] = None,
+        extra: Optional[dict] = None,
     ) -> Addon:
-        patch = {}
+        patch = dict(extra or {})  # code / requires_photo / duration_extra_min (0008)
         if name is not None:
             patch["name"] = name
         if description is not None:

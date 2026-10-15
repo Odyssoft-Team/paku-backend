@@ -9,6 +9,10 @@ from app.modules.store.app.use_cases_impl.access import check_pet_access as _che
 from app.core.auth import CurrentUser, get_current_user, get_optional_current_user, require_roles
 from app.core.db import engine, get_async_session
 from app.modules.store.api.schemas import (
+    QuestionOptionOut,
+    QuestionOut,
+    RecommendationIn,
+    RecommendationOut,
     AddonCreateIn,
     AddonOut,
     AddonUpdateIn,
@@ -141,6 +145,33 @@ async def quote(
     )
 
 
+@router.post("/recommendations", response_model=RecommendationOut)
+async def recommendations(
+    payload: RecommendationIn,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresStoreRepository = Depends(get_store_repo),
+    pets_repo: PetRepository = Depends(get_pets_repo),
+) -> RecommendationOut:
+    """Servicio recomendado, preguntas y adicionales recomendados para la mascota (feature 0008)."""
+    from app.modules.store.app.use_cases_impl.recommend import Recommend
+
+    await _check_pet_access(payload.pet_id, current, pets_repo)
+    r = await Recommend(repo=repo, pets_repo=pets_repo).execute(
+        pet_id=payload.pet_id, product_id=payload.product_id, answers=payload.answers)
+    return RecommendationOut(
+        version=r.version,
+        segment=r.segment,
+        service=r.service,
+        questions=[
+            QuestionOut(id=q.id, text=q.text, required=q.required,
+                        options=[QuestionOptionOut(code=c, label=l) for c, l in q.options])
+            for q in r.questions
+        ],
+        addons=r.addons,
+        review=r.review,
+    )
+
+
 # ------------------------------------------------------------------
 # Admin — categorías
 # ------------------------------------------------------------------
@@ -235,7 +266,7 @@ async def admin_update_product(
         description=payload.description,
         allowed_breeds=payload.allowed_breeds,
         included_items=payload.included_items,
-        limits={k: getattr(payload, k) for k in ("max_weight_kg", "max_age_months") if k in payload.model_fields_set},
+        limits={k: getattr(payload, k) for k in ("max_weight_kg", "max_age_months", "code") if k in payload.model_fields_set},
     )
     return ProductOut(**product.__dict__)
 
@@ -290,7 +321,9 @@ async def admin_update_addon(
     repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> AddonOut:
     addon = await UpdateAddon(repo=repo).execute(
-        id, name=payload.name, description=payload.description, allowed_breeds=payload.allowed_breeds
+        id, name=payload.name, description=payload.description, allowed_breeds=payload.allowed_breeds,
+        extra={k: getattr(payload, k) for k in ("code", "requires_photo", "duration_extra_min")
+               if k in payload.model_fields_set and not (k == "requires_photo" and payload.requires_photo is None)},
     )
     return AddonOut(**addon.__dict__)
 

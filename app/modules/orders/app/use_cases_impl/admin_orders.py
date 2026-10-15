@@ -88,6 +88,13 @@ class AssignOrder:
         if order is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
+        # Revisión previa pendiente (feature 0008): primero aprobar
+        if order.review_status == "pending":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+                "code": "REVIEW_PENDING",
+                "message": "Esta orden requiere revisión: apruébala antes de asignar un groomer.",
+            })
+
         # No se puede asignar una orden cancelada o finalizada
         if order.status in (OrderStatus.cancelled, OrderStatus.done):
             raise HTTPException(

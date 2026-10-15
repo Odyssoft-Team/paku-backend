@@ -66,7 +66,8 @@ async def create_signed_upload(
     elif payload.entity_type == MediaEntityType.order:
         # Fotos del servicio: solo el groomer asignado o un admin.
         order = await _get_order(session, payload.entity_id)
-        if current.role != "admin" and order.groomer_id != current_id:
+        # El dueño también: fotos previas al pago (feature 0008)
+        if current.role != "admin" and order.groomer_id != current_id and order.user_id != current_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot upload media for this order")
     else:
         # entity_type == pet: la mascota debe existir y pertenecer al current_user

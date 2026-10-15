@@ -51,6 +51,7 @@ class PostgresStoreRepository:
             included_items=r.included_items,
             max_weight_kg=r.max_weight_kg,
             max_age_months=r.max_age_months,
+            code=r.code,
         )
 
     def _to_addon(self, r) -> Addon:
@@ -62,6 +63,9 @@ class PostgresStoreRepository:
             species=Species(r.species),
             allowed_breeds=r.allowed_breeds,
             is_active=r.is_active,
+            code=r.code,
+            requires_photo=bool(r.requires_photo),
+            duration_extra_min=r.duration_extra_min,
         )
 
     def _to_price_rule(self, r) -> PriceRule:
@@ -457,6 +461,27 @@ class PostgresStoreRepository:
             return None, None
 
         return float(rule.price), rule.breed_category   # Decimal("120.00") → 120.0 (soles)
+
+    async def list_recommendation_rules(self):
+        """Reglas activas e inactivas del motor (feature 0008)."""
+        from app.modules.store.domain.recommendations import Rule
+        from app.modules.store.infra.db_models import RecommendationRuleModel
+
+        rows = (await self._session.execute(select(RecommendationRuleModel))).scalars().all()
+        return [
+            Rule(id=r.id, kind=r.kind, priority=r.priority, active=r.is_active, action=r.action,
+                 conditions=r.conditions or {}, target_code=r.target_code, requires_photo=r.requires_photo,
+                 text=r.text, version=r.version)
+            for r in rows
+        ]
+
+    async def breed_coat_type(self, breed_id: Optional[str]) -> Optional[str]:
+        from app.modules.catalog.infra.models import BreedModel
+
+        if not breed_id:
+            return None
+        row = await self._session.get(BreedModel, breed_id.strip().lower())
+        return row.coat_type if row is not None else None
 
     async def price_category_for(self, breed_id: Optional[str]) -> str:
         """Categoría de precio de una raza: su pelaje en `breeds` (lo asigna el admin) o "mestizo"."""

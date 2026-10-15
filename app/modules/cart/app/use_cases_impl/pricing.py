@@ -109,6 +109,20 @@ class CartPricing:
         quote = await price_service(
             self.store_repo, pet=pet, product_id=product_id, addon_ids=addon_ids, check_requirements=True
         )
+
+        # Recomendación y respuestas del cliente (feature 0008): se guardan en la reserva para auditar
+        # y para saber si requiere fotos o revisión del admin.
+        from app.modules.store.app.use_cases_impl.recommendation_snapshot import build_recommendation_snapshot
+        from app.modules.store.domain.recommendations import validate_answers
+
+        try:
+            answers = validate_answers(_meta_dict(base.get("meta")).get("answers"))
+        except ValueError as exc:
+            raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "ANSWER_INVALID", str(exc))
+        recommendation = await build_recommendation_snapshot(
+            self.store_repo, pet=pet, product_id=product_id, addon_ids=addon_ids, answers=answers,
+            breed_category=await self.store_repo.price_category_for(pet.breed_id),
+        )
         priced = {quote.product.target_id: quote.product}
         priced.update({a.target_id: a for a in quote.addons})
 
@@ -123,6 +137,8 @@ class CartPricing:
                 # (lo ve el groomer; feature 0003-saldo-por-peso).
                 meta = dict(_meta_dict(line.get("meta")))
                 meta["pet_weight_kg"] = float(pet.weight_kg) if pet.weight_kg is not None else None
+                meta["answers"] = answers
+                meta["recommendation"] = recommendation
                 new["meta"] = meta
             elif _kind_value(line.get("kind")) == CartItemKind.service_addon.value:
                 meta = dict(_meta_dict(line.get("meta")))

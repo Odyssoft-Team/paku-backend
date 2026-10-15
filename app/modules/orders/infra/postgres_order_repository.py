@@ -54,6 +54,9 @@ class PostgresOrderRepository:
             measured_weight_at=r.measured_weight_at,
             extra_charge=float(r.extra_charge) if r.extra_charge is not None else None,
             adjustment_order_id=r.adjustment_order_id,
+            review_status=r.review_status,
+            review_note=r.review_note,
+            reviewed_at=r.reviewed_at,
         )
 
     async def set_reservation(self, *, id: UUID, hold_id: Optional[UUID], reserved_date) -> Order:
@@ -144,6 +147,7 @@ class PostgresOrderRepository:
             payment_status=order.payment_status.value,
             culqi_charge_id=order.culqi_charge_id,
             parent_order_id=order.parent_order_id,
+            review_status=order.review_status,
             created_at=order.created_at,
             updated_at=utcnow(),
         )
@@ -472,6 +476,21 @@ class PostgresOrderRepository:
         model.measured_weight_kg = Decimal(str(weight_kg))
         model.measured_weight_at = at
         model.extra_charge = Decimal(str(extra_charge)) if extra_charge is not None else None
+        model.updated_at = utcnow()
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
+
+    async def set_review(self, *, id: UUID, review_status: str, note: Optional[str]) -> Order:
+        """Resultado de la revisión previa del admin (feature 0008)."""
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None:
+            raise ValueError("order_not_found")
+        model.review_status = review_status
+        model.review_note = note
+        model.reviewed_at = utcnow()
         model.updated_at = utcnow()
         await self._session.commit()
         await self._session.refresh(model)
