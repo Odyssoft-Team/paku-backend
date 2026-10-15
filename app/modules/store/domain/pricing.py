@@ -3,8 +3,9 @@
 El precio de un servicio o addon depende de especie, categoría de precio y peso
 (ver `StorePriceRuleModel`). La categoría de precio es:
 
-- El **tipo de pelaje** de la raza del catálogo (6 tipos, `breeds_data.coat_type`),
-  porque el pelaje define el trabajo del groomer.
+- El **tipo de pelaje** de la raza (6 tipos, columna `breeds.coat_type`), porque el pelaje
+  define el trabajo del groomer. Desde la feature 0006 lo asigna el admin (antes estaba fijo en
+  `breeds_data.py`); los mestizos son 6 razas, una por pelaje.
 - **"mestizo"** para mestizos, razas escritas a mano, sin raza o razas sin tipo de
   pelaje (p. ej. gatos). Es también el respaldo: si un producto no tiene precio
   para un pelaje, se cotiza con su fila "mestizo".
@@ -17,8 +18,6 @@ categorías antiguas: ya no se crean y el admin las muestra para desactivarlas.
 from __future__ import annotations
 
 from typing import Optional
-
-from app.modules.catalog.domain.breeds_data import BREEDS_CATALOG
 
 FALLBACK_CATEGORY = "mestizo"
 
@@ -47,24 +46,11 @@ DEFAULT_WEIGHT_TIERS: list[tuple[float, Optional[float]]] = [
     (50.01, None),
 ]
 
-_COAT_BY_BREED: dict[str, Optional[str]] = {
-    breed["id"]: breed.get("coat_type")
-    for group in BREEDS_CATALOG
-    for breed in group["breeds"]
-}
 
 
-def price_category(breed_id: Optional[str], breed_name: Optional[str] = None) -> str:
-    """Categoría de precio de la mascota: pelaje de su raza del catálogo o "mestizo".
-
-    `breed_name` se acepta por compatibilidad con los llamadores: una raza escrita a
-    mano (sin `breed_id`) no tiene pelaje conocido y se cotiza como "mestizo".
-    """
-    if breed_id:
-        coat = _COAT_BY_BREED.get(breed_id.strip().lower())
-        if coat in VALID_PRICE_CATEGORIES:
-            return coat
-    return FALLBACK_CATEGORY
+def category_for_coat(coat_type: Optional[str]) -> str:
+    """Categoría de precio para el pelaje de la raza: el pelaje, o "mestizo" si no tiene uno válido."""
+    return coat_type if coat_type in VALID_PRICE_CATEGORIES else FALLBACK_CATEGORY
 
 
 def category_label(category: str) -> str:

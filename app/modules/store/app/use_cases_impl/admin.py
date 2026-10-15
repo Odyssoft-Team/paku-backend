@@ -94,7 +94,10 @@ class CreateProduct:
         allowed_breeds: Optional[List[str]],
         is_active: bool = True,
         included_items: Optional[List[str]] = None,
+        max_weight_kg: Optional[float] = None,
+        max_age_months: Optional[int] = None,
     ) -> Product:
+        _validate_limits(max_weight_kg, max_age_months)
         category = await self.repo.get_category(category_id)
         if not category:
             _not_found("Category not found")
@@ -106,7 +109,18 @@ class CreateProduct:
             allowed_breeds=allowed_breeds,
             is_active=is_active,
             included_items=included_items,
+            max_weight_kg=max_weight_kg,
+            max_age_months=max_age_months,
         )
+
+
+def _validate_limits(max_weight_kg: Optional[float], max_age_months: Optional[int]) -> None:
+    if max_weight_kg is not None and max_weight_kg <= 0:
+        raise HTTPException(status_code=422, detail={
+            "code": "MAX_WEIGHT_INVALID", "message": "El peso máximo debe ser mayor que 0."})
+    if max_age_months is not None and max_age_months <= 0:
+        raise HTTPException(status_code=422, detail={
+            "code": "MAX_AGE_INVALID", "message": "La edad máxima debe ser mayor que 0 meses."})
 
 
 @dataclass
@@ -121,8 +135,13 @@ class UpdateProduct:
         description: Optional[str] = None,
         allowed_breeds: Optional[List[str]] = None,
         included_items: Optional[List[str]] = None,
+        limits: Optional[dict] = None,
     ) -> Product:
+        """`limits`: solo las claves enviadas (max_weight_kg / max_age_months); None las quita."""
         patch = {}
+        if limits:
+            _validate_limits(limits.get("max_weight_kg"), limits.get("max_age_months"))
+            patch.update(limits)
         if name is not None:
             patch["name"] = name
         if description is not None:

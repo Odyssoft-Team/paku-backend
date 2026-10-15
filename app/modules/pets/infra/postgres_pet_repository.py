@@ -49,6 +49,11 @@ class PostgresPetRepository(PetRepository):
             antiparasitic=pet.antiparasitic,
             antiparasitic_interval=(str(pet.antiparasitic_interval.value) if pet.antiparasitic_interval is not None else None),
             special_shampoo=pet.special_shampoo,
+            reactive=pet.reactive,
+            bite_history=pet.bite_history,
+            muzzle_required=pet.muzzle_required,
+            fragrance=pet.fragrance,
+            weight_updated_at=pet.weight_updated_at,
         )
         self._session.add(model)
         try:
@@ -103,6 +108,11 @@ class PostgresPetRepository(PetRepository):
             antiparasitic=model.antiparasitic,
             antiparasitic_interval=(AntiparasiticInterval(model.antiparasitic_interval) if model.antiparasitic_interval is not None else None),
             special_shampoo=model.special_shampoo,
+            reactive=model.reactive,
+            bite_history=model.bite_history,
+            muzzle_required=model.muzzle_required,
+            fragrance=model.fragrance,
+            weight_updated_at=model.weight_updated_at,
         )
 
     async def soft_delete(self, pet_id: UUID, when: datetime) -> Optional[Pet]:
@@ -154,6 +164,11 @@ class PostgresPetRepository(PetRepository):
         model.antiparasitic = pet.antiparasitic
         model.antiparasitic_interval = (str(pet.antiparasitic_interval.value) if pet.antiparasitic_interval is not None else None)
         model.special_shampoo = pet.special_shampoo
+        model.reactive = pet.reactive
+        model.bite_history = pet.bite_history
+        model.muzzle_required = pet.muzzle_required
+        model.fragrance = pet.fragrance
+        model.weight_updated_at = pet.weight_updated_at
 
         try:
             await self._session.commit()
@@ -211,6 +226,11 @@ class PostgresPetRepository(PetRepository):
                 antiparasitic=model.antiparasitic,
                 antiparasitic_interval=(AntiparasiticInterval(model.antiparasitic_interval) if model.antiparasitic_interval is not None else None),
                 special_shampoo=model.special_shampoo,
+                reactive=model.reactive,
+                bite_history=model.bite_history,
+                muzzle_required=model.muzzle_required,
+                fragrance=model.fragrance,
+                weight_updated_at=model.weight_updated_at,
             )
             for model in models
         ]

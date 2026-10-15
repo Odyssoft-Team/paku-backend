@@ -9,10 +9,11 @@ class MediaEntityType(str, Enum):
     user = "user"
     pet = "pet"
     order = "order"  # fotos del servicio (groomer asignado o admin); se registran con POST /orders/{id}/photos
+    catalog = "catalog"  # fotos del catálogo (p. ej. mestizos); solo admin. entity_id: cualquier UUID
 
 
 class SignedUploadRequest(BaseModel):
-    entity_type: MediaEntityType = Field(..., description="Target entity type: user, pet or order")
+    entity_type: MediaEntityType = Field(..., description="Target entity type: user, pet, order or catalog")
     entity_id: UUID = Field(..., description="User, pet or order UUID")
     content_type: Literal["image/webp", "image/jpeg", "image/png"] = Field(
         ...,

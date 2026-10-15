@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
@@ -47,6 +49,8 @@ class PostgresStoreRepository:
             allowed_breeds=r.allowed_breeds,
             is_active=r.is_active,
             included_items=r.included_items,
+            max_weight_kg=r.max_weight_kg,
+            max_age_months=r.max_age_months,
         )
 
     def _to_addon(self, r) -> Addon:
@@ -204,6 +208,8 @@ class PostgresStoreRepository:
         allowed_breeds: Optional[List[str]],
         is_active: bool = True,
         included_items: Optional[List[str]] = None,
+        max_weight_kg: Optional[float] = None,
+        max_age_months: Optional[int] = None,
     ) -> Product:
         from app.modules.store.infra.db_models import ProductModel, _utcnow
 
@@ -216,6 +222,8 @@ class PostgresStoreRepository:
             allowed_breeds=allowed_breeds or None,
             is_active=is_active,
             included_items=included_items or None,
+            max_weight_kg=max_weight_kg,
+            max_age_months=max_age_months,
             created_at=now,
             updated_at=now,
         )
@@ -418,6 +426,10 @@ class PostgresStoreRepository:
         """Precio y categoría de la regla usada (la del pelaje o el respaldo "mestizo")."""
         from app.modules.store.infra.db_models import StorePriceRuleModel
 
+        # Los tramos son "5 < peso ≤ 15" y se guardan como 5.01–15: un peso con más de 2 decimales
+        # (5.004) caería entre dos tramos. Se redondea hacia arriba al centésimo.
+        weight = math.ceil(round(float(weight), 6) * 100) / 100
+
         async def _find(cat: str) -> Optional[StorePriceRuleModel]:
             stmt = (
                 select(StorePriceRuleModel)
@@ -445,6 +457,16 @@ class PostgresStoreRepository:
             return None, None
 
         return float(rule.price), rule.breed_category   # Decimal("120.00") → 120.0 (soles)
+
+    async def price_category_for(self, breed_id: Optional[str]) -> str:
+        """Categoría de precio de una raza: su pelaje en `breeds` (lo asigna el admin) o "mestizo"."""
+        from app.modules.catalog.infra.models import BreedModel
+        from app.modules.store.domain.pricing import FALLBACK_CATEGORY, category_for_coat
+
+        if not breed_id:
+            return FALLBACK_CATEGORY
+        row = await self._session.get(BreedModel, breed_id.strip().lower())
+        return category_for_coat(row.coat_type if row is not None else None)
 
     async def replace_price_rules(
         self,

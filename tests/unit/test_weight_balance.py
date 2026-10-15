@@ -1,7 +1,7 @@
 """Feature 0003-saldo-por-peso: peso declarado, peso medido, bloqueo del peso y saldo pendiente."""
 import asyncio
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 import pytest
@@ -42,6 +42,12 @@ def _order(pet: Pet, *, declared=15.0, price=90.0, **fields) -> Order:
 
 class _Store:
     """Precio por peso: hasta 15 kg S/90, más de 15 kg S/95."""
+
+    async def price_category_for(self, breed_id):
+        from app.modules.catalog.domain.breeds_data import BREEDS_CATALOG
+        from app.modules.store.domain.pricing import category_for_coat
+        coats = {b["id"]: b.get("coat_type") for g in BREEDS_CATALOG for b in g["breeds"]}
+        return category_for_coat(coats.get((breed_id or "").strip().lower()))
 
     async def price_for(self, *, target_id, target_type, species, breed_category, weight):
         return 90.0 if weight <= 15 else 95.0
@@ -207,6 +213,31 @@ def test_owner_changes_weight_without_requested_service():
 
     assert result.price_check is None
     assert orders.find_calls == []  # el dueño no registra peso de servicio
+
+
+def test_owner_waits_30_days_between_weight_changes():
+    # Feature 0006: el dueño cambia el peso una vez cada 30 días; el primer cambio es libre.
+    pet = replace(_pet(), weight_updated_at=datetime.now(timezone.utc) - timedelta(days=10))
+    with pytest.raises(HTTPException) as err:
+        _record(pet, _Orders(), role="user", user_id=pet.owner_id)
+    assert err.value.status_code == 409
+    assert err.value.detail["code"] == "PET_WEIGHT_COOLDOWN"
+
+    old = replace(_pet(), weight_updated_at=datetime.now(timezone.utc) - timedelta(days=31))
+    pets = _Pets(old)
+    use_case = CreateRecord(records_repo=_Records(), pets_repo=pets, orders_repo=_Orders(), store_repo=_Store())
+    _run(use_case.execute(
+        pet_id=old.id, user_id=old.owner_id, role="user", type=RecordType.weight_record,
+        occurred_at=datetime.now(timezone.utc), data={"weight_kg": 18.0},
+    ))
+    assert pets.updated.weight_kg == 18.0 and pets.updated.weight_updated_at is not None
+
+
+def test_groomer_changes_weight_during_cooldown(notices):
+    pet = replace(_pet(), weight_updated_at=datetime.now(timezone.utc) - timedelta(days=1))
+    orders = _Orders(_order(pet))
+    result = _record(pet, orders, role="admin", user_id=uuid4())
+    assert result.price_check["difference"] == 5.0
 
 
 def test_admin_records_weight_even_if_locked(notices):

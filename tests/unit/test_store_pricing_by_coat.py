@@ -15,7 +15,15 @@ from app.modules.store.app.use_cases_impl.pricing_admin import (
 )
 from app.modules.store.app.use_cases_impl.quote import price_service
 from app.modules.store.domain.models import Addon, Product, Species
-from app.modules.store.domain.pricing import FALLBACK_CATEGORY, price_category
+from app.modules.catalog.domain.breeds_data import BREEDS_CATALOG
+from app.modules.store.domain.pricing import FALLBACK_CATEGORY, category_for_coat
+
+_COAT = {b["id"]: b.get("coat_type") for g in BREEDS_CATALOG for b in g["breeds"]}
+
+
+def price_category(breed_id, breed_name=None):
+    """Misma regla que PostgresStoreRepository.price_category_for, con el catálogo semilla."""
+    return category_for_coat(_COAT.get((breed_id or "").strip().lower()))
 
 CATEGORY = uuid4()
 CLASICO = uuid4()
@@ -66,6 +74,9 @@ class FakeRepo:
             NAILS: Addon(id=NAILS, product_id=CLASICO, name="Corte de uñas", species=Species.dog,
                          allowed_breeds=None, is_active=True),
         }
+
+    async def price_category_for(self, breed_id):
+        return price_category(breed_id)
 
     async def get_product(self, product_id):
         return self.products.get(product_id)

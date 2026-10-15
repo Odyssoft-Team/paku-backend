@@ -66,6 +66,13 @@ class PetOut(BaseModel):
     antiparasitic: Optional[bool] = None
     antiparasitic_interval: Optional[AntiparasiticInterval] = None
     special_shampoo: Optional[bool] = None
+    reactive: Optional[bool] = None
+    bite_history: Optional[bool] = None
+    muzzle_required: Optional[bool] = None
+    fragrance: Optional[bool] = None
+    weight_updated_at: Optional[datetime] = None
+    # Desde cuándo el dueño puede volver a cambiar el peso (null = ya puede). Feature 0006.
+    weight_editable_from: Optional[datetime] = None
 
 
 class UpdatePetIn(BaseModel):
@@ -95,3 +102,7 @@ class PatchPetOptionalIn(BaseModel):
     antiparasitic: Optional[bool] = None
     antiparasitic_interval: Optional[AntiparasiticInterval] = None
     special_shampoo: Optional[bool] = None
+    reactive: Optional[bool] = None
+    bite_history: Optional[bool] = None
+    muzzle_required: Optional[bool] = None
+    fragrance: Optional[bool] = None

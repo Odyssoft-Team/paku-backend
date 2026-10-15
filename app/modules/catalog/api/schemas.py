@@ -14,6 +14,9 @@ class BreedItemOut(BaseModel):
     name: str
     coat_group: Optional[str] = None
     coat_type: Optional[str] = None
+    is_mixed: bool = False                 # mestizo: el cliente elige por foto (feature 0006)
+    photo_url: Optional[str] = None
+    description: Optional[str] = None
 
 
 class BreedsBySpeciesOut(BaseModel):
@@ -32,16 +35,28 @@ class BreedOut(BaseModel):
     is_active: bool
     coat_group: Optional[str] = None
     coat_type: Optional[str] = None
+    is_mixed: bool = False
+    photo_url: Optional[str] = None
+    description: Optional[str] = None
 
 
 class BreedCreateIn(BaseModel):
     id: str          # slug, ej: "nueva_raza" — debe ser único
     name: str
     species: str     # "dog" | "cat"
+    coat_type: Optional[str] = None   # pelaje (define el precio); null = se cobra como mestizo
+    is_mixed: bool = False
+    photo_url: Optional[str] = None
+    description: Optional[str] = None
 
 
 class BreedUpdateIn(BaseModel):
-    name: str
+    # Solo se cambian los campos enviados; coat_type/photo_url/description en null los quitan.
+    name: Optional[str] = None
+    coat_type: Optional[str] = None
+    is_mixed: Optional[bool] = None
+    photo_url: Optional[str] = None
+    description: Optional[str] = None
 
 
 class BreedToggleIn(BaseModel):

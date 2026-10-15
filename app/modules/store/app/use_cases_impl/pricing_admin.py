@@ -15,7 +15,6 @@ from app.modules.store.domain.pricing import (
     PRICE_CATEGORIES,
     VALID_PRICE_CATEGORIES,
     category_label,
-    price_category,
 )
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 
@@ -130,7 +129,7 @@ class SimulatePrices:
     ) -> SimulationResult:
         if weight <= 0:
             raise _error("WEIGHT_INVALID", "El peso debe ser mayor que 0.")
-        category = price_category(breed_id, breed_name)
+        category = await self.repo.price_category_for(breed_id)
 
         async def _price(target_id: UUID, target_type: str) -> tuple[Optional[float], Optional[str]]:
             return await self.repo.price_detail_for(
@@ -145,6 +144,8 @@ class SimulatePrices:
         for p in await self.repo.list_products(category_id=category_id, species=species):
             if not breed_allowed(p.allowed_breeds, breed_id, breed_name):
                 continue
+            if p.max_weight_kg is not None and weight > p.max_weight_kg:
+                continue  # fuera del peso máximo del servicio (la edad no se simula)
             price, used = await _price(p.id, "product")
             item = SimulatedProduct(
                 id=p.id,

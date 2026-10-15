@@ -45,6 +45,8 @@ def resolve_prefix(entity_type: MediaEntityType) -> str:
         return "users"
     if entity_type == MediaEntityType.order:
         return "orders"
+    if entity_type == MediaEntityType.catalog:
+        return "catalog"
     return "pets"
 
 
@@ -55,7 +57,7 @@ def build_object_name(entity_type: MediaEntityType, entity_id: UUID, content_typ
     extension = ALLOWED_CONTENT_TYPES[content_type]
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%fZ")
     prefix = resolve_prefix(entity_type)
-    stem = "photo" if entity_type == MediaEntityType.order else "profile"
+    stem = "photo" if entity_type in (MediaEntityType.order, MediaEntityType.catalog) else "profile"
     return f"{prefix}/{entity_id}/{stem}_{timestamp}.{extension}"
 
 

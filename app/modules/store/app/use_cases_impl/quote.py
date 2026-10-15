@@ -6,16 +6,15 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
+from app.modules.store.domain.eligibility import ineligibility
 from app.modules.store.domain.models import Species, breed_allowed
-from app.modules.store.domain.pricing import price_category
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
 from app.modules.pets.domain.pet import PetRepository
 
-def _breed_category(breed_id: Optional[str], breed_name: Optional[str]) -> str:
-    """Categoría de precio de la mascota (feature 0004): el tipo de pelaje de su raza
-    del catálogo, o "mestizo" (mestizo, raza escrita a mano o sin pelaje conocido).
-    Ver `app/modules/store/domain/pricing.py`."""
-    return price_category(breed_id, breed_name)
+async def _breed_category(repo, breed_id: Optional[str], breed_name: Optional[str] = None) -> str:
+    """Categoría de precio de la mascota (features 0004/0006): el pelaje que el admin asignó a su
+    raza, o "mestizo" (raza escrita a mano o sin pelaje). Ver `store/domain/pricing.py`."""
+    return await repo.price_category_for(breed_id)
 
 
 @dataclass
@@ -49,7 +48,9 @@ class Quote:
         pet = await self.pets_repo.get_by_id(pet_id)
         if not pet:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found")
-        return await price_service(self.repo, pet=pet, product_id=product_id, addon_ids=addon_ids)
+        return await price_service(
+            self.repo, pet=pet, product_id=product_id, addon_ids=addon_ids, check_requirements=True
+        )
 
 
 async def price_service(
@@ -58,11 +59,15 @@ async def price_service(
     pet,
     product_id: UUID,
     addon_ids: Optional[List[UUID]] = None,
+    check_requirements: bool = False,
 ) -> QuoteResult:
     """
     Única fuente del precio de un servicio + addons para una mascota (por especie, categoría de
     raza y peso). La usan `POST /store/quote` y el carrito, para que el cliente pague exactamente
     lo que se le cotizó.
+
+    `check_requirements`: exige los requisitos del servicio (peso y edad máximos, feature 0005) al
+    reservar. El recálculo por peso medido (feature 0003) no los usa: el servicio ya se hizo.
     """
     pet_weight = getattr(pet, "weight_kg", None)
     if pet_weight is None or float(pet_weight) <= 0:
@@ -75,7 +80,7 @@ async def price_service(
     pet_species = Species(str(raw_species))
     breed_id = getattr(pet, "breed_id", None)
     breed_name = getattr(pet, "breed_name", None)
-    breed_cat = _breed_category(breed_id, breed_name)
+    breed_cat = await _breed_category(repo, breed_id, breed_name)
     weight = float(pet_weight)
 
     product = await repo.get_product(product_id)
@@ -92,6 +97,13 @@ async def price_service(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Product is not available for this pet's breed",
         )
+    if check_requirements:
+        reason = ineligibility(product, weight=weight, birth_date=getattr(pet, "birth_date", None))
+        if reason:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": reason[0], "message": reason[1]},
+            )
 
     product_price = await repo.price_for(
         target_id=product.id,

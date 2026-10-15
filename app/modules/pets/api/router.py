@@ -30,11 +30,15 @@ def get_orders_repo(session: AsyncSession = Depends(get_async_session)):
     return PostgresOrderRepository(session=session, engine=engine)
 
 
+from app.modules.pets.domain.weight_policy import weight_editable_from  # noqa: E402
+
+
 def _pet_to_out(pet: Pet, *, weight_locked: bool = False) -> PetOut:
     """Construye PetOut resolviendo photo_url (object key en BD) a una signed read URL fresca."""
     data = pet.__dict__.copy()
     data["photo_url"] = to_signed_read_url_or_none(pet.photo_url)
     data["weight_locked"] = weight_locked
+    data["weight_editable_from"] = weight_editable_from(pet.weight_updated_at)
     return PetOut(**data)
 
 
