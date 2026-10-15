@@ -37,7 +37,7 @@ class CreateAvailabilitySlot:
     async def execute(
         self,
         *,
-        service_id: UUID,
+        service_id: Optional[UUID],
         date: date_type,
         capacity: int,
         is_active: bool = True,
@@ -47,7 +47,7 @@ class CreateAvailabilitySlot:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="capacity_invalid: debe ser mayor que 0",
             )
-        await _assert_service_exists(self.store_repo, service_id)
+        service_id = await _resolve_pool(self.repo, self.store_repo, service_id)
         try:
             return await self.repo.create_slot(
                 service_id=service_id,
@@ -57,7 +57,7 @@ class CreateAvailabilitySlot:
             )
         except ValueError as exc:
             if str(exc) == "slot_exists":
-                raise _error(status.HTTP_409_CONFLICT, "SLOT_EXISTS", "Ya hay cupos para ese servicio y día.") from exc
+                raise _error(status.HTTP_409_CONFLICT, "SLOT_EXISTS", "Ese día ya tiene cupos.") from exc
             raise
 
 
@@ -69,11 +69,12 @@ class CreateAvailabilitySlotsBulk:
     async def execute(
         self,
         *,
-        service_id: UUID,
+        service_id: Optional[UUID],
         date_from: date_type,
         date_to: Optional[date_type],
         capacity: int,
         is_active: bool = True,
+        weekdays: Optional[List[int]] = None,
     ) -> tuple[List[AvailabilitySlot], List[date_type]]:
         if capacity <= 0:
             raise HTTPException(
@@ -91,12 +92,16 @@ class CreateAvailabilitySlotsBulk:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"date_range_too_large: el rango no puede superar {_MAX_BULK_RANGE_DAYS} días",
             )
-        await _assert_service_exists(self.store_repo, service_id)
+        service_id = await _resolve_pool(self.repo, self.store_repo, service_id)
+        days = _weekday_filter(weekdays)
 
         created: List[AvailabilitySlot] = []
         skipped: List[date_type] = []
         current = date_from
         while current <= end:
+            if current.weekday() not in days:
+                current += timedelta(days=1)
+                continue
             existing = await self.repo.get_slot_for_date(service_id, current)
             if existing is not None:
                 skipped.append(current)
@@ -116,6 +121,71 @@ class CreateAvailabilitySlotsBulk:
             current += timedelta(days=1)
 
         return created, skipped
+
+
+async def _resolve_pool(repo, store_repo, service_id: Optional[UUID]) -> UUID:
+    """Servicio cuyo cupo se usa: el indicado (su categoría) o, sin servicio, el cupo de la tienda (0007)."""
+    from app.modules.booking.infra.pool import default_pool_service_id
+
+    if service_id is not None:
+        await _assert_service_exists(store_repo, service_id)
+        return service_id
+    pool = await default_pool_service_id(repo._session)
+    if pool is None:
+        raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "NO_SERVICES", "No hay servicios activos en la tienda.")
+    return pool
+
+
+def _weekday_filter(weekdays: Optional[List[int]]) -> set[int]:
+    if not weekdays:
+        return set(range(7))
+    if any(d not in range(7) for d in weekdays):
+        raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "WEEKDAYS_INVALID",
+                     "Los días de la semana van de 0 (lunes) a 6 (domingo).")
+    return set(weekdays)
+
+
+@dataclass
+class UpdateAvailabilitySlotsBulk:
+    """Cambia cupos y/o abre/cierra los días ya creados de un rango (0007). Un día con más reservas
+    que la nueva capacidad no se modifica y se informa en `below_booked`."""
+    repo: PostgresAvailabilityRepository
+    store_repo: Optional[object] = None
+
+    async def execute(
+        self,
+        *,
+        service_id: Optional[UUID],
+        date_from: date_type,
+        date_to: date_type,
+        weekdays: Optional[List[int]] = None,
+        capacity: Optional[int] = None,
+        is_active: Optional[bool] = None,
+    ) -> tuple[List[AvailabilitySlot], List[date_type]]:
+        if capacity is None and is_active is None:
+            raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "NOTHING_TO_UPDATE", "Indica cupos o abrir/cerrar.")
+        if date_to < date_from or (date_to - date_from).days + 1 > _MAX_BULK_RANGE_DAYS:
+            raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "DATE_RANGE_INVALID",
+                         f"Rango inválido (máximo {_MAX_BULK_RANGE_DAYS} días).")
+        service_id = await _resolve_pool(self.repo, self.store_repo, service_id)
+        days = _weekday_filter(weekdays)
+
+        updated: List[AvailabilitySlot] = []
+        below: List[date_type] = []
+        current = date_from
+        while current <= date_to:
+            slot = await self.repo.get_slot_for_date(service_id, current) if current.weekday() in days else None
+            if slot is not None:
+                if capacity is not None and capacity < slot.booked:
+                    below.append(current)
+                else:
+                    if capacity is not None:
+                        slot = await self.repo.update_slot(slot.id, {"capacity": capacity})
+                    if is_active is not None:
+                        slot = await self.repo.toggle_slot(slot.id, is_active)
+                    updated.append(slot)
+            current += timedelta(days=1)
+        return updated, below
 
 
 @dataclass

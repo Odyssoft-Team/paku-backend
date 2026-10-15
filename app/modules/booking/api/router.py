@@ -11,6 +11,8 @@ from app.modules.booking.api.schemas import (
     AvailabilityOut,
     AvailabilitySlotBulkCreateIn,
     AvailabilitySlotBulkOut,
+    AvailabilitySlotBulkUpdateIn,
+    AvailabilitySlotBulkUpdateOut,
     AvailabilitySlotCreateIn,
     AvailabilitySlotToggleIn,
     AvailabilitySlotUpdateIn,
@@ -28,6 +30,7 @@ from app.modules.booking.app.use_cases import (
     ListSlotHolds,
     ToggleAvailabilitySlot,
     UpdateAvailabilitySlot,
+    UpdateAvailabilitySlotsBulk,
 )
 from app.modules.booking.infra.postgres_availability_repository import PostgresAvailabilityRepository
 from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepository
@@ -225,9 +228,29 @@ async def admin_create_slots_bulk(
         date_to=payload.date_to,
         capacity=payload.capacity,
         is_active=payload.is_active,
+        weekdays=payload.weekdays,
     )
     created_out = await _to_availability_out(created, store_repo)
     return AvailabilitySlotBulkOut(created=created_out, skipped=skipped)
+
+
+@router.patch("/admin/availability/bulk", response_model=AvailabilitySlotBulkUpdateOut)
+async def admin_update_slots_bulk(
+    payload: AvailabilitySlotBulkUpdateIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
+    store_repo: PostgresStoreRepository = Depends(get_store_repo),
+) -> AvailabilitySlotBulkUpdateOut:
+    """Cambia cupos y/o abre/cierra los días ya creados de un rango (feature 0007)."""
+    updated, below = await UpdateAvailabilitySlotsBulk(repo=repo, store_repo=store_repo).execute(
+        service_id=payload.service_id,
+        date_from=payload.date_from,
+        date_to=payload.date_to,
+        weekdays=payload.weekdays,
+        capacity=payload.capacity,
+        is_active=payload.is_active,
+    )
+    return AvailabilitySlotBulkUpdateOut(updated=await _to_availability_out(updated, store_repo), below_booked=below)
 
 
 @router.get("/admin/availability/{slot_id}/holds", response_model=list[HoldOut])
@@ -236,10 +259,12 @@ async def admin_list_slot_holds(
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresHoldRepository = Depends(get_hold_repo),
     availability_repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
+    store_repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> list[HoldOut]:
-    """Quién reservó ese día (todas las reservas del cupo, con su estado)."""
+    """Quién reservó ese día (todas las reservas del cupo, de todos los servicios, con su estado)."""
     holds = await ListSlotHolds(hold_repo=repo, availability_repo=availability_repo).execute(slot_id=slot_id)
-    return [HoldOut(**h.__dict__) for h in holds]
+    names = await store_repo.get_product_names_by_ids(list({h.service_id for h in holds}))
+    return [HoldOut(**h.__dict__, service_name=names.get(h.service_id)) for h in holds]
 
 
 @router.patch("/admin/availability/{slot_id}", response_model=AvailabilityOut)

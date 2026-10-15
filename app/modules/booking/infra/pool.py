@@ -7,6 +7,7 @@ de ese único cupo.
 """
 from __future__ import annotations
 
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -75,3 +76,20 @@ async def pool_labels(session: AsyncSession, service_ids: list[UUID]) -> dict[UU
         .where(ProductModel.id.in_(service_ids))
     )
     return {pid: f"{name} · todos los servicios" for pid, name in rows.all()}
+
+
+async def default_pool_service_id(session: AsyncSession) -> Optional[UUID]:
+    """Cupo "del día" cuando el admin no indica servicio (feature 0007): el de la primera categoría
+    activa que tiene servicios (hoy, PAKU Spa)."""
+    from app.modules.store.infra.db_models import CategoryModel, ProductModel
+
+    first = (
+        await session.execute(
+            select(ProductModel.id)
+            .join(CategoryModel, CategoryModel.id == ProductModel.category_id)
+            .where(CategoryModel.is_active.is_(True))
+            .order_by(CategoryModel.created_at.asc(), CategoryModel.id.asc())
+            .limit(1)
+        )
+    ).scalar()
+    return await pool_service_id(session, first) if first else None

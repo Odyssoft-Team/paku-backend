@@ -496,3 +496,11 @@ dispara no se le notifica.
   `service_id`, el admin solo ve los cupos compartidos. `POST /admin/availability(/bulk)` con cualquier servicio
   crea el cupo de su categoría. `GET /admin/availability/{id}/holds` lista las reservas de todos sus servicios.
 - **Sin migración.** Los cupos que ya existían en otros servicios dejan de usarse.
+- **Actualización (mismo C-28):** el cupo es **del día**, sin servicio:
+  - `POST /admin/availability` y `POST /admin/availability/bulk`: `service_id` **opcional**; sin él se usa el
+    cupo de la tienda (primera categoría activa con servicios, hoy PAKU Spa). El bulk acepta `weekdays`
+    (0 = lunes … 6 = domingo; vacío = todos). 422 `WEEKDAYS_INVALID`.
+  - **Nuevo** `PATCH /admin/availability/bulk` `{date_from, date_to, weekdays?, capacity?, is_active?}`: cambia cupos
+    y/o abre/cierra los días ya creados del rango. Responde `{updated, below_booked}` (días donde no se bajó la
+    capacidad porque hay más reservas). 422 `NOTHING_TO_UPDATE`, `DATE_RANGE_INVALID`.
+  - `GET /admin/availability/{id}/holds`: cada reserva trae `service_name`.

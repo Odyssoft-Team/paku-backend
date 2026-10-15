@@ -24,6 +24,7 @@ class HoldOut(BaseModel):
     expires_at: datetime
     created_at: datetime
     date: Optional[date_type] = None
+    service_name: Optional[str] = None  # solo en el listado del admin por día
 
 
 class AvailabilityOut(BaseModel):
@@ -42,7 +43,8 @@ class AvailabilityOut(BaseModel):
 # ------------------------------------------------------------------
 
 class AvailabilitySlotCreateIn(BaseModel):
-    service_id: UUID
+    # Opcional (0007): el cupo es del día, compartido por los servicios; sin servicio se usa el de la tienda
+    service_id: Optional[UUID] = None
     date: date_type
     capacity: int = Field(gt=0)
     is_active: bool = True
@@ -57,11 +59,28 @@ class AvailabilitySlotToggleIn(BaseModel):
 
 
 class AvailabilitySlotBulkCreateIn(BaseModel):
-    service_id: UUID
+    service_id: Optional[UUID] = None
     date_from: date_type
     date_to: Optional[date_type] = None
     capacity: int = Field(gt=0)
     is_active: bool = True
+    # Días de la semana a incluir: 0 = lunes … 6 = domingo. Vacío/null = todos.
+    weekdays: Optional[list[int]] = None
+
+
+class AvailabilitySlotBulkUpdateIn(BaseModel):
+    """Editar en bloque los días ya abiertos de un rango (0007)."""
+    service_id: Optional[UUID] = None
+    date_from: date_type
+    date_to: date_type
+    weekdays: Optional[list[int]] = None
+    capacity: Optional[int] = Field(default=None, gt=0)
+    is_active: Optional[bool] = None
+
+
+class AvailabilitySlotBulkUpdateOut(BaseModel):
+    updated: list["AvailabilityOut"]
+    below_booked: list[date_type]   # no se bajó la capacidad: ya hay más reservas
 
 
 class AvailabilitySlotBulkOut(BaseModel):

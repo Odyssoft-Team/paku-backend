@@ -62,3 +62,37 @@ def test_services_of_a_category_share_the_daily_capacity():
         await engine.dispose()
 
     asyncio.run(scenario())
+
+
+def test_open_days_without_service_weekdays_and_bulk_update():
+    from app.modules.booking.app.use_cases_impl.availability import (
+        CreateAvailabilitySlotsBulk,
+        UpdateAvailabilitySlotsBulk,
+    )
+
+    async def scenario():
+        engine, holds, slots, (a, b, _c) = await _setup()
+        monday = DAY - timedelta(days=DAY.weekday()) + timedelta(days=7)
+        # Abrir una semana sin servicio, solo lunes a sábado (0..5)
+        created, _ = await CreateAvailabilitySlotsBulk(repo=slots).execute(
+            service_id=None, date_from=monday, date_to=monday + timedelta(days=6), capacity=10,
+            weekdays=[0, 1, 2, 3, 4, 5],
+        )
+        assert len(created) == 6 and {s.service_id for s in created} == {a}
+        assert await slots.get_slot_for_date(b, monday + timedelta(days=6)) is None  # domingo cerrado
+
+        await CreateHold(hold_repo=holds, availability_repo=slots).execute(
+            user_id=uuid4(), pet_id=uuid4(), service_id=b, date=monday)
+        # Bajar a 1 cupo: el lunes ya tiene 1 reserva, así que se puede; luego cerrar solo los sábados
+        updated, below = await UpdateAvailabilitySlotsBulk(repo=slots).execute(
+            service_id=None, date_from=monday, date_to=monday + timedelta(days=6), capacity=1)
+        assert len(updated) == 6 and below == []
+        with pytest.raises(HTTPException):  # nada que cambiar
+            await UpdateAvailabilitySlotsBulk(repo=slots).execute(
+                service_id=None, date_from=monday, date_to=monday)
+        updated, _ = await UpdateAvailabilitySlotsBulk(repo=slots).execute(
+            service_id=None, date_from=monday, date_to=monday + timedelta(days=6), weekdays=[5], is_active=False)
+        assert [s.date.weekday() for s in updated] == [5] and updated[0].is_active is False
+        await engine.dispose()
+
+    asyncio.run(scenario())
