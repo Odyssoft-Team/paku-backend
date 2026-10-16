@@ -106,6 +106,10 @@ class GroomerPetOut(BaseModel):
     tolerates_drying: Optional[bool] = None
     tolerates_nail_clipping: Optional[bool] = None
     special_shampoo: Optional[bool] = None
+    reactive: Optional[bool] = None          # seguridad (C-27/C-30)
+    bite_history: Optional[bool] = None
+    muzzle_required: Optional[bool] = None
+    fragrance: Optional[bool] = None         # preferencia de perfume
 
 
 class GroomerClientOut(BaseModel):
