@@ -535,3 +535,11 @@ dispara no se le notifica.
 
 - `GET /orders/my-assignments[/{id}]`: `pet` agrega `reactive`, `bite_history`, `muzzle_required` y `fragrance`
   (bool o null), para mostrar alertas en la ficha del servicio. Sin migración. **Apps:** groomer.
+
+## C-31 · Rango de precios por tamaño (2026-10-16)
+
+- **Nuevo** `GET /store/categories/{slug}/price-ranges?breed_id=&species=dog` (público):
+  `[{weight_min, weight_max, min_price, max_price}]`, uno por tramo de peso (≤5, ≤15, ≤25, ≤35, ≤50, >50).
+  Mínimo y máximo de los servicios activos sin requisitos de edad/peso, para el pelaje de la raza.
+- Uso: el registro de mascota ya no pide el peso; se elige el tamaño (tramo) mostrando su rango de precio.
+  Sin migración. **Apps:** cliente.

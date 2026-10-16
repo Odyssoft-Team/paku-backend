@@ -9,6 +9,7 @@ from app.modules.store.app.use_cases_impl.access import check_pet_access as _che
 from app.core.auth import CurrentUser, get_current_user, get_optional_current_user, require_roles
 from app.core.db import engine, get_async_session
 from app.modules.store.api.schemas import (
+    PriceRangeOut,
     QuestionOptionOut,
     QuestionOut,
     RecommendationIn,
@@ -104,6 +105,21 @@ async def list_products(
         category_slug=slug, pet_id=pet_id, species=species
     )
     return [ProductOut(**rp.product.__dict__, price=rp.price) for rp in items]
+
+
+@router.get("/categories/{slug}/price-ranges", response_model=List[PriceRangeOut])
+async def category_price_ranges(
+    slug: str,
+    breed_id: Optional[str] = Query(None),
+    species: Species = Query(Species.dog),
+    repo: PostgresStoreRepository = Depends(get_store_repo),
+) -> List[PriceRangeOut]:
+    """Precio mínimo y máximo por tramo de peso para la raza (público; el registro de mascota elige
+    tamaño en vez de peso, feature 0009)."""
+    from app.modules.store.app.use_cases_impl.price_ranges import price_ranges
+
+    items = await price_ranges(repo, category_slug=slug, species=species, breed_id=breed_id)
+    return [PriceRangeOut(**r.__dict__) for r in items]
 
 
 @router.get("/products/{id}", response_model=ProductDetailOut)
