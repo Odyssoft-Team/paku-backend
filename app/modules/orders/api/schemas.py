@@ -56,6 +56,8 @@ class OrderOut(BaseModel):
     review_note: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     requires_photos: bool = False                # el cliente debe subir fotos antes de pagar
+    departed_at: Optional[datetime] = None       # salió hacia el domicilio (C-32)
+    completed_at: Optional[datetime] = None      # terminó el servicio (C-32)
     recommendation: Optional[dict] = None        # respuestas, reglas y versión (auditoría)
 
     @field_validator("service_steps_log", "addons_done", mode="before")

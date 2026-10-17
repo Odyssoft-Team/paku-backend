@@ -543,3 +543,10 @@ dispara no se le notifica.
   Mínimo y máximo de los servicios activos sin requisitos de edad/peso, para el pelaje de la raza.
 - Uso: el registro de mascota ya no pide el peso; se elige el tamaño (tramo) mostrando su rango de precio.
   Sin migración. **Apps:** cliente.
+
+## C-32 · Tiempos de atención del groomer (2026-10-16)
+
+- `OrderOut` agrega `departed_at` (salió hacia el domicilio) y `completed_at` (terminó el servicio). Junto con
+  `service_steps_log` (inicio de cada paso) permiten calcular traslado, duración por paso y total.
+- Se llenan solos al cambiar a `on_the_way` y `done`. Órdenes anteriores: null.
+- **Migración:** `8b9c0d1e2f3a`. **Apps:** admin (pantalla Tiempos).

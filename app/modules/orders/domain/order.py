@@ -168,6 +168,10 @@ class Order:
     review_status: Optional[str] = None
     review_note: Optional[str] = None
     reviewed_at: Optional[datetime] = None
+    # Tiempos de atención (C-32): salida hacia el domicilio y fin del servicio. Con service_steps_log
+    # (inicio de cada paso) dan traslado, duración por paso y total.
+    departed_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
     # [TECH]
     # Factory creating Order with created status and timestamps.

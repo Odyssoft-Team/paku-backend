@@ -57,6 +57,8 @@ class PostgresOrderRepository:
             review_status=r.review_status,
             review_note=r.review_note,
             reviewed_at=r.reviewed_at,
+            departed_at=r.departed_at,
+            completed_at=r.completed_at,
         )
 
     async def set_reservation(self, *, id: UUID, hold_id: Optional[UUID], reserved_date) -> Order:
@@ -205,6 +207,10 @@ class PostgresOrderRepository:
             raise ValueError("invalid_status_transition")
         model.status = status.value
         model.updated_at = utcnow()
+        if status == OrderStatus.on_the_way:
+            model.departed_at = model.updated_at
+        elif status == OrderStatus.done:
+            model.completed_at = model.updated_at
         await self._session.commit()
         await self._session.refresh(model)
         return self._row_to_order(model)
@@ -218,6 +224,11 @@ class PostgresOrderRepository:
             raise ValueError("order_not_found")
         model.status = status.value
         model.updated_at = utcnow()
+        # Tiempos de atención (C-32): la última salida y el fin del servicio
+        if status == OrderStatus.on_the_way:
+            model.departed_at = model.updated_at
+        elif status == OrderStatus.done:
+            model.completed_at = model.updated_at
         await self._session.commit()
         await self._session.refresh(model)
         return self._row_to_order(model)
