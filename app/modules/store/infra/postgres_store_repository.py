@@ -86,10 +86,14 @@ class PostgresStoreRepository:
     # Categorías
     # ------------------------------------------------------------------
 
-    async def list_categories(self, *, species: Optional[Species] = None) -> List[Category]:
+    async def list_categories(
+        self, *, species: Optional[Species] = None, include_inactive: bool = False
+    ) -> List[Category]:
         from app.modules.store.infra.db_models import CategoryModel
 
-        stmt = select(CategoryModel).where(CategoryModel.is_active.is_(True))
+        stmt = select(CategoryModel)
+        if not include_inactive:
+            stmt = stmt.where(CategoryModel.is_active.is_(True))
         if species is not None:
             stmt = stmt.where(
                 (CategoryModel.species == species.value) | (CategoryModel.species.is_(None))

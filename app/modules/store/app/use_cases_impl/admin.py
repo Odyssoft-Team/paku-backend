@@ -24,7 +24,9 @@ class ListAllCategories:
     repo: PostgresStoreRepository
 
     async def execute(self) -> List[Category]:
-        return await self.repo.list_categories()
+        # El admin ve también las desactivadas: si no, una categoría desactivada desaparece y no se puede
+        # reactivar (y crearla de nuevo choca con el slug único).
+        return await self.repo.list_categories(include_inactive=True)
 
 
 @dataclass
@@ -34,6 +36,11 @@ class CreateCategory:
     async def execute(
         self, *, name: str, slug: str, species: Optional[Species], is_active: bool = True
     ) -> Category:
+        if await self.repo.get_category_by_slug(slug):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+                "code": "SLUG_TAKEN",
+                "message": "Ya existe una categoría con ese identificador. Si está inactiva, actívala desde la lista.",
+            })
         return await self.repo.create_category(name=name, slug=slug, species=species, is_active=is_active)
 
 
