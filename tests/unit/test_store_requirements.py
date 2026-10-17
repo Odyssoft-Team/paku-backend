@@ -206,3 +206,14 @@ def test_breeds_from_pricing_document():
     assert price_category("lagotto_romagnolo") == "curly_no_undercoat"
     assert price_category("perro_agua_portugues") == "curly_no_undercoat"
     assert price_category("aussiedoodle") == "mixed_curly_undercoat"
+
+
+
+def test_price_ranges_by_size_exclude_restricted_services():
+    from app.modules.store.app.use_cases_impl.price_ranges import price_ranges
+
+    repo = FakeRepo()
+    ranges = run(price_ranges(repo, category_slug="spa", species=Species.dog, breed_id="labrador"))
+    assert len(ranges) == 6 and ranges[0].weight_max == 5 and ranges[-1].weight_max is None
+    # Express sin agua (con requisitos) no entra; Fresco y Limpio: doble manto corto 129
+    assert (ranges[0].min_price, ranges[0].max_price) == (129.0, 129.0)

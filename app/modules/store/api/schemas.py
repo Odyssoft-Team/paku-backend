@@ -287,3 +287,11 @@ class RecommendationOut(BaseModel):
     questions: List[QuestionOut]
     addons: List[AddonRecommendationOut]
     review: Optional[ReviewOut]
+
+
+class PriceRangeOut(BaseModel):
+    """Rango de precio de un tramo de peso (tamaño) para una raza (feature 0009)."""
+    weight_min: float
+    weight_max: Optional[float]   # null = sin tope (último tramo)
+    min_price: Optional[float]
+    max_price: Optional[float]
