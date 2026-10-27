@@ -27,6 +27,7 @@ class ProductOut(BaseModel):
     allowed_breeds: Optional[List[str]]
     is_active: bool
     price: Optional[float] = None   # soles con decimales, ej: 120.0
+    min_price: Optional[float] = None   # "desde": el precio más bajo de su tabla (C-33); útil sin mascota
     currency: str = "PEN"
     included_items: Optional[List[str]] = None
     max_weight_kg: Optional[float] = None   # requisito de la mascota; null = sin límite

@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.modules.store.domain.models import Addon, Category, PriceRule, Product, Species
@@ -403,6 +403,19 @@ class PostgresStoreRepository:
         await self._session.commit()
         await self._session.refresh(row)
         return self._to_price_rule(row)
+
+    async def min_price_for(self, target_id: UUID, target_type: str = "product") -> Optional[float]:
+        """Precio más bajo de su tabla (cualquier pelaje y peso): el "desde" que se muestra sin mascota."""
+        from app.modules.store.infra.db_models import StorePriceRuleModel
+
+        value = await self._session.scalar(
+            select(func.min(StorePriceRuleModel.price)).where(
+                StorePriceRuleModel.target_id == target_id,
+                StorePriceRuleModel.target_type == target_type,
+                StorePriceRuleModel.is_active.is_(True),
+            )
+        )
+        return float(value) if value is not None else None
 
     async def price_for(
         self,

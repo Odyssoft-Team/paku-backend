@@ -550,3 +550,9 @@ dispara no se le notifica.
   `service_steps_log` (inicio de cada paso) permiten calcular traslado, duración por paso y total.
 - Se llenan solos al cambiar a `on_the_way` y `done`. Órdenes anteriores: null.
 - **Migración:** `8b9c0d1e2f3a`. **Apps:** admin (pantalla Tiempos).
+
+## C-33 · Precio "desde" por servicio (2026-10-27)
+
+- `GET /store/categories/{slug}/products` agrega `min_price` en cada producto: el precio más bajo de su tabla
+  (cualquier pelaje y peso). `price` sigue siendo el precio exacto para la mascota (null sin mascota).
+- Uso: la web muestra "Desde S/ X" a quien no inició sesión. **Sin migración.**

@@ -104,7 +104,11 @@ async def list_products(
     items = await ListProducts(repo=repo, pets_repo=pets_repo).execute(
         category_slug=slug, pet_id=pet_id, species=species
     )
-    return [ProductOut(**rp.product.__dict__, price=rp.price) for rp in items]
+    # "Desde" (C-33): la web muestra el precio mínimo a quien no inició sesión
+    return [
+        ProductOut(**rp.product.__dict__, price=rp.price, min_price=await repo.min_price_for(rp.product.id))
+        for rp in items
+    ]
 
 
 @router.get("/categories/{slug}/price-ranges", response_model=List[PriceRangeOut])
