@@ -99,8 +99,11 @@ class CreateOrderFromCart:
     orders_repo: PostgresOrderRepository
     cart_repo: PostgresCartRepository
     holds_repo: Optional[object] = None  # PostgresHoldRepository
+    campaign_engine: Optional[object] = None  # campaigns.app.use_cases.CampaignEngine (feature 0013)
 
-    async def execute(self, *, user_id: UUID, cart_id: UUID, delivery_address_snapshot: dict) -> Order:
+    async def execute(
+        self, *, user_id: UUID, cart_id: UUID, delivery_address_snapshot: dict, campaign_code: Optional[str] = None,
+    ) -> Order:
         from app.modules.cart.domain.cart import CartStatus
         from app.core.db import engine
         from app.modules.notifications.infra.postgres_notification_repository import PostgresNotificationRepository
@@ -119,6 +122,15 @@ class CreateOrderFromCart:
         items_snapshot = _snapshot_cart_items(items)
         total_snapshot = _calc_total(items)
 
+        # Campaña (feature 0013): la mejor entre las automáticas del cliente y la del cupón. Un cupón
+        # inválido responde 422 antes de tomar el cupo; el total guardado es el neto que se cobra.
+        offer = None
+        if self.campaign_engine is not None:
+            quote = await self.campaign_engine.quote(user_id=user_id, items_snapshot=items_snapshot, code=campaign_code)
+            offer = quote.offer
+            if offer is not None:
+                total_snapshot = round(total_snapshot - offer.discount, 2)
+
         hold = await _confirm_cart_hold(self.holds_repo, items_snapshot, user_id=user_id)
 
         order = Order.new(
@@ -130,8 +142,19 @@ class CreateOrderFromCart:
             hold_id=hold.id if hold else None,
             reserved_date=hold.date if hold else None,
             review_status="pending" if (recommendation_of(items_snapshot) or {}).get("review_required") else None,
+            discount_amount=offer.discount if offer else None,
+            campaign_id=offer.campaign.id if offer else None,
         )
         created = await self.orders_repo.create_order(order)
+
+        if offer is not None:
+            try:
+                await self.campaign_engine.repo.add_redemption(
+                    campaign_id=offer.campaign.id, order_id=created.id, user_id=user_id, discount=offer.discount,
+                )
+            except Exception:
+                import logging
+                logging.exception("No se pudo registrar el uso de la campaña %s en la orden %s", offer.campaign.id, created.id)
 
         # Poblar order_pets (best effort): necesario para el recálculo de precio por peso.
         try:
@@ -235,6 +258,12 @@ async def _change_status_as_staff(
                 detail="Invalid status transition",
             ) from exc
         raise
+
+    if updated.status == OrderStatus.done:
+        # "Cerrar a mano" del admin: descuenta los insumos igual que /complete (feature 0009)
+        from app.modules.inventory.app.order_hook import register_order_consumption
+
+        await register_order_consumption(orders_repo._session, updated)
 
     title, body = _status_message(updated.status.value)
 

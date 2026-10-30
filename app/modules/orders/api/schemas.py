@@ -11,6 +11,8 @@ from app.modules.orders.domain.photo import OrderPhotoKind
 class CreateOrderIn(BaseModel):
     cart_id: UUID
     address_id: Optional[UUID] = None
+    # Cupón de una campaña (C-38). Opcional: las campañas automáticas se aplican sin código.
+    campaign_code: Optional[str] = None
 
 
 class UpdateStatusIn(BaseModel):
@@ -59,6 +61,9 @@ class OrderOut(BaseModel):
     departed_at: Optional[datetime] = None       # salió hacia el domicilio (C-32)
     completed_at: Optional[datetime] = None      # terminó el servicio (C-32)
     recommendation: Optional[dict] = None        # respuestas, reglas y versión (auditoría)
+    # Campaña aplicada (C-38): total_snapshot ya es el neto; subtotal = total_snapshot + discount_amount
+    discount_amount: Optional[float] = None
+    campaign_id: Optional[UUID] = None
 
     @field_validator("service_steps_log", "addons_done", mode="before")
     @classmethod

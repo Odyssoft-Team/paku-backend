@@ -59,6 +59,8 @@ class PostgresOrderRepository:
             reviewed_at=r.reviewed_at,
             departed_at=r.departed_at,
             completed_at=r.completed_at,
+            discount_amount=float(r.discount_amount) if r.discount_amount is not None else None,
+            campaign_id=r.campaign_id,
         )
 
     async def set_reservation(self, *, id: UUID, hold_id: Optional[UUID], reserved_date) -> Order:
@@ -150,6 +152,8 @@ class PostgresOrderRepository:
             culqi_charge_id=order.culqi_charge_id,
             parent_order_id=order.parent_order_id,
             review_status=order.review_status,
+            discount_amount=Decimal(str(order.discount_amount)) if order.discount_amount is not None else None,
+            campaign_id=order.campaign_id,
             created_at=order.created_at,
             updated_at=utcnow(),
         )

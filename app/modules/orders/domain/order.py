@@ -172,6 +172,9 @@ class Order:
     # (inicio de cada paso) dan traslado, duración por paso y total.
     departed_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    # Campaña aplicada (feature 0013). total_snapshot ya es el neto; subtotal = total + descuento.
+    discount_amount: Optional[float] = None
+    campaign_id: Optional[UUID] = None
 
     # [TECH]
     # Factory creating Order with created status and timestamps.
@@ -191,6 +194,8 @@ class Order:
         reserved_date: Optional[date] = None,
         parent_order_id: Optional[UUID] = None,
         review_status: Optional[str] = None,
+        discount_amount: Optional[float] = None,
+        campaign_id: Optional[UUID] = None,
     ) -> "Order":
         now = datetime.now(timezone.utc)
         return Order(
@@ -209,6 +214,8 @@ class Order:
             review_status=review_status,
             payment_status=PaymentStatus.pending,
             culqi_charge_id=None,
+            discount_amount=discount_amount,
+            campaign_id=campaign_id,
         )
 
     # [TECH]

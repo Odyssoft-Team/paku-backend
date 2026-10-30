@@ -163,11 +163,16 @@ async def create_order(
 
     from app.modules.booking.infra.postgres_hold_repository import PostgresHoldRepository
 
+    from app.modules.campaigns.app.use_cases import campaign_engine
+
     holds_repo = PostgresHoldRepository(session=session, engine=engine)
-    order = await CreateOrderFromCart(orders_repo=orders_repo, cart_repo=cart_repo, holds_repo=holds_repo).execute(
+    order = await CreateOrderFromCart(
+        orders_repo=orders_repo, cart_repo=cart_repo, holds_repo=holds_repo, campaign_engine=campaign_engine(session),
+    ).execute(
         user_id=current.id,
         cart_id=payload.cart_id,
         delivery_address_snapshot=snapshot,
+        campaign_code=payload.campaign_code,
     )
     return _order_out(order)
 
