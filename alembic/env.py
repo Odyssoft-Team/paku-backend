@@ -37,6 +37,16 @@ def _get_metadata():
     from app.modules.pet_records.infra.models import PetRecordModel  # noqa: F401
     from app.modules.iam.infra.models import UserSocialIdentityModel  # noqa: F401
     from app.modules.wallet.infra.models import WalletCardModel, UserPaymentCustomerModel  # noqa: F401
+    from app.modules.inventory.infra.models import (  # noqa: F401
+        SupplyModel,
+        MovementModel,
+        RecipeModel,
+        RecipeCellModel,
+        RecipeLineModel,
+    )
+    from app.modules.general_settings.infra.models import GeneralSettingModel  # noqa: F401
+    from app.modules.groomer_costs.infra.models import GroomerCostProfileModel  # noqa: F401
+    from app.modules.campaigns.infra.models import CampaignModel, CampaignRedemptionModel  # noqa: F401
 
     return Base.metadata
 

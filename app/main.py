@@ -43,6 +43,11 @@ from app.modules.store.api.router import (
 from app.modules.chat.api.router import router as chat_router
 from app.modules.streaming.api.router import router as streaming_router
 from app.modules.tracking.api.router import router as tracking_router
+from app.modules.inventory.api.router import admin_router as inventory_admin_router
+from app.modules.general_settings.api.router import admin_router as settings_admin_router
+from app.modules.crm.api.router import admin_router as crm_admin_router
+from app.modules.groomer_costs.api.router import admin_router as groomer_costs_admin_router
+from app.modules.campaigns.api.router import router as campaigns_router, admin_router as campaigns_admin_router
 
 
 def _init_firebase() -> None:
@@ -136,6 +141,12 @@ app.include_router(catalog_admin_router, prefix="/admin")
 app.include_router(iam_admin_router, prefix="/admin")
 app.include_router(pets_admin_router, prefix="/admin")
 app.include_router(store_admin_router, prefix="/admin")
+app.include_router(inventory_admin_router, prefix="/admin")
+app.include_router(settings_admin_router, prefix="/admin")
+app.include_router(crm_admin_router, prefix="/admin")
+app.include_router(groomer_costs_admin_router, prefix="/admin")
+app.include_router(campaigns_admin_router, prefix="/admin")
+app.include_router(campaigns_router)
 app.include_router(media_router)
 
 

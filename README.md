@@ -75,7 +75,9 @@ python -m alembic downgrade -1
 ```
 
 **📋 NOTA:** hay migraciones nuevas escritas y aún no aplicadas (`1a2b3c4d5e6f`, `2b3c4d5e6f7a`,
-`3c4d5e6f7a8b`); ver `docs/plan-de-trabajo.md`.
+`3c4d5e6f7a8b`); ver `docs/plan-de-trabajo.md`. Del 2026-10-29, también sin aplicar: `9c0d1e2f3a4b`
+(inventario, C-34), `0d1e2f3a4b5c` (parámetros generales, C-35), `1e2f3a4b5c6d` (costo del groomer, C-37) y
+`2f3a4b5c6d7e` (campañas, C-38).
 
 ### 🧪 Tests (local)
 ```bash

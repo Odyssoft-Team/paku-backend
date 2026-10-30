@@ -556,3 +556,71 @@ dispara no se le notifica.
 - `GET /store/categories/{slug}/products` agrega `min_price` en cada producto: el precio más bajo de su tabla
   (cualquier pelaje y peso). `price` sigue siendo el precio exacto para la mascota (null sin mascota).
 - Uso: la web muestra "Desde S/ X" a quien no inició sesión. **Sin migración.**
+
+## C-34 · Inventario: insumos, movimientos, recetas y costo por orden (feature 0009, 2026-10-29)
+
+- **Nuevos (admin):** `GET /admin/inventory/config` (categorías, unidades, tipos de movimiento, ubicaciones y
+  centros de costo); `GET/POST /admin/inventory/supplies` y `PATCH /admin/inventory/supplies/{id}` (el código
+  `INS-001` lo da el backend; cada insumo trae `stock`, `status` `ok|low|out`, `value` y `unit_cost`);
+  `GET/POST /admin/inventory/movements` (filtros `type`, `supply_id`, `order_id`, `date_from`, `date_to`, `limit`);
+  `GET /admin/inventory/summary?date_from&date_to`; `GET /admin/inventory/recipes`;
+  `GET/PUT /admin/inventory/recipes/{target_id}` y `GET …/{target_id}/versions`;
+  `GET /admin/inventory/orders/{id}/cost`; `POST /admin/inventory/orders/{id}/consume`.
+- Movimientos: `quantity` siempre positiva; el signo sale del tipo (`adjustment` exige `direction` `in|out`).
+  Motivo obligatorio; no se editan ni se borran. Errores con `code`: `MOVEMENT_*`, `SUPPLY_*`, `LOCATION_INVALID`,
+  `COST_CENTER_INVALID`, `RECIPE_UNCHANGED`, `RECIPE_NOT_CURRENT`, `CONSUMPTION_ALREADY_REGISTERED`, y los de la
+  tabla de precios (`PRICE_CATEGORY_INVALID`, `WEIGHT_RANGE_*`).
+- Recetas (2026-10-29, rehecho antes de desplegar): **misma forma que la tabla de precios** — una por servicio y
+  por adicional (`target_id`), celdas `{breed_category, weight_min, weight_max, labor_minutes, lines}` con las
+  filas y tramos de `GET /admin/store/price-config`. La orden usa la celda con la regla del precio (pelaje o
+  "mestizo"; tramo del peso registrado). Cada celda devuelve `supplies_cost`, `labor_cost`, `total_cost`, `price`
+  y `margin`. El costeo de la orden trae insumos, mano de obra estimada y real (C-37) y márgenes.
+- **Cambio de comportamiento:** al pasar una orden a `done` (`/complete` o "cerrar a mano" del admin) se registran
+  solos sus consumos (`type=consumption`, `created_by` null = sistema). Best effort: la orden termina igual.
+- **Compatible.** **Migración:** `9c0d1e2f3a4b`. **Apps:** admin (Inventario: Insumos, Movimientos, Recetas y costeo).
+
+## C-35 · Parámetros generales y anticipación mínima (feature 0010, 2026-10-29)
+
+- **Nuevos (admin):** `GET /admin/settings` (`values` y `sections` con etiqueta, tipo, valor por defecto y si es
+  editable) y `PATCH /admin/settings` con `{"values": {clave: valor}}` (solo lo cambiado; `null` vuelve al valor
+  por defecto; todo o nada: 422 `SETTING_INVALID` con `key`).
+- Solo lectura: `timezone` (America/Lima), `currency` (PEN) y `reservation_ttl_minutes` (120 = vida del carrito).
+- **Cambio de comportamiento (solo si el admin lo configura):** con `booking_min_days_ahead` = N > 0,
+  `GET /availability` omite los días antes de hoy + N y `POST /holds` responde 422 `DATE_TOO_SOON` con
+  `earliest_date`. Por defecto 0: igual que antes.
+- **Compatible.** **Migración:** `0d1e2f3a4b5c`. **Apps:** admin (Parámetros generales); app de clientes
+  (mostrar `detail.message` de `DATE_TOO_SOON`).
+
+## C-36 · Clientes: resumen por dueño (feature 0011, 2026-10-29)
+
+- **Nuevos (admin):** `GET /admin/customers` (filtros `segment`, `district_id`, `q`, `last_visit_from`,
+  `last_visit_to`; `sort` `spend|last_visit|services`), `GET /admin/customers/stats` (totales y segmentos con su
+  regla) y `GET /admin/customers/{user_id}` (ficha con `pets_detail` y `visits`).
+- Servicio = orden terminada sin orden padre; `spend` = lo pagado (orden + cargos extra pagados). Segmentos:
+  `vip`, `recurrente`, `nuevo`, `sin_recompra`, `en_riesgo`, `inactivo`.
+- Resuelve el pedido del admin de "un endpoint de resumen por cliente" para no traer todas las órdenes.
+- **Compatible.** **Sin migración.** **Apps:** admin (CRM · Clientes).
+
+## C-37 · Costo del groomer y mano de obra (feature 0012, 2026-10-29)
+
+- **Nuevos (admin):** `GET /admin/groomer-costs` (cada groomer con su registro vigente, `reference_rate` y cargos
+  sugeridos), `GET /admin/groomer-costs/{groomer_id}` (historial) y `POST /admin/groomer-costs/{groomer_id}`
+  (`effective_from`, `base_salary`, `items` `[{label, kind: percent|amount, value}]`, `monthly_hours`,
+  `driving_rest_hours`; misma fecha = corrige).
+- Devuelve `monthly_cost`, `service_hours` y `cost_per_service_hour` (costo mensual ÷ horas de servicio): la tarifa
+  de las recetas y del costeo.
+- **Compatible.** **Migración:** `1e2f3a4b5c6d`. **Apps:** admin (Groomers, Recetas y costeo).
+
+## C-38 · Campañas y descuentos (feature 0013, 2026-10-29)
+
+- **Nuevos (admin):** `GET /admin/campaigns/config`, `GET/POST /admin/campaigns`, `PATCH /admin/campaigns/{id}`
+  (editar, activar, pausar o terminar con `status`). Cada campaña trae `state`, usos, `discount_given`, `sales` y
+  `audience_size`.
+- **Nuevo (cliente):** `POST /campaigns/quote` `{cart_id, code?}` → `subtotal`, `discount`, `total` y la campaña.
+- **Cambio en `POST /orders`:** acepta `campaign_code` (opcional). Se aplica la mejor campaña (automáticas del
+  cliente + el cupón). Cupón inválido → 422 con `code` `CAMPAIGN_*` y no se crea la orden. `OrderOut` agrega
+  `discount_amount` y `campaign_id`; **`total_snapshot` pasa a ser el neto** (lo que cobra Culqi). Cancelar libera
+  el uso.
+- **Compatible** (campos nuevos opcionales), pero los fronts que suman los ítems para mostrar el total deben usar
+  `total_snapshot` (o mostrar `discount_amount`). **Migración:** `2f3a4b5c6d7e`. **Apps:** admin (CRM · Campañas,
+  Órdenes), app de clientes (cupón y total).

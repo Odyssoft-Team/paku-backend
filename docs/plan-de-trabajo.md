@@ -85,6 +85,22 @@ Creado: 2026-10-03. Fuente de verdad del trabajo en curso. Se actualiza al cerra
 - [x] 5.3 `GET /holds` (cliente) y `GET /admin/availability/{slot_id}/holds` (admin)
 - [ ] 5.4 **Lo hace el dueño:** `git rm app/modules/booking/infra/hold_repository.py` (repositorio en memoria sin uso)
 
+### Fase 6 — Maquetas del admin con backend (2026-10-29)
+Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada spec (pendientes de aprobar).
+- [x] 6.1 Inventario: insumos, movimientos, recetas versionadas, consumo automático al terminar la orden y
+  costo de insumos por orden — `specs/features/0009-inventario`, C-34, migración `9c0d1e2f3a4b`
+- [x] 6.2 Parámetros generales (una sola empresa) y anticipación mínima para reservar —
+  `specs/features/0010-parametros-generales`, C-35, migración `0d1e2f3a4b5c`
+- [x] 6.3 Clientes: gasto, frecuencia, última visita y segmento por dueño — `specs/features/0011-clientes-crm`,
+  C-36, sin migración
+- [x] 6.4 Recetas rehechas con la estructura de precios (pelaje × peso por servicio y adicional) y minutos de groomer
+- [x] 6.5 Costo del groomer (sueldo + cargos, bolsón de manejo y reposo) y mano de obra en el costeo —
+  `specs/features/0012-costo-groomer`, C-37, migración `1e2f3a4b5c6d`
+- [x] 6.6 Campañas: descuentos por segmento, cupón, mejor oferta y usos — `specs/features/0013-campanas`, C-38,
+  migración `2f3a4b5c6d7e`
+- [x] 6.7 Admin: Inventario (Insumos, Movimientos, Recetas y costeo) y costo en Groomers conectados a la API
+- [ ] 6.8 Admin: conectar Parámetros generales, Clientes y Campañas; app de clientes: cupón y total con descuento
+
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)
 - [ ] Refresh token, streaming (`pendientes.md`)
