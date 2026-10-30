@@ -154,8 +154,16 @@ class CompleteOrder:
                 },
             )
         updated = await self.repo.set_status(id=order_id, status=OrderStatus.done)
+        await _register_supplies_consumption(self.repo, updated)
         await _notify(self.repo, updated)
         return updated
+
+
+async def _register_supplies_consumption(repo: PostgresOrderRepository, order: Order) -> None:
+    """Descuenta los insumos del servicio según sus recetas (feature 0009). Best effort."""
+    from app.modules.inventory.app.order_hook import register_order_consumption
+
+    await register_order_consumption(repo._session, order)
 
 
 # ------------------------------------------------------------------
@@ -194,6 +202,11 @@ class CancelOrder:
             )
         updated = await self.repo.set_status(id=order_id, status=OrderStatus.cancelled)
         updated = await release_order_hold(self.holds_repo, updated, self.repo)
+
+        # El cupón vuelve a quedar disponible para el cliente (feature 0013)
+        from app.modules.campaigns.app.use_cases import release_order_campaign
+
+        await release_order_campaign(self.repo._session, updated)
         await _notify(self.repo, updated)
 
         # Aviso al groomer asignado (C-17). Import diferido: groomer_notifications importa este módulo.
