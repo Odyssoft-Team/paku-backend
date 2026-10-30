@@ -106,11 +106,15 @@ async def create(
     carrito (meta.hold_id del servicio base) vence junto con él, y al crear la orden se confirma.
     409 PENDING_BALANCE si el cliente tiene un saldo por diferencia de peso sin pagar.
     """
+    from app.modules.general_settings.app.use_cases import booking_min_days_ahead
     from app.modules.orders.app.use_cases_impl.weight_balance import assert_no_pending_balance
     from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 
     await assert_no_pending_balance(PostgresOrderRepository(session=session, engine=engine), user_id=current.id)
-    hold = await CreateHold(hold_repo=hold_repo, availability_repo=availability_repo, pets_repo=pets_repo).execute(
+    hold = await CreateHold(
+        hold_repo=hold_repo, availability_repo=availability_repo, pets_repo=pets_repo,
+        min_days_ahead=await booking_min_days_ahead(session),
+    ).execute(
         user_id=current.id,
         pet_id=payload.pet_id,
         service_id=payload.service_id,
@@ -161,12 +165,17 @@ async def availability(
     _: CurrentUser = Depends(get_current_user),
     repo: PostgresAvailabilityRepository = Depends(get_availability_repo),
     store_repo: PostgresStoreRepository = Depends(get_store_repo),
+    session: AsyncSession = Depends(get_async_session),
 ) -> list[AvailabilityOut]:
+    """Días con cupo. Omite los que no cumplen la anticipación mínima (parámetros generales)."""
+    from app.modules.general_settings.app.use_cases import booking_min_days_ahead
+
     slots = await ListAvailability(repo=repo).execute(
         service_id=service_id,
         date_from=date_from,
         days=days,
         active_only=True,
+        min_days_ahead=await booking_min_days_ahead(session),
     )
     return await _to_availability_out(slots, store_repo)
 

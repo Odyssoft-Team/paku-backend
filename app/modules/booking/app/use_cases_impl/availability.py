@@ -240,15 +240,21 @@ class ListAvailability:
         date_from: Optional[date_type] = None,
         days: int = 7,
         active_only: bool = True,
+        min_days_ahead: int = 0,
     ) -> List[AvailabilitySlot]:
         # "Hoy" en hora de Lima: el servidor corre en UTC y desde las 7 pm ya sería el día siguiente.
         start = date_from or today_lima()
-        return await self.repo.list_slots(
+        slots = await self.repo.list_slots(
             service_id=service_id,
             date_from=start,
             days=days,
             active_only=active_only,
         )
+        # Anticipación mínima (parámetros generales, 0010): el cliente no ve los días que ya no puede reservar
+        if min_days_ahead > 0:
+            earliest = today_lima() + timedelta(days=min_days_ahead)
+            slots = [s for s in slots if s.date >= earliest]
+        return slots
 
 
 @dataclass
@@ -260,12 +266,21 @@ class CreateHold:
     hold_repo: PostgresHoldRepository
     availability_repo: PostgresAvailabilityRepository
     pets_repo: Optional[object] = None
+    min_days_ahead: int = 0   # parámetros generales (0010); 0 = se puede reservar para hoy
 
     async def execute(
         self, *, user_id: UUID, pet_id: UUID, service_id: UUID, date: date_type
     ) -> Hold:
         if date < today_lima():
             raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "DATE_IN_PAST", "No se puede reservar una fecha pasada.")
+        earliest = today_lima() + timedelta(days=self.min_days_ahead)
+        if date < earliest:
+            raise _error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "DATE_TOO_SOON",
+                f"Se reserva con al menos {self.min_days_ahead} día(s) de anticipación.",
+                earliest_date=earliest.isoformat(),
+            )
 
         if self.pets_repo is not None:
             pet = await self.pets_repo.get_by_id(pet_id)
