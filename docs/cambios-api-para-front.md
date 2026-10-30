@@ -624,3 +624,16 @@ dispara no se le notifica.
 - **Compatible** (campos nuevos opcionales), pero los fronts que suman los ítems para mostrar el total deben usar
   `total_snapshot` (o mostrar `discount_amount`). **Migración:** `2f3a4b5c6d7e`. **Apps:** admin (CRM · Campañas,
   Órdenes), app de clientes (cupón y total).
+
+## C-39 · Dashboard gerencial (feature 0014, 2026-10-29)
+
+- **Nuevo (admin):** `GET /admin/dashboard?date=YYYY-MM-DD` (corte; hoy en Lima por defecto). Devuelve `period`
+  (del 1 al corte), `previous_period` (mismo corte del mes anterior), `metrics`, `scheduled_rest_of_month` y
+  `next_days` (7 días desde el corte: `capacity`, `booked`, `occupancy_pct`, `scheduled`).
+- Cada métrica: `key`, `label`, `unit` (`count|money|pct|minutes`), `description` (cómo se calcula), `value`,
+  `previous`, `delta`, `delta_pct`, `quality` y `previous_quality` (`real|estimated|no_data`; con `no_data` el
+  valor es null, nunca 0) y, en las parciales, `with_data` de `total` órdenes.
+- Métricas: servicios realizados, ingresos, ticket promedio, por cobrar, cancelaciones, ocupación, clientes nuevos y
+  con recompra, contribución estimada y su margen, traslado, atención, llegada vs. hora programada y avisos de
+  retraso. Reglas en `specs/features/0014-dashboard-gerencial/spec.md`.
+- **Compatible.** **Sin migración.** **Apps:** admin (Resumen gerencial).

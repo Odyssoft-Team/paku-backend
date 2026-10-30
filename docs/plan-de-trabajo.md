@@ -100,6 +100,8 @@ Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada sp
   migración `2f3a4b5c6d7e`
 - [x] 6.7 Admin: Inventario (Insumos, Movimientos, Recetas y costeo) y costo en Groomers conectados a la API
 - [ ] 6.8 Admin: conectar Parámetros generales, Clientes y Campañas; app de clientes: cupón y total con descuento
+- [x] 6.9 Dashboard gerencial v1 (solo lectura): mes al día vs. mismo corte del mes anterior, calidad real/estimado/sin
+  datos — `specs/features/0014-dashboard-gerencial`, C-39, sin migración
 
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)
