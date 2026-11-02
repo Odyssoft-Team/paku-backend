@@ -17,6 +17,7 @@ from app.modules.crm.api.schemas import (
     CustomerStatsOut,
     CustomerSummaryOut,
     CustomerVisitOut,
+    MonthAttendanceOut,
     SegmentOut,
 )
 from app.modules.crm.app.use_cases import Customer, GetCustomer, GetCustomerStats, ListCustomers
@@ -71,7 +72,7 @@ async def customer_stats(
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresCustomerReadRepository = Depends(get_repo),
 ) -> CustomerStatsOut:
-    """Totales de clientes (sin filtros) y cuántos hay en cada segmento, con su regla."""
+    """Totales de clientes (sin filtros), cuántos hay en cada segmento (con su regla) y los atendidos por mes."""
     s = await GetCustomerStats(repo=repo).execute()
     return CustomerStatsOut(
         customers=s.customers, pets=s.pets, active=s.active, active_pct=_pct(s.active, s.customers),
@@ -79,6 +80,7 @@ async def customer_stats(
         total_spend=s.total_spend, avg_spend=s.avg_spend,
         segments=[SegmentOut(code=code, label=label, rule=rule, count=s.by_segment[code])
                   for code, (label, rule) in SEGMENTS.items()],
+        by_month=[MonthAttendanceOut(**m.__dict__) for m in s.by_month],
     )
 
 

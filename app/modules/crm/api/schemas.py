@@ -40,6 +40,13 @@ class SegmentOut(BaseModel):
     count: int
 
 
+class MonthAttendanceOut(BaseModel):
+    month: str = Field(description="YYYY-MM")
+    attended: int = Field(description="Clientes con al menos un servicio terminado ese mes")
+    new: int = Field(description="Su primer servicio cae en ese mes")
+    returning: int = Field(description="Atendidos cuyo primer servicio fue antes")
+
+
 class CustomerStatsOut(BaseModel):
     customers: int
     pets: int
@@ -50,6 +57,7 @@ class CustomerStatsOut(BaseModel):
     total_spend: float
     avg_spend: Optional[float] = None
     segments: list[SegmentOut]
+    by_month: list[MonthAttendanceOut] = Field(description="El mes en curso (al día) y los 5 anteriores, del más antiguo al actual")
 
 
 class CustomerPetOut(BaseModel):

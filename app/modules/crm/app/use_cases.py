@@ -10,7 +10,15 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.core.timezone import LIMA_TZ, today_lima
-from app.modules.crm.domain.customers import ACTIVE_DAYS, SEGMENTS, CustomerMetrics, compute_metrics, visit_from_order
+from app.modules.crm.domain.customers import (
+    ACTIVE_DAYS,
+    SEGMENTS,
+    CustomerMetrics,
+    MonthAttendance,
+    compute_metrics,
+    monthly_attendance,
+    visit_from_order,
+)
 from app.modules.geo.infra.districts_data import get_district_by_id
 
 SORTS = ("spend", "last_visit", "services")
@@ -140,14 +148,16 @@ class CustomerStats:
     total_spend: float
     avg_spend: Optional[float]
     by_segment: dict[str, int]
+    by_month: list[MonthAttendance]   # clientes atendidos por mes: nuevos y que vuelven
 
 
 @dataclass
 class GetCustomerStats:
     repo: Any
 
-    async def execute(self) -> CustomerStats:
-        rows = await BuildCustomers(repo=self.repo).execute()
+    async def execute(self, *, today: Optional[date] = None) -> CustomerStats:
+        today = today or today_lima()
+        rows = await BuildCustomers(repo=self.repo).execute(today=today)
         total = round(sum(c.metrics.spend for c in rows), 2)
         return CustomerStats(
             customers=len(rows),
@@ -157,6 +167,7 @@ class GetCustomerStats:
             total_spend=total,
             avg_spend=round(total / len(rows), 2) if rows else None,
             by_segment={code: sum(1 for c in rows if c.metrics.segment == code) for code in SEGMENTS},
+            by_month=monthly_attendance([c.metrics for c in rows], today=today),
         )
 
 

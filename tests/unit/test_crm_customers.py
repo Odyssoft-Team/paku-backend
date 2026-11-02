@@ -160,6 +160,12 @@ def test_filters_sort_and_stats():
         assert (stats.customers, stats.pets, stats.with_repurchase) == (2, 2, 1)
         assert stats.total_spend == 404.0 and stats.avg_spend == 202.0
         assert sum(stats.by_segment.values()) == 2
+        stats = await GetCustomerStats(repo=ctx.repo).execute(today=TODAY)
+        # Ana: 21/08, 20/09 y 18/10; Luis: 31/08 → agosto 2 nuevos; septiembre y octubre, Ana vuelve
+        assert [(m.month, m.attended, m.new, m.returning) for m in stats.by_month] == [
+            ("2026-05", 0, 0, 0), ("2026-06", 0, 0, 0), ("2026-07", 0, 0, 0),
+            ("2026-08", 2, 2, 0), ("2026-09", 1, 0, 1), ("2026-10", 1, 0, 1),
+        ]
         await _close(ctx)
     _run(scenario())
 

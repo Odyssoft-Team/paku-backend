@@ -106,6 +106,7 @@ Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada sp
   `specs/features/0015-capturas-inventario`, C-40, migración `3a4b5c6d7e8f`
 - [x] 6.11 Reporte de ventas con filtros, resúmenes y exportar — `specs/features/0016-reporte-ventas`, C-41, sin migración
 - [x] 6.12 Resultados de las campañas (clientes nuevos, cobrado, costo y margen) — `specs/features/0017-resultados-campanas`, C-42, sin migración
+- [x] 6.13 Fidelización con datos reales (atendidos por mes en `/admin/customers/stats`) — C-43, sin migración
 
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)

@@ -667,3 +667,11 @@ dispara no se le notifica.
   últimos null si ninguna realizada se pudo costear). Campañas sin ventas en cero. Reglas en
   `specs/features/0017-resultados-campanas/spec.md`.
 - **Compatible.** **Sin migración.** **Apps:** admin (CRM · Campañas, Reporte de ventas con `?campaign_id=`).
+
+## C-43 · Clientes atendidos por mes (feature 0011, 2026-11-02)
+
+- **`GET /admin/customers/stats`** agrega `by_month`: el mes en curso (al día, hora de Lima) y los 5 anteriores, del
+  más antiguo al actual, con `month` (`YYYY-MM`), `attended` (clientes con al menos un servicio terminado ese mes),
+  `new` (su primer servicio cae en ese mes) y `returning` (atendidos cuyo primer servicio fue antes). Mismas
+  definiciones que el dashboard.
+- **Compatible** (campo nuevo). **Sin migración.** **Apps:** admin (CRM · Fidelización, ahora real).

@@ -101,3 +101,32 @@ def visit_from_order(order, adjustments: list, day: date) -> Visit:
     )
     return Visit(order_id=order.id, day=day, pet_id=pet_id, service_name=base.get("name") or "Servicio",
                  addon_names=addons, amount=round(amount, 2), paid=paid)
+
+
+# ─── Clientes atendidos por mes (Fidelización) ────────────────────────────────
+
+STATS_MONTHS = 6   # el mes en curso (al día) y los 5 anteriores
+
+
+@dataclass(frozen=True)
+class MonthAttendance:
+    month: str          # YYYY-MM
+    attended: int       # clientes con al menos un servicio terminado ese mes
+    new: int            # su primer servicio cae en ese mes
+    returning: int      # atendidos cuyo primer servicio fue antes
+
+
+def monthly_attendance(metrics: list[CustomerMetrics], *, today: date,
+                       months: int = STATS_MONTHS) -> list[MonthAttendance]:
+    """Del más antiguo al mes de `today`. Mismas definiciones que el dashboard (clientes nuevos y con recompra)."""
+    keys = []
+    year, month = today.year, today.month
+    for _ in range(months):
+        keys.append(f"{year:04d}-{month:02d}")
+        year, month = (year, month - 1) if month > 1 else (year - 1, 12)
+    out = []
+    for key in reversed(keys):
+        attended = [m for m in metrics if any(v.day.isoformat()[:7] == key for v in m.visits)]
+        new = sum(1 for m in attended if m.first_visit and m.first_visit.isoformat()[:7] == key)
+        out.append(MonthAttendance(month=key, attended=len(attended), new=new, returning=len(attended) - new))
+    return out
