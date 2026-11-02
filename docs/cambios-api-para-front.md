@@ -658,3 +658,12 @@ dispara no se le notifica.
   `total` neto, `extra_paid`, `collected`, pago, estado, groomer, distrito y campaña), `totals`, `by_service`,
   `by_payment_method`, `by_order_status` y `options` para los filtros. 422 `DATE_BASIS_INVALID` / `DATE_RANGE_INVALID`.
 - **Compatible.** **Sin migración.** **Apps:** admin (Reporte de ventas).
+
+## C-42 · Resultados de las campañas (feature 0017, 2026-11-01)
+
+- **Nuevo (admin):** `GET /admin/campaigns/results` → `{items: [{campaign_id, code, name, state, starts_on, ends_on,
+  result}], total}`. `result`: `sold` (pagadas y no canceladas), `done`, `customers`, `new_customers`, `subtotal`,
+  `discount`, `discount_pct`, `net`, `extra_paid`, `collected`, `costed`, `cost`, `margin`, `margin_pct` (los tres
+  últimos null si ninguna realizada se pudo costear). Campañas sin ventas en cero. Reglas en
+  `specs/features/0017-resultados-campanas/spec.md`.
+- **Compatible.** **Sin migración.** **Apps:** admin (CRM · Campañas, Reporte de ventas con `?campaign_id=`).

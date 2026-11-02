@@ -14,11 +14,22 @@ from app.modules.campaigns.api.schemas import (
     CampaignOut,
     CampaignQuoteIn,
     CampaignQuoteOut,
+    CampaignResultOut,
+    CampaignResultsOut,
+    CampaignResultsRowOut,
     CampaignUpdateIn,
     CodeLabelOut,
 )
-from app.modules.campaigns.app.use_cases import CampaignRow, ListCampaigns, SaveCampaign, campaign_engine
-from app.modules.campaigns.domain.campaigns import AUDIENCES, BENEFITS, CHANNELS, DISPLAY_STATES, Campaign
+from app.core.timezone import today_lima
+from app.modules.campaigns.app.use_cases import (
+    BuildCampaignResults,
+    CampaignRow,
+    ListCampaigns,
+    SaveCampaign,
+    campaign_engine,
+)
+from app.modules.campaigns.domain.campaigns import AUDIENCES, BENEFITS, CHANNELS, DISPLAY_STATES, Campaign, display_state
+from app.modules.campaigns.domain.results import summarize
 from app.modules.campaigns.infra.postgres_campaign_repository import PostgresCampaignRepository
 from app.modules.crm.infra.postgres_customer_read_repository import PostgresCustomerReadRepository
 
@@ -75,6 +86,33 @@ async def list_campaigns(
 ) -> list[CampaignOut]:
     """Campañas con su estado, usos, resultados (órdenes pagadas) y tamaño del público hoy."""
     return [_out(r) for r in await ListCampaigns(repo=repo, crm_repo=crm_repo).execute()]
+
+
+@admin_router.get("/results", response_model=CampaignResultsOut)
+async def campaign_results(
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresCampaignRepository = Depends(get_repo),
+    session: AsyncSession = Depends(get_async_session),
+) -> CampaignResultsOut:
+    """
+    Resultados de cada campaña (todas las fechas): vendidas (pagadas y no canceladas) y realizadas, clientes y
+    nuevos, descuento, neto, cobrado y, de las realizadas, costo estimado y margen. Las campañas sin ventas
+    aparecen en cero. Reglas en `specs/features/0017-resultados-campanas/spec.md`.
+    """
+    from app.modules.dashboard.app.use_cases import order_cost_estimator
+
+    results, total = await BuildCampaignResults(repo=repo, cost_of=order_cost_estimator(session)).execute()
+    campaigns = await repo.list_campaigns()
+    uses = await repo.uses([c.id for c in campaigns])
+    today, empty = today_lima(), summarize([], {})
+    return CampaignResultsOut(
+        items=[CampaignResultsRowOut(
+            campaign_id=c.id, code=c.code, name=c.name, starts_on=c.starts_on, ends_on=c.ends_on,
+            state=display_state(c, today=today, total_uses=uses.get(c.id, 0)),
+            result=CampaignResultOut(**results.get(c.id, empty).__dict__),
+        ) for c in campaigns],
+        total=CampaignResultOut(**total.__dict__),
+    )
 
 
 async def _row(campaign: Campaign, repo, crm_repo) -> CampaignOut:

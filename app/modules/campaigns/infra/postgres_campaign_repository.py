@@ -152,3 +152,39 @@ class PostgresCampaignRepository:
             PetModel.deleted_at.is_(None), PetModel.birth_date.is_not(None), extract("month", PetModel.birth_date) == month,
         )
         return int((await self._session.execute(stmt)).scalar() or 0)
+
+    # ------------------------------------------------------------------
+    # Resultados (feature 0017)
+    # ------------------------------------------------------------------
+
+    async def sold_orders(self) -> list:
+        """Órdenes de servicio con campaña, pagadas y no canceladas."""
+        from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
+
+        stmt = select(OrderModel).where(
+            OrderModel.parent_order_id.is_(None), OrderModel.campaign_id.is_not(None),
+            OrderModel.payment_status == "paid", OrderModel.status != "cancelled",
+        ).order_by(OrderModel.created_at)
+        return [PostgresOrderRepository._row_to_order(r) for r in (await self._session.execute(stmt)).scalars().all()]
+
+    async def paid_extras(self, parent_ids: list[UUID]) -> dict[UUID, float]:
+        """Suma de los cargos extra pagados (órdenes de ajuste) de cada orden."""
+        if not parent_ids:
+            return {}
+        stmt = select(OrderModel.parent_order_id, OrderModel.total_snapshot).where(
+            OrderModel.parent_order_id.in_(parent_ids), OrderModel.payment_status == "paid",
+        )
+        out: dict[UUID, float] = {}
+        for parent, total in (await self._session.execute(stmt)).all():
+            out[parent] = out.get(parent, 0.0) + float(total)
+        return out
+
+    async def done_services(self, user_ids: list[UUID]) -> list[tuple[UUID, UUID, Optional[UUID], datetime]]:
+        """Servicios terminados de esos clientes: (orden, cliente, campaña, cuándo: terminó, programada o creación)."""
+        if not user_ids:
+            return []
+        stmt = select(
+            OrderModel.id, OrderModel.user_id, OrderModel.campaign_id,
+            func.coalesce(OrderModel.completed_at, OrderModel.scheduled_at, OrderModel.created_at),
+        ).where(OrderModel.parent_order_id.is_(None), OrderModel.status == "done", OrderModel.user_id.in_(user_ids))
+        return [tuple(r) for r in (await self._session.execute(stmt)).all()]

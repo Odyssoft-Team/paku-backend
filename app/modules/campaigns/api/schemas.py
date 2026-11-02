@@ -95,3 +95,36 @@ class CampaignQuoteOut(BaseModel):
     campaign_name: Optional[str] = None
     benefit_label: Optional[str] = None
     automatic: Optional[bool] = None
+
+
+class CampaignResultOut(BaseModel):
+    """Resultados (feature 0017). Vendidas = pagadas y no canceladas; costo y margen, solo de las realizadas."""
+    sold: int = Field(description="Órdenes pagadas y no canceladas con la campaña")
+    done: int = Field(description="De ellas, las terminadas")
+    customers: int
+    new_customers: int = Field(description="Sin servicios terminados (fuera de la campaña) antes de su primera compra con ella")
+    subtotal: float
+    discount: float
+    discount_pct: Optional[float] = Field(default=None, description="Descuento ÷ subtotal × 100")
+    net: float = Field(description="Neto de las órdenes (total_snapshot)")
+    extra_paid: float = Field(description="Cargos extra pagados")
+    collected: float = Field(description="Neto + cargos extra pagados")
+    costed: int = Field(description="Realizadas con costo estimado (insumos + mano de obra)")
+    cost: Optional[float] = Field(default=None, description="null si ninguna realizada se pudo costear")
+    margin: Optional[float] = Field(default=None, description="Cobrado de las costeadas − su costo")
+    margin_pct: Optional[float] = None
+
+
+class CampaignResultsRowOut(BaseModel):
+    campaign_id: UUID
+    code: str
+    name: str
+    state: str
+    starts_on: date
+    ends_on: Optional[date] = None
+    result: CampaignResultOut
+
+
+class CampaignResultsOut(BaseModel):
+    items: list[CampaignResultsRowOut]
+    total: CampaignResultOut = Field(description="Todas las campañas juntas")

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
@@ -25,6 +25,7 @@ from app.modules.campaigns.domain.campaigns import (
     subtotal,
     validate_fields,
 )
+from app.modules.campaigns.domain.results import CampaignResult, CampaignSale, summarize
 
 logger = logging.getLogger(__name__)
 
@@ -249,3 +250,50 @@ async def release_order_campaign(session, order) -> None:
             await session.rollback()
         except Exception:
             pass
+
+
+# ─── Resultados (feature 0017) ───────────────────────────────────────────────
+
+def _utc(when):
+    return when if when is None or when.tzinfo else when.replace(tzinfo=timezone.utc)  # la BD guarda en UTC
+
+
+@dataclass
+class BuildCampaignResults:
+    """Resultados por campaña y del total de las campañas. `cost_of`: costo estimado de una orden o None."""
+    repo: Any
+    cost_of: Any
+
+    async def execute(self) -> tuple[dict[UUID, CampaignResult], CampaignResult]:
+        orders = await self.repo.sold_orders()
+        extras = await self.repo.paid_extras([o.id for o in orders])
+        done = await self.repo.done_services(list({o.user_id for o in orders}))
+
+        sales: list[CampaignSale] = []
+        for o in orders:
+            is_done = o.status.value == "done"
+            items = [l for l in o.items_snapshot or [] if isinstance(l, dict)]
+            sales.append(CampaignSale(
+                order_id=o.id, campaign_id=o.campaign_id, user_id=o.user_id, bought_at=_utc(o.created_at),
+                done=is_done, subtotal=sum(float(l.get("unit_price") or 0) * float(l.get("qty") or 1) for l in items),
+                discount=float(o.discount_amount or 0), net=float(o.total_snapshot),
+                extra_paid=extras.get(o.id, 0.0), cost=await self.cost_of(o) if is_done else None,
+            ))
+
+        def prior(skip) -> dict[UUID, datetime]:
+            """Primer servicio terminado de cada cliente, sin las órdenes cuya campaña cumple `skip`."""
+            out: dict[UUID, datetime] = {}
+            for _, user_id, campaign_id, at in done:
+                if skip(campaign_id):
+                    continue
+                at = _utc(at)
+                if user_id not in out or at < out[user_id]:
+                    out[user_id] = at
+            return out
+
+        by_campaign: dict[UUID, list[CampaignSale]] = {}
+        for s in sales:
+            by_campaign.setdefault(s.campaign_id, []).append(s)
+        results = {cid: summarize(items, prior(lambda c, cid=cid: c == cid)) for cid, items in by_campaign.items()}
+        # Total: nuevo = sin servicios terminados fuera de campañas antes de su primera compra con alguna
+        return results, summarize(sales, prior(lambda c: c is not None))
