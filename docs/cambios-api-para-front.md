@@ -675,3 +675,18 @@ dispara no se le notifica.
   `new` (su primer servicio cae en ese mes) y `returning` (atendidos cuyo primer servicio fue antes). Mismas
   definiciones que el dashboard.
 - **Compatible** (campo nuevo). **Sin migración.** **Apps:** admin (CRM · Fidelización, ahora real).
+
+## C-44 · Integración de correo: configuración de Resend (feature 0018 fase 1, 2026-11-02)
+
+- **Nuevos (admin):** `GET /admin/integrations/email` → `{provider, providers, enabled, configured, api_key_mask
+  (p. ej. "re_12…9aXz", nunca la key completa), from_email, from_name, reply_to, status (not_configured | disabled |
+  active | error), last_test_at, last_test_ok, last_test_error, encryption_ready, updated_at, updated_by}`.
+- `PUT /admin/integrations/email` con `{provider, enabled, api_key?, from_email, from_name, reply_to}`: `api_key` vacía
+  o ausente conserva la guardada. 422 `EMAIL_CONFIG_INVALID` con `field` (no guarda nada); 503
+  `ENCRYPTION_UNAVAILABLE` si el servidor no tiene la llave.
+- `POST /admin/integrations/email/test` con `{to?}` (por defecto el correo del admin) → `{ok, to,
+  provider_message_id, error}`; si Resend rechaza responde 200 con `ok: false`. 409 `EMAIL_NOT_CONFIGURED`.
+- **Servidor:** nueva variable `CREDENTIALS_ENCRYPTION_KEY` (llave Fernet; generar con
+  `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`). Guardarla: si se
+  pierde, hay que volver a ingresar la API key. Nueva dependencia `cryptography` en `requirements.txt`.
+- **Compatible.** **Migración:** `4b5c6d7e8f9a` (`channel_providers`). **Apps:** admin (Configuración · Integraciones).

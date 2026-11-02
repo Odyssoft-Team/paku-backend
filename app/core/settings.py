@@ -58,6 +58,11 @@ class Settings:
     # "mock" en el resto (comportamiento anterior).
     PUSH_PROVIDER: str = (os.getenv("PUSH_PROVIDER") or ("expo" if ENV == "production" else "mock")).strip().lower()
 
+    # Llave Fernet para cifrar credenciales de integraciones (API key de Resend, etc.; feature 0018). Varias separadas
+    # por coma para rotar: la primera cifra. Generar con:
+    # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    CREDENTIALS_ENCRYPTION_KEY: Optional[str] = os.getenv("CREDENTIALS_ENCRYPTION_KEY")
+
     # Tracking — Google Routes API
     # Dejar vacío para deshabilitar el endpoint GET /tracking/orders/{id}/route.
     # Obtener en: https://console.cloud.google.com/apis/credentials

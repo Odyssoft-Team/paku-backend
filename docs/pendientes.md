@@ -21,6 +21,10 @@ del dueño; "Para después" ya está entendido y se programa más adelante.
 ## Configuración del servidor (no es código)
 
 - **`PUSH_PROVIDER=expo`** en el `.env` del servidor de pruebas para que los push salgan de verdad (C-18).
+- **`CREDENTIALS_ENCRYPTION_KEY`** (C-44): llave Fernet para cifrar la API key de Resend. Generarla una vez y
+  guardarla aparte (si se pierde, hay que volver a ingresar la API key). Sin ella el admin no puede guardar la key.
+- **Resend:** verificar el dominio paku.com.pe (registros SPF y DKIM en el DNS) antes de enviar desde
+  `hola@paku.com.pe`; sin verificar, Resend rechaza el envío y la prueba del admin muestra el motivo.
 - **Migración `4d5e6f7a8b9c`** (C-21, `orders.reserved_date` + relleno): corre sola al arrancar el contenedor.
 - **Verificar en el contenedor** que la versión instalada de `exponent_server_sdk` acepte `channel_id`
   (no está instalado localmente). Si no lo acepta, el push se envía igual sin esos campos y queda un

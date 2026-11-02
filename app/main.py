@@ -50,6 +50,7 @@ from app.modules.groomer_costs.api.router import admin_router as groomer_costs_a
 from app.modules.campaigns.api.router import router as campaigns_router, admin_router as campaigns_admin_router
 from app.modules.dashboard.api.router import admin_router as dashboard_admin_router
 from app.modules.reports.api.router import admin_router as reports_admin_router
+from app.modules.messaging.api.router import admin_router as messaging_admin_router
 
 
 def _init_firebase() -> None:
@@ -150,6 +151,7 @@ app.include_router(groomer_costs_admin_router, prefix="/admin")
 app.include_router(campaigns_admin_router, prefix="/admin")
 app.include_router(dashboard_admin_router, prefix="/admin")
 app.include_router(reports_admin_router, prefix="/admin")
+app.include_router(messaging_admin_router, prefix="/admin")
 app.include_router(campaigns_router)
 app.include_router(media_router)
 
