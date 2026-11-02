@@ -648,3 +648,13 @@ dispara no se le notifica.
   `none`. Una por corte; si el servidor estuvo apagado, se recupera hasta 3 días después.
 - **`/admin/settings`:** nuevo tipo de campo `choice` con `options` `[{value, label}]` y sección `inventory`.
 - **Compatible.** **Migración:** `3a4b5c6d7e8f`. **Apps:** admin (Inventario · Capturas, Parámetros).
+
+## C-41 · Reporte de ventas (feature 0016, 2026-11-01)
+
+- **Nuevo (admin):** `GET /admin/reports/sales` con `date_from`, `date_to`, `date_basis` (`purchase` = fecha de
+  compra, por defecto | `service` = fecha del servicio), `order_status`, `payment_status`, `payment_method`,
+  `service_id`, `groomer_id`, `district_id`, `campaign_id` y `q` (cliente, mascota o n.º de orden).
+- Devuelve `rows` (una por orden de servicio: cliente, mascota, servicio y adicionales, `subtotal`, `discount`,
+  `total` neto, `extra_paid`, `collected`, pago, estado, groomer, distrito y campaña), `totals`, `by_service`,
+  `by_payment_method`, `by_order_status` y `options` para los filtros. 422 `DATE_BASIS_INVALID` / `DATE_RANGE_INVALID`.
+- **Compatible.** **Sin migración.** **Apps:** admin (Reporte de ventas).

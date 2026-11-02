@@ -104,6 +104,7 @@ Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada sp
   datos — `specs/features/0014-dashboard-gerencial`, C-39, sin migración
 - [x] 6.10 Capturas del inventario (domingo, 15 y fin de mes, o fin de mes) con pestaña de consulta y exportar —
   `specs/features/0015-capturas-inventario`, C-40, migración `3a4b5c6d7e8f`
+- [x] 6.11 Reporte de ventas con filtros, resúmenes y exportar — `specs/features/0016-reporte-ventas`, C-41, sin migración
 
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)
