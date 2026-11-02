@@ -25,6 +25,11 @@ from app.modules.inventory.api.schemas import (
     RecipeOut,
     RecipeSaveIn,
     RecipeSummaryOut,
+    SnapshotDetailOut,
+    SnapshotLineOut,
+    SnapshotListOut,
+    SnapshotOut,
+    SnapshotScheduleOut,
     SupplyCreateIn,
     SupplyOut,
     SupplyUpdateIn,
@@ -52,7 +57,10 @@ from app.modules.inventory.domain.inventory import (
     Recipe,
     Supply,
 )
+from app.modules.inventory.app.snapshots import GetSnapshot, TakeSnapshot, snapshot_frequency
+from app.modules.inventory.domain.snapshots import FREQUENCIES, KINDS, Snapshot, next_cut
 from app.modules.inventory.infra.postgres_inventory_repository import PostgresInventoryRepository
+from app.modules.inventory.infra.postgres_snapshot_repository import PostgresSnapshotRepository
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.pets.infra.postgres_pet_repository import PostgresPetRepository
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
@@ -201,6 +209,72 @@ async def inventory_summary(
     """Valor del inventario y bajo mínimo (al día) y costo de los consumos por servicio del período."""
     summary = await GetInventorySummary(repo=repo).execute(date_from=date_from, date_to=date_to)
     return InventorySummaryOut(**summary.__dict__)
+
+
+# ------------------------------------------------------------------
+# Capturas del inventario (feature 0015)
+# ------------------------------------------------------------------
+
+def get_snapshots_repo(session: AsyncSession = Depends(get_async_session)) -> PostgresSnapshotRepository:
+    return PostgresSnapshotRepository(session=session)
+
+
+def _snapshot_fields(s: Snapshot) -> dict:
+    return dict(
+        id=s.id, cut_date=s.cut_date, kind=s.kind, kind_label=KINDS.get(s.kind, s.kind), frequency=s.frequency,
+        taken_at=s.taken_at, created_by=s.created_by, supplies_count=s.supplies_count, total_value=s.total_value,
+        low_count=s.low_count, out_count=s.out_count,
+    )
+
+
+def _snapshot_detail(s: Snapshot) -> SnapshotDetailOut:
+    return SnapshotDetailOut(**_snapshot_fields(s), lines=[SnapshotLineOut(**x.__dict__) for x in s.lines])
+
+
+@admin_router.get("/snapshots", response_model=SnapshotListOut)
+async def list_snapshots(
+    date_from: Optional[date] = Query(None, description="Corte desde"),
+    date_to: Optional[date] = Query(None, description="Corte hasta"),
+    _: CurrentUser = Depends(require_roles("admin")),
+    snapshots: PostgresSnapshotRepository = Depends(get_snapshots_repo),
+    session: AsyncSession = Depends(get_async_session),
+) -> SnapshotListOut:
+    """Capturas guardadas (la más reciente primero) y la frecuencia automática vigente con su próximo corte."""
+    from app.core.timezone import today_lima
+    from app.modules.general_settings.infra.postgres_settings_repository import PostgresSettingsRepository
+
+    frequency = await snapshot_frequency(PostgresSettingsRepository(session=session))
+    items = await snapshots.list(date_from=date_from, date_to=date_to)
+    return SnapshotListOut(
+        schedule=SnapshotScheduleOut(frequency=frequency, frequency_label=FREQUENCIES.get(frequency, frequency),
+                                     next_cut=next_cut(today_lima(), frequency)),
+        items=[SnapshotOut(**_snapshot_fields(s)) for s in items],
+    )
+
+
+@admin_router.get("/snapshots/{snapshot_id}", response_model=SnapshotDetailOut)
+async def get_snapshot(
+    snapshot_id: UUID,
+    _: CurrentUser = Depends(require_roles("admin")),
+    snapshots: PostgresSnapshotRepository = Depends(get_snapshots_repo),
+) -> SnapshotDetailOut:
+    """Una captura con el stock de cada insumo al corte (404 `SNAPSHOT_NOT_FOUND`)."""
+    return _snapshot_detail(await GetSnapshot(snapshots=snapshots).execute(snapshot_id))
+
+
+@admin_router.post("/snapshots", response_model=SnapshotDetailOut, status_code=status.HTTP_201_CREATED)
+async def take_snapshot(
+    current: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresInventoryRepository = Depends(get_repo),
+    snapshots: PostgresSnapshotRepository = Depends(get_snapshots_repo),
+) -> SnapshotDetailOut:
+    """Captura manual con corte hoy (movimientos hasta hoy). No reemplaza a la automática."""
+    from app.core.timezone import today_lima
+
+    snap = await TakeSnapshot(repo=repo, snapshots=snapshots).execute(
+        cut_date=today_lima(), kind="manual", actor_id=current.id,
+    )
+    return _snapshot_detail(snap)
 
 
 # ------------------------------------------------------------------

@@ -106,3 +106,43 @@ class RecipeLineModel(Base):
     )
     supply_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("inventory_supplies.id"), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+
+
+class SnapshotModel(Base):
+    """Captura del inventario en una fecha de corte (feature 0015). No se edita ni se borra."""
+    __tablename__ = "inventory_snapshots"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    cut_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)                   # scheduled | manual
+    frequency: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # Una sola captura automática por corte (= cut_date en ISO); null en las manuales
+    schedule_key: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, unique=True)
+    supplies_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    low_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    out_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)  # null = sistema
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class SnapshotLineModel(Base):
+    """Un insumo dentro de una captura, con copia de sus datos al momento del corte."""
+    __tablename__ = "inventory_snapshot_lines"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    snapshot_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("inventory_snapshots.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    supply_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    sku: Mapped[str] = mapped_column(String(30), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(30), nullable=False)
+    consumption_unit: Mapped[str] = mapped_column(String(20), nullable=False)
+    purchase_unit: Mapped[str] = mapped_column(String(50), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    stock: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    min_stock: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False)

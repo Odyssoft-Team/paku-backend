@@ -85,9 +85,11 @@ class PostgresInventoryRepository:
         await self._session.refresh(m)
         return self._to_supply(m)
 
-    async def stock_by_supply(self) -> dict[UUID, float]:
-        """Stock de cada insumo = suma de sus movimientos."""
+    async def stock_by_supply(self, *, until: Optional[date] = None) -> dict[UUID, float]:
+        """Stock de cada insumo = suma de sus movimientos (con `until`: los de fecha hasta ese día, incluido)."""
         stmt = select(MovementModel.supply_id, func.sum(MovementModel.quantity)).group_by(MovementModel.supply_id)
+        if until is not None:
+            stmt = stmt.where(MovementModel.occurred_on <= until)
         return {sid: _f(total) for sid, total in (await self._session.execute(stmt)).all()}
 
     # ------------------------------------------------------------------

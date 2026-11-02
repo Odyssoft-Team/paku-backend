@@ -236,3 +236,49 @@ class OrderCostOut(BaseModel):
     margin_estimated_pct: Optional[float] = None
     total_cost_real: Optional[float] = Field(default=None, description="Insumos + mano de obra con el tiempo real")
     margin_real: Optional[float] = None
+
+
+# ─── Capturas (feature 0015) ─────────────────────────────────────────────────
+
+class SnapshotScheduleOut(BaseModel):
+    frequency: str = Field(description="weekly | semimonthly | monthly | none (Parámetros generales)")
+    frequency_label: str
+    next_cut: Optional[date] = Field(default=None, description="Próximo corte; se captura al terminar ese día")
+
+
+class SnapshotOut(BaseModel):
+    id: UUID
+    cut_date: date
+    kind: str = Field(description="scheduled | manual")
+    kind_label: str
+    frequency: Optional[str] = None
+    taken_at: datetime
+    created_by: Optional[UUID] = Field(default=None, description="null = sistema")
+    supplies_count: int
+    total_value: float
+    low_count: int
+    out_count: int
+
+
+class SnapshotListOut(BaseModel):
+    schedule: SnapshotScheduleOut
+    items: list[SnapshotOut]
+
+
+class SnapshotLineOut(BaseModel):
+    supply_id: UUID
+    sku: str
+    name: str
+    category: str
+    consumption_unit: str
+    purchase_unit: str
+    is_active: bool
+    stock: float
+    min_stock: float
+    unit_cost: float
+    value: float
+    status: str = Field(description="ok | low | out")
+
+
+class SnapshotDetailOut(SnapshotOut):
+    lines: list[SnapshotLineOut]

@@ -7,16 +7,22 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class SettingOptionOut(BaseModel):
+    value: str
+    label: str
+
+
 class SettingFieldOut(BaseModel):
     key: str
     label: str
-    type: str = Field(description="text | ruc | email | phone | time | percent | int | readonly")
+    type: str = Field(description="text | ruc | email | phone | time | percent | int | choice | readonly")
     value: Any = None
     default: Any = None
     editable: bool
     help: Optional[str] = None
     min: Optional[float] = None
     max: Optional[float] = None
+    options: Optional[list[SettingOptionOut]] = Field(default=None, description="Solo en `choice`")
 
 
 class SettingSectionOut(BaseModel):

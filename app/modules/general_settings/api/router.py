@@ -12,6 +12,7 @@ from app.modules.general_settings.api.schemas import (
     GeneralSettingsOut,
     GeneralSettingsUpdateIn,
     SettingFieldOut,
+    SettingOptionOut,
     SettingSectionOut,
 )
 from app.modules.general_settings.app.use_cases import GetSettings, UpdateSettings
@@ -30,7 +31,9 @@ async def _settings_out(values: dict[str, Any], repo: PostgresSettingsRepository
     sections = [
         SettingSectionOut(code=code, title=title, fields=[
             SettingFieldOut(key=f.key, label=f.label, type=f.type, value=values.get(f.key), default=f.default,
-                            editable=f.editable, help=f.help, min=f.min, max=f.max)
+                            editable=f.editable, help=f.help, min=f.min, max=f.max,
+                            options=[SettingOptionOut(value=k, label=v) for k, v in f.options.items()]
+                            if f.options else None)
             for f in FIELDS if f.section == code
         ])
         for code, title in SECTIONS.items()

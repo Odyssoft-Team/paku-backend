@@ -153,6 +153,18 @@ def start_scheduler() -> None:
         max_instances=1,
         coalesce=True,
     )
+    # Captura del inventario al terminar cada día de corte (feature 0015); revisa también al arrancar
+    from app.modules.inventory.app.snapshots import run_scheduled_snapshot_job
+
+    scheduler.add_job(
+        run_scheduled_snapshot_job,
+        trigger=IntervalTrigger(minutes=30),
+        id="inventory_snapshot_job",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
     scheduler.start()
     logger.info("APScheduler started")
 

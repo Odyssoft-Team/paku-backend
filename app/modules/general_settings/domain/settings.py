@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.modules.cart.domain.cart import CART_TTL_HOURS
+from app.modules.inventory.domain.snapshots import DEFAULT_FREQUENCY, FREQUENCIES
 
 
 class SettingInvalid(ValueError):
@@ -25,18 +26,20 @@ class SettingField:
     key: str
     section: str
     label: str
-    type: str                    # text | ruc | email | phone | time | percent | int | readonly
+    type: str                    # text | ruc | email | phone | time | percent | int | choice | readonly
     default: Any = None
     editable: bool = True
     help: Optional[str] = None
     min: Optional[float] = None
     max: Optional[float] = None
+    options: Optional[dict[str, str]] = None   # choice: valor → etiqueta
 
 
 SECTIONS: dict[str, str] = {
     "company": "Empresa",
     "operation": "Operación",
     "booking": "Reservas",
+    "inventory": "Inventario",
 }
 
 FIELDS: tuple[SettingField, ...] = (
@@ -57,6 +60,9 @@ FIELDS: tuple[SettingField, ...] = (
     SettingField("reservation_ttl_minutes", "booking", "Tiempo para pagar una reserva (minutos)", "readonly",
                  default=CART_TTL_HOURS * 60, editable=False,
                  help="Es la vida del carrito: la reserva vence con él."),
+    SettingField("inventory_snapshot_frequency", "inventory", "Captura automática del inventario", "choice",
+                 default=DEFAULT_FREQUENCY, options=FREQUENCIES,
+                 help="Guarda el estado del inventario al terminar el día de corte (hora de Lima)."),
 )
 FIELDS_BY_KEY: dict[str, SettingField] = {f.key: f for f in FIELDS}
 
@@ -76,7 +82,7 @@ def validate_value(key: str, value: Any) -> Any:
         value = value.strip()
     if value is None or value == "":
         return None
-    if field.type in ("text", "ruc", "email", "phone", "time") and not isinstance(value, str):
+    if field.type in ("text", "ruc", "email", "phone", "time", "choice") and not isinstance(value, str):
         raise SettingInvalid(key, f"«{field.label}» debe ser texto.")
     if field.type == "text" and len(value) > 200:
         raise SettingInvalid(key, f"«{field.label}» admite hasta 200 caracteres.")
@@ -86,6 +92,8 @@ def validate_value(key: str, value: Any) -> Any:
         raise SettingInvalid(key, "Correo inválido.")
     if field.type == "phone" and not _PHONE.match(value):
         raise SettingInvalid(key, "Teléfono inválido.")
+    if field.type == "choice" and value not in (field.options or {}):
+        raise SettingInvalid(key, f"«{field.label}»: usa una de " + ", ".join(field.options or {}) + ".")
     if field.type == "time" and not _TIME.match(value):
         raise SettingInvalid(key, f"«{field.label}» va en formato HH:MM (24 h).")
     if field.type in ("percent", "int"):

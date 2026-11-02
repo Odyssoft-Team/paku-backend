@@ -637,3 +637,14 @@ dispara no se le notifica.
   con recompra, contribución estimada y su margen, traslado, atención, llegada vs. hora programada y avisos de
   retraso. Reglas en `specs/features/0014-dashboard-gerencial/spec.md`.
 - **Compatible.** **Sin migración.** **Apps:** admin (Resumen gerencial).
+
+## C-40 · Capturas del inventario (feature 0015, 2026-11-01)
+
+- **Nuevos (admin):** `GET /admin/inventory/snapshots?date_from&date_to` → `{schedule: {frequency, frequency_label,
+  next_cut}, items}`; `GET /admin/inventory/snapshots/{id}` (con `lines`: stock, mínimo, costo, valor y estado de cada
+  insumo al corte; 404 `SNAPSHOT_NOT_FOUND`); `POST /admin/inventory/snapshots` (captura manual con corte hoy).
+- **Automática:** al terminar el día de corte (hora de Lima) según `inventory_snapshot_frequency` en
+  `/admin/settings`: `weekly` (domingo), `semimonthly` (15 y fin de mes), `monthly` (fin de mes, por defecto) o
+  `none`. Una por corte; si el servidor estuvo apagado, se recupera hasta 3 días después.
+- **`/admin/settings`:** nuevo tipo de campo `choice` con `options` `[{value, label}]` y sección `inventory`.
+- **Compatible.** **Migración:** `3a4b5c6d7e8f`. **Apps:** admin (Inventario · Capturas, Parámetros).

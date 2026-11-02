@@ -43,6 +43,8 @@ def _get_metadata():
         RecipeModel,
         RecipeCellModel,
         RecipeLineModel,
+        SnapshotModel,
+        SnapshotLineModel,
     )
     from app.modules.general_settings.infra.models import GeneralSettingModel  # noqa: F401
     from app.modules.groomer_costs.infra.models import GroomerCostProfileModel  # noqa: F401

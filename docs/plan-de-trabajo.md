@@ -102,6 +102,8 @@ Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada sp
 - [ ] 6.8 Admin: conectar Parámetros generales, Clientes y Campañas; app de clientes: cupón y total con descuento
 - [x] 6.9 Dashboard gerencial v1 (solo lectura): mes al día vs. mismo corte del mes anterior, calidad real/estimado/sin
   datos — `specs/features/0014-dashboard-gerencial`, C-39, sin migración
+- [x] 6.10 Capturas del inventario (domingo, 15 y fin de mes, o fin de mes) con pestaña de consulta y exportar —
+  `specs/features/0015-capturas-inventario`, C-40, migración `3a4b5c6d7e8f`
 
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)
