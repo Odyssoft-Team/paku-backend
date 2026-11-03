@@ -719,3 +719,18 @@ dispara no se le notifica.
   `max_services_with_stock` y `warnings` (sin receta, sin precio, sin tarifa, peso sobre el máximo, inactivo).
 - 404 `PRODUCT_NOT_FOUND` / `ADDON_NOT_FOUND` / `BREED_NOT_FOUND`; 422 `ADDON_NOT_IN_SERVICE` / `WEIGHT_INVALID`.
 - **Compatible.** **Sin migración.** **Apps:** admin (Inventario · Recetas y costeo · Simulador de servicio).
+
+## C-47 · Nubefact: conexión para boletas (feature 0020 fase 1, 2026-11-02)
+
+- **Nuevos (admin):** `GET /admin/integrations/nubefact` → `{enabled, configured, api_url, token_mask (nunca el token
+  completo), boleta_series, status (not_configured | disabled | active | error), last_test_at, last_test_ok,
+  last_test_error, encryption_ready, updated_at, updated_by, readiness}`. `readiness`: `company_ruc`, `company_name`,
+  `igv_percent` (Parámetros generales), `customers` y `customers_with_dni` (clientes activos y con DNI).
+- `PUT /admin/integrations/nubefact` con `{enabled, api_url, token?, boleta_series}`: `token` vacío conserva el
+  guardado; ruta https (http solo en localhost, versión offline); serie de 4 caracteres que empieza con B (por
+  defecto B001). 422 `INVOICING_CONFIG_INVALID` con `field`; 503 `ENCRYPTION_UNAVAILABLE`.
+- `POST /admin/integrations/nubefact/test` → `{ok, message}`: consulta la boleta `{serie}-99999999`; **no emite
+  nada**. «No existe» (código 24) = conexión correcta. 409 `INVOICING_NOT_CONFIGURED`.
+- Todavía no se emiten comprobantes (decisiones pendientes en `specs/features/0020-boletas-nubefact/spec.md`).
+- **Compatible.** **Migración:** `6d7e8f9a0b1c` (`invoicing_providers`). Usa `CREDENTIALS_ENCRYPTION_KEY` (C-44).
+  **Apps:** admin (Configuración · Integraciones).

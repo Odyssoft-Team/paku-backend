@@ -43,3 +43,10 @@ def decrypt_secret(token: str, *, key: str | None = None) -> str:
         return _fernet(key).decrypt(token.encode()).decode()
     except InvalidToken as exc:
         raise CryptoUnavailable("La credencial guardada no se puede descifrar con la llave actual.") from exc
+
+
+def mask_secret(secret: str) -> str:
+    """`re_12…9aXz`: primeros 5 y últimos 4. Si es corto, solo los últimos 2. Lo único que ve el admin."""
+    if len(secret) <= 12:
+        return "…" + secret[-2:]
+    return f"{secret[:5]}…{secret[-4:]}"

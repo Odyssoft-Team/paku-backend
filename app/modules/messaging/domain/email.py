@@ -11,6 +11,8 @@ from typing import Optional
 
 from email_validator import EmailNotValidError, validate_email
 
+from app.core.crypto import mask_secret  # noqa: F401  (se reexporta para el módulo)
+
 EMAIL_CHANNEL = "email"
 
 # Proveedores que el admin puede elegir: código → nombre visible.
@@ -88,10 +90,3 @@ def check_api_key(provider: str, api_key: str) -> str:
     if prefix and not key.startswith(prefix):
         raise EmailConfigInvalid("api_key", f"Las API keys de {EMAIL_PROVIDERS[provider]} empiezan con «{prefix}».")
     return key
-
-
-def mask_secret(secret: str) -> str:
-    """`re_12…9aXz`: primeros 5 y últimos 4. Si es corto, solo los últimos 2."""
-    if len(secret) <= 12:
-        return "…" + secret[-2:]
-    return f"{secret[:5]}…{secret[-4:]}"
