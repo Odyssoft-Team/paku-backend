@@ -165,6 +165,17 @@ def start_scheduler() -> None:
         coalesce=True,
         next_run_time=datetime.now(timezone.utc),
     )
+    # Reintentos de correos con falla temporal y envíos colgados en PENDING (feature 0018)
+    from app.modules.messaging.app.sender import retry_due_emails_job
+
+    scheduler.add_job(
+        retry_due_emails_job,
+        trigger=IntervalTrigger(minutes=1),
+        id="retry_due_emails_job",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.start()
     logger.info("APScheduler started")
 

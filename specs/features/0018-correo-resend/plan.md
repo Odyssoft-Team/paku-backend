@@ -47,3 +47,10 @@ Descartado: guardar en `general_settings` (mezcla secretos con parámetros visib
 
 `tests/unit/test_email_integration.py`: cifrado y rotación, máscara, guardado y conservación de la key, validaciones,
 503 sin llave, prueba con proveedor falso, petición y errores de Resend con `httpx.MockTransport`.
+
+## Fase 2 — registro y reintentos
+
+- `notification_logs` (migración `5c6d7e8f9a0b`): una fila por envío, `idempotency_key` única, `payload` con el
+  mensaje armado para reintentar igual. `EmailSender.send` registra PENDING, intenta y deja SENT o FAILED; nunca lanza
+  por fallas del proveedor. Reglas de reintento en `domain/logs.py`; job `retry_due_emails_job` cada minuto.
+- Contrato: C-45. Tests: `tests/unit/test_email_sending.py`.

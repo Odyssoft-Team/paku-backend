@@ -108,7 +108,8 @@ Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada sp
 - [x] 6.12 Resultados de las campañas (clientes nuevos, cobrado, costo y margen) — `specs/features/0017-resultados-campanas`, C-42, sin migración
 - [x] 6.13 Fidelización con datos reales (atendidos por mes en `/admin/customers/stats`) — C-43, sin migración
 - [ ] 6.14 Correo con Resend — `specs/features/0018-correo-resend`. Fase 1 (configuración cifrada y prueba): C-44,
-  migración `4b5c6d7e8f9a`. Siguen: registro de envíos, plantillas Jinja2, webhook y bajas, constructor visual
+  migración `4b5c6d7e8f9a`. Fase 2 (registro de envíos, `send_email` y reintentos): C-45, migración `5c6d7e8f9a0b`.
+  Siguen: plantillas Jinja2 y primeros correos, webhook y bajas, constructor visual
 
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)

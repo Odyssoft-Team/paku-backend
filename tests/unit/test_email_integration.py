@@ -23,8 +23,9 @@ from app.modules.messaging.domain.email import (
     SendResult,
     mask_secret,
 )
-from app.modules.messaging.infra.models import ChannelProviderModel
+from app.modules.messaging.infra.models import ChannelProviderModel, NotificationLogModel
 from app.modules.messaging.infra.postgres_channel_repository import PostgresChannelRepository
+from app.modules.messaging.infra.postgres_log_repository import PostgresLogRepository
 from app.modules.messaging.infra.resend_provider import RESEND_URL, ResendEmailProvider
 
 ADMIN = uuid4()
@@ -43,10 +44,13 @@ def _run(coro):
 async def _with_repo(fn):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all, tables=[ChannelProviderModel.__table__])
+        await conn.run_sync(Base.metadata.create_all, tables=[ChannelProviderModel.__table__,
+                                                                    NotificationLogModel.__table__])
     session = async_sessionmaker(engine, expire_on_commit=False)()
     try:
-        return await fn(PostgresChannelRepository(session=session))
+        repo = PostgresChannelRepository(session=session)
+        repo.logs = PostgresLogRepository(session=session)
+        return await fn(repo)
     finally:
         await session.close()
         await engine.dispose()
@@ -143,7 +147,7 @@ class FakeProvider(BaseEmailProvider):
 def test_send_test_email_records_last_result():
     async def scenario(repo):
         with pytest.raises(HTTPException) as exc:
-            await SendTestEmail(repo=repo).execute(to="admin@paku.com.pe")
+            await SendTestEmail(repo=repo, logs=repo.logs).execute(to="admin@paku.com.pe")
         assert (exc.value.status_code, exc.value.detail["code"]) == (409, "EMAIL_NOT_CONFIGURED")
 
         await _update(repo, api_key=KEY, from_email="hola@paku.com.pe", from_name="Paku", enabled=True)
@@ -153,13 +157,13 @@ def test_send_test_email_records_last_result():
         def factory(code, api_key):
             seen_keys.append((code, api_key))
             return ok
-        result = await SendTestEmail(repo=repo, provider_factory=factory).execute(to="admin@paku.com.pe")
+        result = await SendTestEmail(repo=repo, logs=repo.logs, provider_factory=factory).execute(to="admin@paku.com.pe")
         assert (result.ok, result.provider_message_id, seen_keys) == (True, "msg_1", [("resend", KEY)])
         message, sender = ok.sent[0]
         assert (message.to, sender.formatted) == (["admin@paku.com.pe"], "Paku <hola@paku.com.pe>")
 
         bad = FakeProvider(fail="Resend respondió 403: The paku.com.pe domain is not verified.")
-        result = await SendTestEmail(repo=repo, provider_factory=lambda c, k: bad).execute(to="admin@paku.com.pe")
+        result = await SendTestEmail(repo=repo, logs=repo.logs, provider_factory=lambda c, k: bad).execute(to="admin@paku.com.pe")
         assert (result.ok, result.error) == (False, "Resend respondió 403: The paku.com.pe domain is not verified.")
         view = await GetEmailIntegration(repo=repo).execute()
         assert (view.status, view.last_test_ok) == ("error", False)

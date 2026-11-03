@@ -49,7 +49,7 @@ def _get_metadata():
     from app.modules.general_settings.infra.models import GeneralSettingModel  # noqa: F401
     from app.modules.groomer_costs.infra.models import GroomerCostProfileModel  # noqa: F401
     from app.modules.campaigns.infra.models import CampaignModel, CampaignRedemptionModel  # noqa: F401
-    from app.modules.messaging.infra.models import ChannelProviderModel  # noqa: F401
+    from app.modules.messaging.infra.models import ChannelProviderModel, NotificationLogModel  # noqa: F401
 
     return Base.metadata
 

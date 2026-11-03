@@ -14,7 +14,15 @@ plan: ./plan.md
 - [x] 6. Admin: tarjeta «Correo» en Configuración → Integraciones.
 - [ ] Cierre fase 1: llave en el servidor, migración, dominio verificado y prueba real desde el admin.
 
-## Fase 2 — envío y registro (pendiente)
+## Fase 2 — envío y registro
+- [x] 1. Tabla `notification_logs` (migración `5c6d7e8f9a0b`) y repositorio.
+- [x] 2. `EmailSender` / `send_email(...)`: idempotencia, PENDING → SENT/FAILED, la clave también a Resend.
+- [x] 3. Reintentos: fallas temporales a 1, 5, 15 y 60 min (máx. 5), PENDING colgados; job cada minuto.
+- [x] 4. `GET /admin/notification-logs` y `POST /admin/notification-logs/{id}/retry`; la prueba queda registrada.
+- [x] 5. Tests (`tests/unit/test_email_sending.py`). C-45.
+- [x] 6. Admin: tarjeta «Envíos de correo» (estado, búsqueda, fechas, reintentar).
+- [ ] Cierre fase 2: migración en el servidor y revisar el registro tras la prueba real.
+
 ## Fase 3 — plantillas Jinja2 (pendiente)
 ## Fase 4 — webhook y bajas (pendiente)
 ## Fase 5 — constructor visual (pendiente)

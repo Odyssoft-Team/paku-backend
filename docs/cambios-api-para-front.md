@@ -690,3 +690,19 @@ dispara no se le notifica.
   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`). Guardarla: si se
   pierde, hay que volver a ingresar la API key. Nueva dependencia `cryptography` en `requirements.txt`.
 - **Compatible.** **Migración:** `4b5c6d7e8f9a` (`channel_providers`). **Apps:** admin (Configuración · Integraciones).
+
+## C-45 · Registro de envíos y reintentos (feature 0018 fase 2, 2026-11-02)
+
+- **Nuevos (admin):** `GET /admin/notification-logs?channel&status&q&date_from&date_to&limit&offset` → `{items, total,
+  counts}`. Cada envío: `recipient`, `template`, `subject`, `status` (`PENDING` | `SENT` | `FAILED`),
+  `provider_message_id`, `error`, `retryable` + `next_attempt_at` (se reintentará solo), `attempts`, `user_id`,
+  `order_id`, `campaign_id`, `created_at`, `sent_at`. Más recientes primero; fechas = día de creación en Lima;
+  `counts` por estado ignora el filtro de estado. 422 `LOG_STATUS_INVALID` / `DATE_RANGE_INVALID`.
+- `POST /admin/notification-logs/{id}/retry`: reintenta ahora un `FAILED`. 404 `LOG_NOT_FOUND`, 409 `LOG_NOT_RETRYABLE`.
+- **Backend:** `send_email(session, to, subject, html, text, idempotency_key, template, user_id, order_id,
+  campaign_id)` en `app/modules/messaging/app/sender.py`. La misma `idempotency_key` no sale dos veces (también va a
+  Resend en `Idempotency-Key`). Fallas temporales (429, 5xx, sin conexión) se reintentan solas a 1, 5, 15 y 60 min,
+  hasta 5 intentos (job cada minuto); un `PENDING` colgado más de 10 min también se reintenta. Correo sin configurar o
+  desactivado → `FAILED` sin reintento.
+- `POST /admin/integrations/email/test` ahora también queda en el registro (`template: "test"`, sin reintento solo).
+- **Compatible.** **Migración:** `5c6d7e8f9a0b` (`notification_logs`). **Apps:** admin (Configuración · Integraciones).

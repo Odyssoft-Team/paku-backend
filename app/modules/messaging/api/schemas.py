@@ -48,3 +48,31 @@ class TestEmailOut(BaseModel):
     to: str
     provider_message_id: Optional[str] = None
     error: Optional[str] = None
+
+
+class NotificationLogOut(BaseModel):
+    id: UUID
+    channel: str
+    provider: Optional[str] = None
+    recipient: str
+    template: Optional[str] = None
+    subject: Optional[str] = None
+    status: str = Field(..., description="PENDING | SENT | FAILED")
+    provider_message_id: Optional[str] = None
+    error: Optional[str] = None
+    retryable: bool = Field(..., description="true: se reintentará solo en `next_attempt_at`.")
+    attempts: int
+    next_attempt_at: Optional[datetime] = None
+    user_id: Optional[UUID] = None
+    order_id: Optional[UUID] = None
+    campaign_id: Optional[UUID] = None
+    created_at: datetime
+    sent_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationLogPageOut(BaseModel):
+    items: list[NotificationLogOut]
+    total: int
+    counts: dict[str, int] = Field(..., description="Por estado con los demás filtros (para las pestañas).")

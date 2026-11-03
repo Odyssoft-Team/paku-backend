@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any, Callable, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 
 from app.core.crypto import CryptoUnavailable, decrypt_secret, encrypt_secret, encryption_ready
+from app.core.timezone import LIMA_TZ
+from app.modules.messaging.app.sender import EmailSender
 from app.modules.messaging.domain.email import (
     EMAIL_CHANNEL,
     EMAIL_PROVIDERS,
@@ -16,12 +18,11 @@ from app.modules.messaging.domain.email import (
     BaseEmailProvider,
     EmailConfigInvalid,
     EmailMessage,
-    EmailProviderError,
-    Sender,
     check_api_key,
     mask_secret,
     normalize_email,
 )
+from app.modules.messaging.domain.logs import FAILED, SENT, STATUSES
 from app.modules.messaging.infra.factory import build_email_provider
 from app.modules.messaging.infra.models import ChannelProviderModel, utcnow
 
@@ -149,6 +150,7 @@ class UpdateEmailIntegration:
 
 
 TEST_SUBJECT = "Correo de prueba de Paku"
+TEST_TEMPLATE = "test"
 
 
 def _test_message(to: str) -> EmailMessage:
@@ -162,10 +164,12 @@ def _test_message(to: str) -> EmailMessage:
 @dataclass
 class SendTestEmail:
     repo: Any
+    logs: Any
     provider_factory: Callable[[str, str], BaseEmailProvider] = build_email_provider
 
-    async def execute(self, *, to: str) -> TestEmailResult:
-        """Envía con lo guardado aunque el correo esté desactivado (para probar antes de activarlo)."""
+    async def execute(self, *, to: str, actor_id: Optional[UUID] = None) -> TestEmailResult:
+        """Envía con lo guardado aunque el correo esté desactivado (para probar antes de activarlo). Queda en el
+        registro de envíos como `template="test"`, sin reintentos automáticos (el admin ve el resultado al momento)."""
         try:
             to = normalize_email(to, field="to")
         except EmailConfigInvalid as exc:
@@ -175,19 +179,72 @@ class SendTestEmail:
             raise HTTPException(status_code=409, detail={
                 "code": "EMAIL_NOT_CONFIGURED", "message": "Primero guarda la API key y el correo del remitente."})
         try:
-            api_key = decrypt_secret(model.secret_encrypted)
+            decrypt_secret(model.secret_encrypted)
         except CryptoUnavailable as exc:
             raise _no_encryption(exc) from exc
 
-        provider = self.provider_factory(model.provider, api_key)
-        sender = Sender(from_email=model.from_email, from_name=model.from_name, reply_to=model.reply_to)
-        try:
-            sent = await provider.send(_test_message(to), sender=sender)
-            result = TestEmailResult(ok=True, to=to, provider_message_id=sent.provider_message_id, error=None)
-        except EmailProviderError as exc:
-            result = TestEmailResult(ok=False, to=to, provider_message_id=None, error=exc.message[:500])
+        sender = EmailSender(channels=self.repo, logs=self.logs, provider_factory=self.provider_factory)
+        log = await sender.send(_test_message(to), idempotency_key=f"test:{uuid4()}", template=TEST_TEMPLATE,
+                                user_id=actor_id, ignore_disabled=True)
+        if log.status == FAILED and log.retryable:
+            log.retryable, log.next_attempt_at = False, None
+            await self.logs.save(log)
+        ok = log.status == SENT
+        result = TestEmailResult(ok=ok, to=to, provider_message_id=log.provider_message_id,
+                                 error=None if ok else log.error)
         model.last_test_at = utcnow()
         model.last_test_ok = result.ok
         model.last_test_error = result.error
         await self.repo.save(model)
         return result
+
+
+@dataclass(frozen=True)
+class LogPage:
+    items: list
+    total: int
+    counts: dict[str, int]
+
+
+def _lima_start(day: date) -> datetime:
+    return datetime.combine(day, time.min, tzinfo=LIMA_TZ)
+
+
+@dataclass
+class ListNotificationLogs:
+    logs: Any
+
+    async def execute(self, *, channel: Optional[str], status: Optional[str], q: Optional[str],
+                      date_from: Optional[date], date_to: Optional[date], limit: int, offset: int) -> LogPage:
+        """Fechas = días de creación en hora de Lima, ambos incluidos."""
+        if status and status not in STATUSES:
+            raise HTTPException(status_code=422, detail={"code": "LOG_STATUS_INVALID",
+                                                          "message": f"Estado desconocido: {status}."})
+        if date_from and date_to and date_from > date_to:
+            raise HTTPException(status_code=422, detail={
+                "code": "DATE_RANGE_INVALID", "message": "La fecha desde no puede ser posterior a la fecha hasta."})
+        items, total, counts = await self.logs.search(
+            channel=channel, status=status, q=(q or "").strip() or None,
+            created_from=_lima_start(date_from) if date_from else None,
+            created_to=_lima_start(date_to + timedelta(days=1)) if date_to else None,
+            limit=limit, offset=offset,
+        )
+        return LogPage(items=items, total=total, counts={s: counts.get(s, 0) for s in STATUSES})
+
+
+@dataclass
+class RetryNotificationLog:
+    repo: Any
+    logs: Any
+    provider_factory: Callable[[str, str], BaseEmailProvider] = build_email_provider
+
+    async def execute(self, log_id: UUID):
+        """Reintento manual de un envío `FAILED` (aunque ya no le queden reintentos automáticos)."""
+        log = await self.logs.get(log_id)
+        if log is None:
+            raise HTTPException(status_code=404, detail={"code": "LOG_NOT_FOUND", "message": "Envío no encontrado."})
+        if log.status != FAILED:
+            raise HTTPException(status_code=409, detail={
+                "code": "LOG_NOT_RETRYABLE", "message": "Solo se reintentan los envíos fallidos."})
+        sender = EmailSender(channels=self.repo, logs=self.logs, provider_factory=self.provider_factory)
+        return await sender.deliver(log, ignore_disabled=log.template == TEST_TEMPLATE)
