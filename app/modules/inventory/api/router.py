@@ -30,6 +30,11 @@ from app.modules.inventory.api.schemas import (
     SnapshotListOut,
     SnapshotOut,
     SnapshotScheduleOut,
+    SimulationIn,
+    SimulationItemOut,
+    SimulationLineOut,
+    SimulationOut,
+    SimulationSupplyOut,
     SupplyCreateIn,
     SupplyOut,
     SupplyUpdateIn,
@@ -57,6 +62,7 @@ from app.modules.inventory.domain.inventory import (
     Recipe,
     Supply,
 )
+from app.modules.inventory.app.simulation import Simulation, SimulateService
 from app.modules.inventory.app.snapshots import GetSnapshot, TakeSnapshot, snapshot_frequency
 from app.modules.inventory.domain.snapshots import FREQUENCIES, KINDS, Snapshot, next_cut
 from app.modules.inventory.infra.postgres_inventory_repository import PostgresInventoryRepository
@@ -497,3 +503,75 @@ async def consume_order(
     )
     supplies = await repo.get_supplies(list({m.supply_id for m in movements}))
     return [_movement_out(m, supplies.get(m.supply_id)) for m in movements]
+
+
+
+# ------------------------------------------------------------------
+# Simulador de un servicio (feature 0019)
+# ------------------------------------------------------------------
+
+def _simulation_out(sim: Simulation) -> SimulationOut:
+    supplies_cost = sim.supplies_cost
+    with_stock = [s.services_with_stock for s in sim.supplies if s.services_with_stock is not None]
+    return SimulationOut(
+        product_id=sim.product.id, product_name=sim.product.name, breed_id=sim.breed_id, breed_name=sim.breed_name,
+        breed_category=sim.breed_category, breed_category_label=sim.category_label, weight_kg=sim.weight_kg,
+        weight_code=sim.weight_code,
+        items=[
+            SimulationItemOut(
+                target_type=i.target.target_type, target_id=UUID(i.target.ref_id), name=i.target.name, price=i.price,
+                recipe_version=i.recipe_version, category_used=i.category_used, weight_min=i.weight_min,
+                weight_max=i.weight_max, labor_minutes=i.labor_minutes, supplies_cost=round(i.supplies_cost, 2),
+                lines=[
+                    SimulationLineOut(
+                        supply_id=l.supply.id, sku=l.supply.sku, supply_name=l.supply.name,
+                        consumption_unit=l.supply.consumption_unit, quantity=round(l.quantity, 3),
+                        unit_cost=round(l.supply.unit_cost, 6), cost=round(l.cost, 2),
+                    )
+                    for l in i.lines
+                ],
+            )
+            for i in sim.items
+        ],
+        supplies=[
+            SimulationSupplyOut(
+                supply_id=s.supply.id, sku=s.supply.sku, supply_name=s.supply.name,
+                consumption_unit=s.supply.consumption_unit, quantity=round(s.quantity, 3),
+                unit_cost=round(s.supply.unit_cost, 6), cost=round(s.cost, 2),
+                cost_share_pct=round(s.cost / supplies_cost * 100, 1) if supplies_cost > 0 else None,
+                stock=round(s.stock, 3), min_stock=s.supply.min_stock, stock_status=s.stock_status,
+                services_with_stock=s.services_with_stock,
+            )
+            for s in sim.supplies
+        ],
+        price=sim.price, supplies_cost=supplies_cost, labor_minutes=sim.labor_minutes,
+        labor_rate=round(sim.labor_rate, 2) if sim.labor_rate is not None else None,
+        labor_rate_source=sim.labor_rate_source, labor_cost=sim.labor_cost, total_cost=sim.total_cost,
+        margin=sim.margin, margin_pct=sim.margin_pct, max_services_with_stock=min(with_stock) if with_stock else None,
+        warnings=sim.warnings,
+    )
+
+
+@admin_router.post("/simulate", response_model=SimulationOut)
+async def simulate_service(
+    payload: SimulationIn,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresInventoryRepository = Depends(get_repo),
+    store_repo: PostgresStoreRepository = Depends(get_store_repo),
+    session: AsyncSession = Depends(get_async_session),
+) -> SimulationOut:
+    """
+    Simula un servicio sin registrar nada: servicio + adicionales, raza (sin raza = «mestizo») y peso → celda de cada
+    receta vigente, insumos y su stock de hoy, minutos y mano de obra (groomer elegido o referencia), precio y margen.
+    Lo que no tiene receta o precio queda en `warnings`. 404 `PRODUCT_NOT_FOUND` / `ADDON_NOT_FOUND` /
+    `BREED_NOT_FOUND`; 422 `ADDON_NOT_IN_SERVICE` / `WEIGHT_INVALID`.
+    """
+    from app.modules.catalog.infra.postgres_breed_repository import PostgresBreedRepository
+    from app.modules.groomer_costs.app.use_cases import labor_rates
+
+    rates = await labor_rates(session)
+    sim = await SimulateService(
+        repo=repo, store_repo=store_repo, breeds_repo=PostgresBreedRepository(session=session, engine=engine),
+    ).execute(product_id=payload.product_id, addon_ids=payload.addon_ids, breed_id=payload.breed_id,
+              weight_kg=payload.weight_kg, rates=rates.rate_for(payload.groomer_id))
+    return _simulation_out(sim)

@@ -110,6 +110,8 @@ Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada sp
 - [ ] 6.14 Correo con Resend — `specs/features/0018-correo-resend`. Fase 1 (configuración cifrada y prueba): C-44,
   migración `4b5c6d7e8f9a`. Fase 2 (registro de envíos, `send_email` y reintentos): C-45, migración `5c6d7e8f9a0b`.
   Siguen: plantillas Jinja2 y primeros correos, webhook y bajas, constructor visual
+- [x] 6.15 Simulador de un servicio (servicio, adicionales, raza y peso → insumos, stock, costo y margen) —
+  `specs/features/0019-simulador-servicio`, C-46, sin migración
 
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)

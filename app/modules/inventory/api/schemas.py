@@ -282,3 +282,76 @@ class SnapshotLineOut(BaseModel):
 
 class SnapshotDetailOut(SnapshotOut):
     lines: list[SnapshotLineOut]
+
+
+# ─── Simulador de un servicio (feature 0019) ─────────────────────────────────
+
+class SimulationIn(BaseModel):
+    product_id: UUID
+    addon_ids: list[UUID] = Field(default_factory=list)
+    breed_id: Optional[str] = Field(None, description="Sin raza: fila «mestizo».")
+    weight_kg: float
+    groomer_id: Optional[UUID] = Field(None, description="Costo por hora de ese groomer; sin valor, el de referencia.")
+
+
+class SimulationLineOut(BaseModel):
+    supply_id: UUID
+    sku: str
+    supply_name: str
+    consumption_unit: str
+    quantity: float
+    unit_cost: float
+    cost: float
+
+
+class SimulationItemOut(BaseModel):
+    target_type: str
+    target_id: UUID
+    name: str
+    price: Optional[float] = Field(None, description="null: sin precio para este pelaje y peso.")
+    recipe_version: Optional[str] = Field(None, description="null: sin receta o sin celda para este pelaje y peso.")
+    category_used: Optional[str] = None
+    weight_min: Optional[float] = None
+    weight_max: Optional[float] = None
+    labor_minutes: float
+    supplies_cost: float
+    lines: list[SimulationLineOut]
+
+
+class SimulationSupplyOut(BaseModel):
+    supply_id: UUID
+    sku: str
+    supply_name: str
+    consumption_unit: str
+    quantity: float
+    unit_cost: float
+    cost: float
+    cost_share_pct: Optional[float] = Field(None, description="% del costo de insumos del servicio.")
+    stock: float
+    min_stock: float
+    stock_status: str
+    services_with_stock: Optional[int] = Field(None, description="Servicios iguales que alcanzan con el stock de hoy.")
+
+
+class SimulationOut(BaseModel):
+    product_id: UUID
+    product_name: str
+    breed_id: Optional[str] = None
+    breed_name: Optional[str] = None
+    breed_category: str
+    breed_category_label: str
+    weight_kg: float
+    weight_code: Optional[str] = None
+    items: list[SimulationItemOut]
+    supplies: list[SimulationSupplyOut]
+    price: Optional[float] = Field(None, description="null si algún ítem no tiene precio.")
+    supplies_cost: float
+    labor_minutes: float
+    labor_rate: Optional[float] = None
+    labor_rate_source: str
+    labor_cost: Optional[float] = None
+    total_cost: Optional[float] = None
+    margin: Optional[float] = None
+    margin_pct: Optional[float] = None
+    max_services_with_stock: Optional[int] = Field(None, description="El insumo que primero se acaba manda.")
+    warnings: list[str]

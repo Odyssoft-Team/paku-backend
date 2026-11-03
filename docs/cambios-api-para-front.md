@@ -706,3 +706,16 @@ dispara no se le notifica.
   desactivado → `FAILED` sin reintento.
 - `POST /admin/integrations/email/test` ahora también queda en el registro (`template: "test"`, sin reintento solo).
 - **Compatible.** **Migración:** `5c6d7e8f9a0b` (`notification_logs`). **Apps:** admin (Configuración · Integraciones).
+
+## C-46 · Simulador de un servicio (feature 0019, 2026-11-02)
+
+- **Nuevo (admin):** `POST /admin/inventory/simulate` con `{product_id, addon_ids, breed_id?, weight_kg, groomer_id?}`.
+  No registra nada. Sin raza se usa la fila «mestizo»; la celda de cada receta y el precio se eligen igual que en una
+  orden real; mano de obra con el costo por hora del groomer elegido o el de referencia.
+- Devuelve `breed_category` (+ `_label`), `weight_code`, `items` (servicio y cada adicional: `price`,
+  `recipe_version`, `category_used`, tramo, `labor_minutes`, `supplies_cost`, `lines`), `supplies` (consumo total por
+  insumo con `cost_share_pct`, `stock` de hoy, `stock_status` y `services_with_stock`), `price`, `supplies_cost`,
+  `labor_minutes`, `labor_rate` + `labor_rate_source`, `labor_cost`, `total_cost`, `margin`, `margin_pct`,
+  `max_services_with_stock` y `warnings` (sin receta, sin precio, sin tarifa, peso sobre el máximo, inactivo).
+- 404 `PRODUCT_NOT_FOUND` / `ADDON_NOT_FOUND` / `BREED_NOT_FOUND`; 422 `ADDON_NOT_IN_SERVICE` / `WEIGHT_INVALID`.
+- **Compatible.** **Sin migración.** **Apps:** admin (Inventario · Recetas y costeo · Simulador de servicio).
