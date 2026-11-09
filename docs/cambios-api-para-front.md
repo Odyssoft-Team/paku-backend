@@ -753,3 +753,12 @@ dispara no se le notifica.
   `purchase_quantity`, `purchase_price`, `voided_at`, `voided_by`, `voided_by_name`, `void_reason` y `can_void`.
 - **Rompe** solo para quien registre compras sin `purchase_price` (el admin ya lo envía). **Migración:**
   `7e8f9a0b1c2d`. **Apps:** admin (Inventario · Insumos y Movimientos).
+
+## C-49 · Código del producto del proveedor y margen sin IGV en recetas (feature 0021, 2026-11-09)
+
+- `suppliers[]` de un insumo suma `product_code` (opcional, máx. 60): el código con que el proveedor conoce el
+  producto.
+- Recetas (`GET /admin/inventory/recipes/{id}`, `/versions`, `PUT`): cada celda suma `price_without_igv`
+  (= `price` ÷ (1 + IGV)) y `margin` pasa a ser **precio sin IGV − costo total** (antes: precio − costo). `RecipeOut`
+  suma `igv_percent` (de Parámetros generales). Solo recetas: simulador, costo de orden y campañas no cambian.
+- **Compatible** (mismo campo `margin`, valor nuevo). **Sin migración.** **Apps:** admin (Insumos, Recetas y costeo).

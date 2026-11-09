@@ -197,7 +197,8 @@ class Recipe:
 # ─── Reglas ──────────────────────────────────────────────────────────────────
 
 # Proveedores de un insumo (feature 0021): lista propia de cada insumo; solo el nombre es obligatorio.
-SUPPLIER_FIELDS: tuple[str, ...] = ("name", "phone", "address", "bank_account", "ruc")
+# product_code: código con que el proveedor conoce el producto (se ingresa a mano)
+SUPPLIER_FIELDS: tuple[str, ...] = ("name", "product_code", "phone", "address", "bank_account", "ruc")
 
 
 def normalize_suppliers(raw: Any) -> list[dict]:
@@ -227,6 +228,11 @@ def signed_quantity(movement_type: str, quantity: float, direction: Optional[str
     if sign == 0:
         sign = 1 if direction == "in" else -1
     return sign * abs(quantity)
+
+
+def price_without_igv(price: float, igv_percent: float) -> float:
+    """Precio sin IGV. Los precios de venta ya incluyen el IGV: 75 con 18 % → 75 ÷ 1,18 = 63,56."""
+    return price / (1 + (igv_percent or 0) / 100)
 
 
 def weighted_unit_cost(stock: float, current_unit_cost: float, quantity: float, new_unit_cost: float) -> float:

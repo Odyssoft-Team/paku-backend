@@ -17,8 +17,9 @@ creado: 2026-11-09
 ## Comportamiento esperado (reglas confirmadas por el dueño, 2026-11-09)
 
 1. **Dado** un insumo, **entonces** tiene marca y descripción opcionales y una lista propia de proveedores
-   (cero, uno o varios; no es un catálogo compartido). Cada proveedor: nombre (obligatorio), teléfono,
-   dirección, cuenta bancaria y RUC (11 dígitos), todos opcionales.
+   (cero, uno o varios; no es un catálogo compartido). Cada proveedor: nombre (obligatorio), código del
+   producto (el que usa el proveedor, se ingresa a mano), teléfono, dirección, cuenta bancaria y RUC
+   (11 dígitos), todos opcionales.
 2. **Dado** el formulario del insumo, **entonces** la unidad de consumo puede ser `ml`, `L`, `g` o `unidad`.
    Las recetas y el stock de ese insumo se miden en esa unidad.
 3. **Dada** una compra, **entonces** se ingresa la cantidad en unidades de compra (p. ej. 2 galones) y el
@@ -31,6 +32,11 @@ creado: 2026-11-09
    **anular** con motivo obligatorio: queda en el historial con quién, cuándo y por qué, y deja de contar en
    el stock, el valor y el consumo. No se borra. El consumo generado por la receta de una orden no se anula.
 7. **Dada** la lista de movimientos, **entonces** por defecto oculta los anulados; se pueden ver con un filtro.
+
+8. **Dada** una celda de receta con precio, **entonces** el margen = precio sin IGV − costo (insumos + minutos ×
+   costo por hora). Los precios incluyen IGV: precio sin IGV = precio ÷ (1 + IGV de Parámetros generales);
+   S/ 75 con 18 % → S/ 63,56. **Solo en Recetas** (2026-11-09): Simulador, costo de una orden y Resultados de
+   campañas siguen restando del precio con IGV.
 
 ## Pendiente de confirmar
 

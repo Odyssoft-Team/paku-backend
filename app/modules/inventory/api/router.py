@@ -64,6 +64,7 @@ from app.modules.inventory.domain.inventory import (
     Movement,
     Recipe,
     Supply,
+    price_without_igv,
 )
 from app.modules.inventory.app.simulation import Simulation, SimulateService
 from app.modules.inventory.app.snapshots import GetSnapshot, TakeSnapshot, snapshot_frequency
@@ -334,7 +335,18 @@ def _same(a: Optional[float], b: Optional[float]) -> bool:
     return a == b or (a is not None and b is not None and abs(a - b) < 0.005)
 
 
-async def _recipe_out(recipe: Recipe, repo, store_repo, labor_rate: Optional[float], name: Optional[str]) -> RecipeOut:
+async def _igv_percent(session) -> float:
+    """IGV (%) de Parámetros generales (los precios de venta ya lo incluyen)."""
+    from app.modules.general_settings.app.use_cases import get_setting
+    from app.modules.general_settings.infra.postgres_settings_repository import PostgresSettingsRepository
+
+    return float(await get_setting(PostgresSettingsRepository(session=session), "igv_percent") or 0)
+
+
+async def _recipe_out(
+    recipe: Recipe, repo, store_repo, labor_rate: Optional[float], name: Optional[str], igv_percent: float,
+) -> RecipeOut:
+    """Costo por celda y margen = precio sin IGV − (insumos + mano de obra)."""
     supplies = await repo.get_supplies(list({l.supply_id for c in recipe.cells for l in c.lines}))
     prices = [p for p in await store_repo.list_price_rules(target_id=recipe.target_id) if p.is_active]
     cells = []
@@ -344,6 +356,7 @@ async def _recipe_out(recipe: Recipe, repo, store_repo, labor_rate: Optional[flo
         total = supplies_cost + (labor or 0)
         price = next((float(p.price) for p in prices if p.breed_category == c.breed_category
                       and _same(p.weight_min, c.weight_min) and _same(p.weight_max, c.weight_max)), None)
+        net = price_without_igv(price, igv_percent) if price is not None else None
         cells.append(RecipeCellOut(
             id=c.id, breed_category=c.breed_category, weight_min=c.weight_min, weight_max=c.weight_max,
             labor_minutes=c.labor_minutes,
@@ -357,12 +370,15 @@ async def _recipe_out(recipe: Recipe, repo, store_repo, labor_rate: Optional[flo
                 for l in c.lines if l.supply_id in supplies
             ],
             supplies_cost=round(supplies_cost, 2), labor_cost=round(labor, 2) if labor is not None else None,
-            total_cost=round(total, 2), price=price, margin=round(price - total, 2) if price is not None else None,
+            total_cost=round(total, 2), price=price,
+            price_without_igv=round(net, 2) if net is not None else None,
+            margin=round(net - total, 2) if net is not None else None,
         ))
     return RecipeOut(
         id=recipe.id, target_type=recipe.target_type, target_id=recipe.target_id, target_name=name,
         version=recipe.version, version_label=recipe.version_label, is_current=recipe.is_current, cells=cells,
-        labor_rate=round(labor_rate, 2) if labor_rate is not None else None, created_at=recipe.created_at,
+        labor_rate=round(labor_rate, 2) if labor_rate is not None else None, igv_percent=igv_percent,
+        created_at=recipe.created_at,
     )
 
 
@@ -403,7 +419,8 @@ async def get_recipe(
     if recipe is None:
         return None
     names = await _target_names([recipe], store_repo)
-    return await _recipe_out(recipe, repo, store_repo, await _reference_rate(session), names.get(target_id))
+    return await _recipe_out(recipe, repo, store_repo, await _reference_rate(session), names.get(target_id),
+                             await _igv_percent(session))
 
 
 @admin_router.get("/recipes/{target_id}/versions", response_model=list[RecipeOut])
@@ -417,8 +434,8 @@ async def recipe_versions(
     """Todas las versiones de la tabla (la más nueva primero), con los costos de hoy."""
     recipes = await repo.list_recipes(current_only=False, target_id=target_id)
     names = await _target_names(recipes, store_repo)
-    rate = await _reference_rate(session)
-    return [await _recipe_out(r, repo, store_repo, rate, names.get(r.target_id)) for r in recipes]
+    rate, igv = await _reference_rate(session), await _igv_percent(session)
+    return [await _recipe_out(r, repo, store_repo, rate, names.get(r.target_id), igv) for r in recipes]
 
 
 @admin_router.put("/recipes/{target_id}", response_model=RecipeOut)
@@ -439,7 +456,8 @@ async def save_recipe(
         cells=[c.model_dump() for c in payload.cells], actor_id=current.id,
     )
     names = await _target_names([recipe], store_repo)
-    return await _recipe_out(recipe, repo, store_repo, await _reference_rate(session), names.get(target_id))
+    return await _recipe_out(recipe, repo, store_repo, await _reference_rate(session), names.get(target_id),
+                             await _igv_percent(session))
 
 
 # ------------------------------------------------------------------

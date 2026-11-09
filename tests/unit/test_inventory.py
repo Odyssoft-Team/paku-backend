@@ -28,6 +28,7 @@ from app.modules.inventory.app.use_cases import (
     order_real_minutes,
 )
 from app.modules.inventory.domain.inventory import (
+    price_without_igv,
     weighted_unit_cost,
     ConsumptionTarget,
     Movement,
@@ -321,10 +322,10 @@ def test_movement_rules():
 def test_supply_brand_description_suppliers_and_liters():
     repo = _Repo()
     shampoo = _supply(repo, consumption_unit="L", content=3.785, brand="  Iv San Bernard ", description="",
-                      suppliers=[{"name": " Distribuidora Pet ", "phone": "", "ruc": "20123456789",
+                      suppliers=[{"name": " Distribuidora Pet ", "product_code": " SH-500 ", "phone": "", "ruc": "20123456789",
                                   "bank_account": "BCP 191-1234567-0-12"}])
     assert (shampoo.consumption_unit, shampoo.brand, shampoo.description) == ("L", "Iv San Bernard", None)
-    assert shampoo.suppliers == [{"name": "Distribuidora Pet", "phone": None, "address": None,
+    assert shampoo.suppliers == [{"name": "Distribuidora Pet", "product_code": "SH-500", "phone": None, "address": None,
                                   "bank_account": "BCP 191-1234567-0-12", "ruc": "20123456789"}]
     assert round(shampoo.unit_cost, 2) == round(185 / 3.785, 2)
     updated = _run(UpdateSupply(repo=repo).execute(shampoo.id, fields={"suppliers": [], "brand": None}))
@@ -353,6 +354,33 @@ def test_purchase_price_updates_weighted_average_cost():
     # Después la merma sale al costo promedio
     waste = _run(register.execute(type="waste", supply_id=shampoo.id, quantity=100, reason="Derrame", actor_id=ADMIN))
     assert waste.unit_cost == pytest.approx(205 / 3785, rel=1e-4)
+
+
+def test_price_without_igv():
+    assert round(price_without_igv(75, 18), 2) == 63.56
+    assert price_without_igv(75, 0) == 75
+
+
+def test_recipe_cell_margin_is_net_of_igv():
+    """Celda: costo = insumos + minutos × tarifa; margen = precio sin IGV − costo."""
+    from app.modules.inventory.api.router import _recipe_out
+
+    repo = _Repo()
+    shampoo = _supply(repo, content=1000, cost=50)             # S/ 0,05 por ml
+    cell = RecipeCell(breed_category="corto", weight_min=0, weight_max=5, labor_minutes=30,
+                      lines=[RecipeLine(shampoo.id, 100)])
+    recipe = Recipe(id=uuid4(), target_type="product", target_id=PRODUCT_ID, version=1, is_current=True,
+                    cells=[cell], created_at=NOW)
+
+    class _Prices:
+        async def list_price_rules(self, *, target_id):
+            return [SimpleNamespace(is_active=True, breed_category="corto", weight_min=0, weight_max=5, price=75)]
+
+    out = _run(_recipe_out(recipe, repo, _Prices(), 12.0, "Baño", 18))
+    [c] = out.cells
+    assert (c.supplies_cost, c.labor_cost, c.total_cost) == (5.0, 6.0, 11.0)
+    assert (c.price, c.price_without_igv, c.margin) == (75, 63.56, 52.56)
+    assert out.igv_percent == 18
 
 
 def test_weighted_cost_ignores_negative_stock():

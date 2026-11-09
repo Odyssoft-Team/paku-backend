@@ -28,6 +28,7 @@ class InventoryConfigOut(BaseModel):
 class SupplierIn(BaseModel):
     """Proveedor de un insumo. Solo el nombre es obligatorio; vacío = sin dato."""
     name: str = Field(min_length=1, max_length=200)
+    product_code: Optional[str] = Field(default=None, max_length=60, description="Código del producto para el proveedor")
     phone: Optional[str] = Field(default=None, max_length=30)
     address: Optional[str] = Field(default=None, max_length=300)
     bank_account: Optional[str] = Field(default=None, max_length=100, description="Banco y número de cuenta / CCI")
@@ -36,6 +37,7 @@ class SupplierIn(BaseModel):
 
 class SupplierOut(BaseModel):
     name: str
+    product_code: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
     bank_account: Optional[str] = None
@@ -206,8 +208,9 @@ class RecipeCellOut(BaseModel):
     supplies_cost: float = Field(description="Insumos con los costos actuales")
     labor_cost: Optional[float] = Field(default=None, description="Minutos × tarifa de referencia (null sin tarifa)")
     total_cost: float
-    price: Optional[float] = Field(default=None, description="Precio de la misma celda en la tabla de precios")
-    margin: Optional[float] = Field(default=None, description="Precio − costo total")
+    price: Optional[float] = Field(default=None, description="Precio (con IGV) de la misma celda en la tabla de precios")
+    price_without_igv: Optional[float] = Field(default=None, description="Precio ÷ (1 + IGV)")
+    margin: Optional[float] = Field(default=None, description="Precio sin IGV − costo total")
 
 
 class RecipeOut(BaseModel):
@@ -220,6 +223,7 @@ class RecipeOut(BaseModel):
     is_current: bool
     cells: list[RecipeCellOut]
     labor_rate: Optional[float] = Field(default=None, description="S/ por hora de servicio usada en labor_cost")
+    igv_percent: float = Field(description="IGV (%) de Parámetros generales con que se quitó el IGV al precio")
     created_at: datetime
 
 
