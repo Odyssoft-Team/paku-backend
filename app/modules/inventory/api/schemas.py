@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -126,13 +126,44 @@ class MovementOut(BaseModel):
     created_by: Optional[UUID] = None
     created_by_name: Optional[str] = Field(default=None, description="null = sistema (consumo automático)")
     created_at: datetime
-    purchase_quantity: Optional[float] = Field(default=None, description="Cantidad en unidades de compra, si se ingresó así")
-    purchase_price: Optional[float] = Field(default=None, description="S/ por unidad de compra pagado en esta entrada")
+    purchase_total: Optional[float] = Field(default=None, description="S/ pagado por esta entrada (compra / stock inicial)")
     voided_at: Optional[datetime] = Field(default=None, description="null = vigente; anulado no cuenta en el stock")
     voided_by: Optional[UUID] = None
     voided_by_name: Optional[str] = None
     void_reason: Optional[str] = None
     can_void: bool = Field(default=False, description="Manual y vigente: se puede anular")
+    can_edit: bool = Field(default=False, description="Manual y vigente: se puede editar")
+    edited_at: Optional[datetime] = Field(default=None, description="Última edición (historial en …/edits)")
+    edited_by_name: Optional[str] = None
+
+
+class MovementEditChangeOut(BaseModel):
+    before: Any = None
+    after: Any = None
+
+
+class MovementEditOut(BaseModel):
+    id: UUID
+    edited_at: datetime
+    edited_by: Optional[UUID] = None
+    edited_by_name: Optional[str] = None
+    reason: str
+    changes: dict[str, MovementEditChangeOut] = Field(description="Campo → valor antes y después")
+
+
+class MovementUpdateIn(BaseModel):
+    """Solo las claves enviadas. El tipo no se edita (se anula y se registra de nuevo)."""
+    edit_reason: str = Field(min_length=1, max_length=500, description="Motivo de la edición")
+    occurred_on: Optional[date] = None
+    supply_id: Optional[UUID] = None
+    quantity: Optional[float] = Field(default=None, gt=0, description="En unidad de consumo, positiva")
+    purchase_total: Optional[float] = Field(default=None, ge=0, description="S/ pagado; null lo quita (solo stock inicial)")
+    direction: Optional[Literal["in", "out"]] = Field(default=None, description="Solo ajustes")
+    reason: Optional[str] = Field(default=None, min_length=1)
+    location: Optional[str] = None
+    cost_center: Optional[str] = None
+    lot: Optional[str] = Field(default=None, max_length=60)
+    expires_on: Optional[date] = None
 
 
 class MovementVoidIn(BaseModel):
@@ -142,14 +173,11 @@ class MovementVoidIn(BaseModel):
 class MovementCreateIn(BaseModel):
     type: Literal["initial_stock", "purchase", "consumption", "adjustment", "waste"]
     supply_id: UUID
-    quantity: Optional[float] = Field(
-        default=None, gt=0, description="En unidad de consumo, siempre positiva; el signo sale del tipo (o de direction). "
-        "Enviar quantity o purchase_quantity, no ambos")
-    purchase_quantity: Optional[float] = Field(
-        default=None, gt=0, description="En unidades de compra (solo purchase / initial_stock); se convierte con el contenido")
-    purchase_price: Optional[float] = Field(
-        default=None, ge=0, description="S/ por unidad de compra. Obligatorio en purchase, opcional en initial_stock; "
-        "el costo del insumo pasa al promedio ponderado")
+    quantity: float = Field(gt=0, description="En unidad de consumo (100 L, no 0,5 recargas), siempre positiva; "
+                            "el signo sale del tipo (o de direction)")
+    purchase_total: Optional[float] = Field(
+        default=None, ge=0, description="S/ pagado por esta entrada. Obligatorio en purchase, opcional en initial_stock; "
+        "costo por unidad = total ÷ cantidad y el costo del insumo pasa al promedio ponderado")
     direction: Optional[Literal["in", "out"]] = Field(default=None, description="Obligatorio en adjustment")
     occurred_on: Optional[date] = Field(default=None, description="Por defecto hoy (Lima); no puede ser futura")
     location: Optional[str] = None

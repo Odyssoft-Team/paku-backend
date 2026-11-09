@@ -152,12 +152,40 @@ class UpdateSupply:
 
 # ─── Movimientos ─────────────────────────────────────────────────────────────
 
+def _check_movement(
+    *, type: str, quantity: Optional[float], purchase_total: Optional[float], direction: Optional[str],
+    reason: str, day: date, location: Optional[str], cost_center: Optional[str],
+) -> None:
+    """Reglas de un movimiento manual (al registrarlo y al editarlo)."""
+    if type not in MOVEMENT_TYPES:
+        raise _invalid("MOVEMENT_TYPE_INVALID", "Tipo inválido. Usa uno de: " + ", ".join(MOVEMENT_TYPES) + ".")
+    if quantity is None or quantity <= 0:
+        raise _invalid("MOVEMENT_QUANTITY_INVALID", "La cantidad debe ser mayor que 0.")
+    if purchase_total is not None and type not in PRICED_MOVEMENT_TYPES:
+        raise _invalid("MOVEMENT_PRICE_NOT_ALLOWED", "El total pagado solo va en compras y stock inicial.")
+    if type == "purchase" and purchase_total is None:
+        raise _invalid("MOVEMENT_PRICE_REQUIRED", "Indica el total pagado por la compra.")
+    if purchase_total is not None and purchase_total < 0:
+        raise _invalid("MOVEMENT_PRICE_INVALID", "El total pagado no puede ser negativo.")
+    if type == "adjustment" and direction not in ("in", "out"):
+        raise _invalid("MOVEMENT_DIRECTION_REQUIRED", "Indica si el ajuste suma (in) o resta (out).")
+    if not (reason or "").strip():
+        raise _invalid("MOVEMENT_REASON_REQUIRED", "El motivo o comprobante es obligatorio.")
+    if day > today_lima():
+        raise _invalid("MOVEMENT_DATE_IN_FUTURE", "La fecha del movimiento no puede ser futura.")
+    if location is not None and location not in LOCATIONS:
+        raise _invalid("LOCATION_INVALID", "Ubicación inválida. Usa una de: " + ", ".join(LOCATIONS) + ".")
+    if cost_center is not None and cost_center not in COST_CENTERS:
+        raise _invalid("COST_CENTER_INVALID", "Centro de costo inválido. Usa uno de: " + ", ".join(COST_CENTERS) + ".")
+
+
 @dataclass
 class RegisterMovement:
     """Movimiento manual. Los consumos por servicio los registra solo `OrderConsumption`.
 
-    Compra (obligatorio) y stock inicial (opcional) llevan `purchase_price` (S/ por unidad de compra). Esa entrada
-    se registra a ese precio y el costo del insumo pasa al promedio ponderado con el stock que había."""
+    La cantidad va siempre en unidad de consumo (100 L, no 0,5 recargas). Compra (obligatorio) y stock inicial
+    (opcional) llevan `purchase_total`: lo pagado por esa entrada. Su costo por unidad = total ÷ cantidad y el
+    costo del insumo pasa al promedio ponderado con el stock que había."""
     repo: Any
 
     async def execute(
@@ -165,11 +193,10 @@ class RegisterMovement:
         *,
         type: str,
         supply_id: UUID,
+        quantity: float,
         reason: str,
         actor_id: UUID,
-        quantity: Optional[float] = None,
-        purchase_quantity: Optional[float] = None,
-        purchase_price: Optional[float] = None,
+        purchase_total: Optional[float] = None,
         direction: Optional[str] = None,
         occurred_on: Optional[date] = None,
         location: Optional[str] = None,
@@ -178,43 +205,19 @@ class RegisterMovement:
         lot: Optional[str] = None,
         expires_on: Optional[date] = None,
     ):
-        if type not in MOVEMENT_TYPES:
-            raise _invalid("MOVEMENT_TYPE_INVALID", "Tipo inválido. Usa uno de: " + ", ".join(MOVEMENT_TYPES) + ".")
-        if (quantity is None) == (purchase_quantity is None):
-            raise _invalid("MOVEMENT_QUANTITY_INVALID", "Indica la cantidad en unidad de consumo o en unidades de compra.")
-        if purchase_quantity is not None and type not in PRICED_MOVEMENT_TYPES:
-            raise _invalid("MOVEMENT_QUANTITY_INVALID", "Las unidades de compra solo van en compras y stock inicial.")
-        if (quantity is not None and quantity <= 0) or (purchase_quantity is not None and purchase_quantity <= 0):
-            raise _invalid("MOVEMENT_QUANTITY_INVALID", "La cantidad debe ser mayor que 0.")
-        if purchase_price is not None and type not in PRICED_MOVEMENT_TYPES:
-            raise _invalid("MOVEMENT_PRICE_NOT_ALLOWED", "El precio solo va en compras y stock inicial.")
-        if type == "purchase" and purchase_price is None:
-            raise _invalid("MOVEMENT_PRICE_REQUIRED", "Indica el precio de compra por unidad de compra.")
-        if purchase_price is not None and purchase_price < 0:
-            raise _invalid("MOVEMENT_PRICE_INVALID", "El precio de compra no puede ser negativo.")
-        if type == "adjustment" and direction not in ("in", "out"):
-            raise _invalid("MOVEMENT_DIRECTION_REQUIRED", "Indica si el ajuste suma (in) o resta (out).")
-        if not (reason or "").strip():
-            raise _invalid("MOVEMENT_REASON_REQUIRED", "El motivo o comprobante es obligatorio.")
         day = occurred_on or today_lima()
-        if day > today_lima():
-            raise _invalid("MOVEMENT_DATE_IN_FUTURE", "La fecha del movimiento no puede ser futura.")
-        if location is not None and location not in LOCATIONS:
-            raise _invalid("LOCATION_INVALID", "Ubicación inválida. Usa una de: " + ", ".join(LOCATIONS) + ".")
-        if cost_center is not None and cost_center not in COST_CENTERS:
-            raise _invalid("COST_CENTER_INVALID", "Centro de costo inválido. Usa uno de: " + ", ".join(COST_CENTERS) + ".")
+        _check_movement(type=type, quantity=quantity, purchase_total=purchase_total, direction=direction,
+                        reason=reason, day=day, location=location, cost_center=cost_center)
         supply = await self.repo.get_supply(supply_id)
         if supply is None:
             raise _error(status.HTTP_404_NOT_FOUND, "SUPPLY_NOT_FOUND", "Insumo no encontrado.")
         if not supply.is_active:
             raise _error(status.HTTP_409_CONFLICT, "SUPPLY_INACTIVE", "El insumo está desactivado.")
 
-        if purchase_quantity is not None:
-            quantity = purchase_quantity * supply.purchase_content
         unit_cost = supply.unit_cost
         new_purchase_cost = None
-        if purchase_price is not None:
-            unit_cost = purchase_price / supply.purchase_content
+        if purchase_total is not None:
+            unit_cost = purchase_total / quantity
             stock = (await self.repo.stock_by_supply()).get(supply.id, 0.0)
             average = weighted_unit_cost(stock, supply.unit_cost, quantity, unit_cost)
             new_purchase_cost = Decimal(str(round(average * supply.purchase_content, 2)))
@@ -232,13 +235,106 @@ class RegisterMovement:
             "lot": (lot or "").strip() or None,
             "expires_on": expires_on,
             "created_by": actor_id,
-            "purchase_quantity": None if purchase_quantity is None else Decimal(str(purchase_quantity)),
-            "purchase_price": None if purchase_price is None else Decimal(str(round(purchase_price, 2))),
+            "purchase_total": None if purchase_total is None else Decimal(str(round(purchase_total, 2))),
         }], commit=new_purchase_cost is None)
         if new_purchase_cost is not None:
             # El costo del insumo pasa al promedio ponderado (misma transacción que la entrada)
             await self.repo.update_supply(supply.id, {"purchase_cost": new_purchase_cost})
         return movement
+
+
+# Campos que se pueden editar de un movimiento manual (el tipo no: para eso se anula y se registra de nuevo)
+EDITABLE_MOVEMENT_FIELDS = (
+    "occurred_on", "supply_id", "quantity", "purchase_total", "direction", "reason", "location", "cost_center",
+    "lot", "expires_on",
+)
+
+
+def _json_value(v):
+    if isinstance(v, (date, datetime)):
+        return v.isoformat()
+    if isinstance(v, UUID):
+        return str(v)
+    if isinstance(v, Decimal):
+        return float(v)
+    return v
+
+
+def _same_value(a, b) -> bool:
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return abs(float(a) - float(b)) < 1e-6
+    return a == b
+
+
+@dataclass
+class EditMovement:
+    """Edita un movimiento manual y guarda el historial (antes y después). El stock se recalcula solo porque es
+    la suma de los movimientos. El costo promedio del insumo **no** se recalcula (se corrige en la ficha si hace
+    falta)."""
+    repo: Any
+
+    async def execute(self, movement_id: UUID, *, changes: dict, edit_reason: str, actor_id: UUID):
+        edit_reason = (edit_reason or "").strip()
+        if not edit_reason:
+            raise _invalid("EDIT_REASON_REQUIRED", "Indica el motivo de la edición.")
+        changes = {k: v for k, v in changes.items() if k in EDITABLE_MOVEMENT_FIELDS}
+        m = await self.repo.get_movement(movement_id)
+        if m is None:
+            raise _error(status.HTTP_404_NOT_FOUND, "MOVEMENT_NOT_FOUND", "Movimiento no encontrado.")
+        if not m.can_edit:
+            message = ("Un movimiento anulado no se edita." if m.is_voided
+                       else "El consumo automático de una orden no se puede editar.")
+            raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_NOT_EDITABLE", message)
+
+        # Estado nuevo = el actual con lo que llegó
+        quantity = changes.get("quantity", abs(m.quantity))
+        purchase_total = changes.get("purchase_total", m.purchase_total)
+        direction = changes.get("direction", ("in" if m.quantity >= 0 else "out") if m.type == "adjustment" else None)
+        day = changes.get("occurred_on") or m.occurred_on
+        reason = changes.get("reason", m.reason)
+        location = changes.get("location", m.location)
+        cost_center = changes.get("cost_center", m.cost_center)
+        _check_movement(type=m.type, quantity=quantity, purchase_total=purchase_total, direction=direction,
+                        reason=reason, day=day, location=location, cost_center=cost_center)
+
+        supply = await self.repo.get_supply(changes.get("supply_id", m.supply_id))
+        if supply is None:
+            raise _error(status.HTTP_404_NOT_FOUND, "SUPPLY_NOT_FOUND", "Insumo no encontrado.")
+        supply_changed = supply.id != m.supply_id
+        if supply_changed and not supply.is_active:
+            raise _error(status.HTTP_409_CONFLICT, "SUPPLY_INACTIVE", "El insumo está desactivado.")
+
+        # Costo por unidad: con total pagado, total ÷ cantidad; sin total, el que tenía (o el de hoy del insumo si
+        # cambió el insumo o se quitó el total)
+        if purchase_total is not None:
+            unit_cost = purchase_total / quantity
+        elif supply_changed or m.purchase_total is not None:
+            unit_cost = supply.unit_cost
+        else:
+            unit_cost = m.unit_cost
+
+        new = {
+            "occurred_on": day,
+            "supply_id": supply.id,
+            "quantity": round(signed_quantity(m.type, quantity, direction), 3),
+            "unit_cost": round(unit_cost, 6),
+            "purchase_total": None if purchase_total is None else round(purchase_total, 2),
+            "reason": reason.strip(),
+            "location": location,
+            "cost_center": cost_center,
+            "lot": (changes.get("lot", m.lot) or "").strip() or None,
+            "expires_on": changes.get("expires_on", m.expires_on),
+        }
+        diff = {
+            k: {"before": _json_value(getattr(m, k)), "after": _json_value(v)}
+            for k, v in new.items() if not _same_value(getattr(m, k), v)
+        }
+        if not diff:
+            raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_UNCHANGED", "El movimiento no tiene cambios.")
+        values = {k: (Decimal(str(v)) if isinstance(v, float) else v) for k, v in new.items() if k in diff}
+        if not await self.repo.edit_movement(m.id, values, actor_id=actor_id, reason=edit_reason, changes=diff):
+            raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_NOT_EDITABLE", "Un movimiento anulado no se edita.")
+        return await self.repo.get_movement(m.id)
 
 
 @dataclass

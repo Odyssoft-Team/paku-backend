@@ -1,8 +1,9 @@
 """Inventario de insumos (feature 0009).
 
 - El stock de un insumo es la suma de sus movimientos (con signo) no anulados. Nada se borra: un movimiento
-  manual se puede anular (queda en el historial con quién, cuándo y por qué, y deja de contar); el consumo
-  automático de una orden no se anula.
+  manual se puede anular (queda en el historial con quién, cuándo y por qué, y deja de contar) o editar (cada
+  edición guarda quién, cuándo, por qué y los valores antes y después); el consumo automático de una orden no
+  se anula ni se edita.
 - Cada movimiento guarda el costo por unidad de consumo vigente al registrarlo; cambiar después el costo
   del insumo no cambia el costo de lo ya consumido.
 - Las recetas tienen la misma forma que la tabla de precios: una tabla por servicio y por adicional, con
@@ -51,7 +52,7 @@ MOVEMENT_TYPES: dict[str, tuple[str, int]] = {
     "adjustment": ("Ajuste", 0),
     "waste": ("Merma", -1),
 }
-# Los que llevan precio de compra (S/ por unidad de compra): obligatorio en compra, opcional en stock inicial
+# Los que llevan total pagado (S/): obligatorio en compra, opcional en stock inicial
 PRICED_MOVEMENT_TYPES: tuple[str, ...] = ("purchase", "initial_stock")
 
 # Tramos de peso del documento (W01…W06) = tramos de la tabla de precios. Solo para mostrar el tamaño de una
@@ -122,12 +123,14 @@ class Movement:
     expires_on: Optional[date] = None
     created_by: Optional[UUID] = None   # None = sistema (consumo automático)
     created_by_name: Optional[str] = None
-    purchase_quantity: Optional[float] = None   # en unidades de compra, si se ingresó así
-    purchase_price: Optional[float] = None      # S/ por unidad de compra pagado en esta entrada
+    purchase_total: Optional[float] = None      # S/ pagado por esta entrada (compra / stock inicial)
     voided_at: Optional[datetime] = None
     voided_by: Optional[UUID] = None
     voided_by_name: Optional[str] = None
     void_reason: Optional[str] = None
+    edited_at: Optional[datetime] = None        # última edición (historial en MovementEdit)
+    edited_by: Optional[UUID] = None
+    edited_by_name: Optional[str] = None
 
     @property
     def is_voided(self) -> bool:
@@ -144,12 +147,29 @@ class Movement:
         return not self.is_voided and not self.is_recipe_consumption
 
     @property
+    def can_edit(self) -> bool:
+        """Mismos que se pueden anular: manuales y vigentes."""
+        return self.can_void
+
+    @property
     def code(self) -> str:
         return f"MOV-{self.seq:04d}"
 
     @property
     def cost(self) -> float:
         return self.quantity * self.unit_cost
+
+
+@dataclass(frozen=True)
+class MovementEdit:
+    """Una edición de un movimiento: `changes` = {campo: {"before": …, "after": …}}."""
+    id: UUID
+    movement_id: UUID
+    edited_at: datetime
+    edited_by: Optional[UUID]
+    reason: str
+    changes: dict
+    edited_by_name: Optional[str] = None
 
 
 @dataclass(frozen=True)

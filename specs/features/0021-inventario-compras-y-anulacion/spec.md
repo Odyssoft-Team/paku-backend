@@ -22,9 +22,10 @@ creado: 2026-11-09
    (11 dígitos), todos opcionales.
 2. **Dado** el formulario del insumo, **entonces** la unidad de consumo puede ser `ml`, `L`, `g` o `unidad`.
    Las recetas y el stock de ese insumo se miden en esa unidad.
-3. **Dada** una compra, **entonces** se ingresa la cantidad en unidades de compra (p. ej. 2 galones) y el
-   precio pagado por unidad de compra (obligatorio). El movimiento queda a ese precio.
-4. **Dado** un stock inicial, **entonces** el precio es opcional; sin precio se usa el costo de la ficha.
+3. **Dada** una compra, **entonces** se ingresa la **cantidad real** en unidad de consumo (100 L, no «0,5
+   recargas de 200 L») y el **total pagado** (obligatorio). Costo por unidad del movimiento = total ÷ cantidad.
+   (Cambiado el 2026-11-09: antes se ingresaban unidades de compra y precio por unidad de compra.)
+4. **Dado** un stock inicial, **entonces** el total pagado es opcional; sin total se usa el costo de la ficha.
 5. **Dada** una entrada con precio, **entonces** el costo del insumo pasa al **promedio ponderado**:
    (stock × costo actual + cantidad × precio nuevo) ÷ (stock + cantidad). Un stock negativo cuenta como 0.
    Lo ya registrado no cambia de costo.
@@ -32,6 +33,11 @@ creado: 2026-11-09
    **anular** con motivo obligatorio: queda en el historial con quién, cuándo y por qué, y deja de contar en
    el stock, el valor y el consumo. No se borra. El consumo generado por la receta de una orden no se anula.
 7. **Dada** la lista de movimientos, **entonces** por defecto oculta los anulados; se pueden ver con un filtro.
+9. **Dado** un movimiento manual vigente, **entonces** se puede **editar** todo menos el tipo (fecha, insumo,
+   cantidad, total pagado, entrada/salida de un ajuste, motivo, ubicación, centro de costo, lote, vencimiento) con
+   motivo de edición obligatorio. Cada edición guarda quién, cuándo, el motivo y los valores antes y después. El
+   stock se recalcula solo; el **costo promedio del insumo no se recalcula**. No se editan los anulados ni el
+   consumo por receta de una orden. Para cambiar el tipo: anular y registrar de nuevo.
 
 8. **Dada** una celda de receta con precio, **entonces** el margen = precio sin IGV − costo (insumos + minutos ×
    costo por hora). Los precios incluyen IGV: precio sin IGV = precio ÷ (1 + IGV de Parámetros generales);

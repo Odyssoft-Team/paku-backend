@@ -63,18 +63,34 @@ class MovementModel(Base):
     expires_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_by: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)  # null = sistema
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
-    # Entrada con precio (feature 0021): cantidad en unidades de compra y S/ por unidad de compra
-    purchase_quantity: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 3), nullable=True)
-    purchase_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    # Entrada con precio (feature 0021): S/ pagado por esta entrada; unit_cost = total ÷ cantidad
+    purchase_total: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     # Anulación (feature 0021): null = vigente
     voided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     voided_by: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
     void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Última edición (feature 0021); el historial está en inventory_movement_edits
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_by: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
 
     __table_args__ = (
         Index("ix_inventory_movements_occurred_on", "occurred_on"),
         Index("ix_inventory_movements_order_type", "order_id", "type"),
     )
+
+
+class MovementEditModel(Base):
+    """Historial de ediciones de un movimiento: quién, cuándo, por qué y los valores antes y después."""
+    __tablename__ = "inventory_movement_edits"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    movement_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("inventory_movements.id"), nullable=False, index=True
+    )
+    edited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    edited_by: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    changes: Mapped[dict] = mapped_column(JSON, nullable=False)   # {campo: {"before": …, "after": …}}
 
 
 class RecipeModel(Base):

@@ -9,8 +9,9 @@ from sqlalchemy import desc, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.inventory.domain.inventory import Movement, Recipe, RecipeCell, RecipeLine, Supply
+from app.modules.inventory.domain.inventory import Movement, MovementEdit, Recipe, RecipeCell, RecipeLine, Supply
 from app.modules.inventory.infra.models import (
+    MovementEditModel,
     MovementModel,
     RecipeCellModel,
     RecipeLineModel,
@@ -104,7 +105,8 @@ class PostgresInventoryRepository:
 
     @staticmethod
     def _to_movement(
-        m: MovementModel, created_by_name: Optional[str] = None, voided_by_name: Optional[str] = None
+        m: MovementModel, created_by_name: Optional[str] = None, voided_by_name: Optional[str] = None,
+        edited_by_name: Optional[str] = None,
     ) -> Movement:
         return Movement(
             id=m.id, seq=m.seq, occurred_on=m.occurred_on, type=m.type, supply_id=m.supply_id,
@@ -112,9 +114,9 @@ class PostgresInventoryRepository:
             reason=m.reason, created_at=m.created_at, order_id=m.order_id, recipe_id=m.recipe_id,
             recipe_cell_id=m.recipe_cell_id, lot=m.lot,
             expires_on=m.expires_on, created_by=m.created_by, created_by_name=created_by_name,
-            purchase_quantity=None if m.purchase_quantity is None else float(m.purchase_quantity),
-            purchase_price=None if m.purchase_price is None else float(m.purchase_price),
+            purchase_total=None if m.purchase_total is None else float(m.purchase_total),
             voided_at=m.voided_at, voided_by=m.voided_by, voided_by_name=voided_by_name, void_reason=m.void_reason,
+            edited_at=m.edited_at, edited_by=m.edited_by, edited_by_name=edited_by_name,
         )
 
     async def add_movements(self, movements: list[dict], *, commit: bool = True) -> list[Movement]:
@@ -131,27 +133,33 @@ class PostgresInventoryRepository:
 
     @staticmethod
     def _with_author():
-        """SELECT de movimientos con el nombre de quien lo registró (null = sistema) y de quien lo anuló."""
+        """SELECT de movimientos con el nombre de quien lo registró (null = sistema), de quien lo anuló y de quien
+        lo editó por última vez."""
         from sqlalchemy.orm import aliased
 
         from app.modules.iam.infra.models import UserModel
 
-        author, voider = aliased(UserModel), aliased(UserModel)
+        author, voider, editor = aliased(UserModel), aliased(UserModel), aliased(UserModel)
         return (
             select(
                 MovementModel,
                 func.concat(author.first_name, " ", author.last_name),
                 func.concat(voider.first_name, " ", voider.last_name),
+                func.concat(editor.first_name, " ", editor.last_name),
             )
             .outerjoin(author, author.id == MovementModel.created_by)
             .outerjoin(voider, voider.id == MovementModel.voided_by)
+            .outerjoin(editor, editor.id == MovementModel.edited_by)
         )
 
     def _rows_to_movements(self, rows) -> list[Movement]:
         def clean(name, user_id):
             return ((name or "").strip() or None) if user_id else None
 
-        return [self._to_movement(m, clean(n, m.created_by), clean(v, m.voided_by)) for m, n, v in rows]
+        return [
+            self._to_movement(m, clean(n, m.created_by), clean(v, m.voided_by), clean(e, m.edited_by))
+            for m, n, v, e in rows
+        ]
 
     async def get_movement(self, movement_id: UUID) -> Optional[Movement]:
         rows = (await self._session.execute(self._with_author().where(MovementModel.id == movement_id))).all()
@@ -198,6 +206,40 @@ class PostgresInventoryRepository:
         )
         await self._session.commit()
         return (result.rowcount or 0) > 0
+
+    async def edit_movement(self, movement_id: UUID, values: dict, *, actor_id: UUID, reason: str,
+                            changes: dict) -> bool:
+        """Aplica la edición y guarda su historial en la misma transacción. False si ya no es editable (anulado)."""
+        now = utcnow()
+        result = await self._session.execute(
+            update(MovementModel)
+            .where(MovementModel.id == movement_id, MovementModel.voided_at.is_(None))
+            .values(**values, edited_at=now, edited_by=actor_id)
+        )
+        if not (result.rowcount or 0):
+            await self._session.rollback()
+            return False
+        self._session.add(MovementEditModel(movement_id=movement_id, edited_at=now, edited_by=actor_id,
+                                            reason=reason, changes=changes))
+        await self._session.commit()
+        return True
+
+    async def list_movement_edits(self, movement_id: UUID) -> list[MovementEdit]:
+        """Ediciones de un movimiento, de la más reciente a la más antigua, con el nombre de quien editó."""
+        from app.modules.iam.infra.models import UserModel
+
+        stmt = (
+            select(MovementEditModel, func.concat(UserModel.first_name, " ", UserModel.last_name))
+            .outerjoin(UserModel, UserModel.id == MovementEditModel.edited_by)
+            .where(MovementEditModel.movement_id == movement_id)
+            .order_by(desc(MovementEditModel.edited_at))
+        )
+        return [
+            MovementEdit(id=e.id, movement_id=e.movement_id, edited_at=e.edited_at, edited_by=e.edited_by,
+                         reason=e.reason, changes=dict(e.changes or {}),
+                         edited_by_name=((n or "").strip() or None) if e.edited_by else None)
+            for e, n in (await self._session.execute(stmt)).all()
+        ]
 
     async def has_order_consumption(self, order_id: UUID) -> bool:
         stmt = select(MovementModel.id).where(

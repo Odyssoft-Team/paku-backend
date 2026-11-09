@@ -16,7 +16,10 @@ from app.modules.inventory.api.schemas import (
     InventorySummaryOut,
     MissingRecipeOut,
     MovementCreateIn,
+    MovementEditChangeOut,
+    MovementEditOut,
     MovementOut,
+    MovementUpdateIn,
     MovementVoidIn,
     OrderCostCellOut,
     OrderCostLineOut,
@@ -43,6 +46,7 @@ from app.modules.inventory.api.schemas import (
 )
 from app.modules.inventory.app.use_cases import (
     CreateSupply,
+    EditMovement,
     GetInventorySummary,
     GetOrderCost,
     ListSupplies,
@@ -176,7 +180,7 @@ def _movement_out(m: Movement, supply: Optional[Supply]) -> MovementOut:
         unit_cost=m.unit_cost, cost=round(m.cost, 2), location=m.location, cost_center=m.cost_center,
         order_id=m.order_id, recipe_id=m.recipe_id, reason=m.reason, lot=m.lot, expires_on=m.expires_on,
         created_by=m.created_by, created_by_name=m.created_by_name, created_at=m.created_at,
-        purchase_quantity=m.purchase_quantity, purchase_price=m.purchase_price,
+        purchase_total=m.purchase_total, can_edit=m.can_edit, edited_at=m.edited_at, edited_by_name=m.edited_by_name,
         voided_at=m.voided_at, voided_by=m.voided_by, voided_by_name=m.voided_by_name, void_reason=m.void_reason,
         can_void=m.can_void,
     )
@@ -212,12 +216,46 @@ async def register_movement(
     """Registra un movimiento manual. No se editan ni se borran: un manual se puede anular (POST …/void)."""
     movement = await RegisterMovement(repo=repo).execute(
         type=payload.type, supply_id=payload.supply_id, quantity=payload.quantity,
-        purchase_quantity=payload.purchase_quantity, purchase_price=payload.purchase_price, direction=payload.direction,
+        purchase_total=payload.purchase_total, direction=payload.direction,
         occurred_on=payload.occurred_on, location=payload.location, cost_center=payload.cost_center,
         order_id=payload.order_id, reason=payload.reason, lot=payload.lot, expires_on=payload.expires_on,
         actor_id=current.id,
     )
     return _movement_out(await repo.get_movement(movement.id) or movement, await repo.get_supply(movement.supply_id))
+
+
+@admin_router.patch("/movements/{movement_id}", response_model=MovementOut)
+async def edit_movement(
+    movement_id: UUID,
+    payload: MovementUpdateIn,
+    current: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresInventoryRepository = Depends(get_repo),
+) -> MovementOut:
+    """Edita un movimiento manual (solo lo enviado) y guarda el historial con el motivo y los valores antes y
+    después. El costo promedio del insumo no se recalcula. 404 MOVEMENT_NOT_FOUND / SUPPLY_NOT_FOUND;
+    409 MOVEMENT_NOT_EDITABLE (anulado o consumo de una orden) / MOVEMENT_UNCHANGED / SUPPLY_INACTIVE;
+    422 EDIT_REASON_REQUIRED y las reglas del registro."""
+    changes = {k: getattr(payload, k) for k in payload.model_fields_set if k != "edit_reason"}
+    movement = await EditMovement(repo=repo).execute(
+        movement_id, changes=changes, edit_reason=payload.edit_reason, actor_id=current.id,
+    )
+    return _movement_out(movement, await repo.get_supply(movement.supply_id))
+
+
+@admin_router.get("/movements/{movement_id}/edits", response_model=list[MovementEditOut])
+async def movement_edits(
+    movement_id: UUID,
+    _: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresInventoryRepository = Depends(get_repo),
+) -> list[MovementEditOut]:
+    """Historial de ediciones del movimiento, de la más reciente a la más antigua."""
+    if await repo.get_movement(movement_id) is None:
+        raise HTTPException(status_code=404, detail={"code": "MOVEMENT_NOT_FOUND", "message": "Movimiento no encontrado."})
+    return [
+        MovementEditOut(id=e.id, edited_at=e.edited_at, edited_by=e.edited_by, edited_by_name=e.edited_by_name,
+                        reason=e.reason, changes={k: MovementEditChangeOut(**v) for k, v in e.changes.items()})
+        for e in await repo.list_movement_edits(movement_id)
+    ]
 
 
 @admin_router.post("/movements/{movement_id}/void", response_model=MovementOut)

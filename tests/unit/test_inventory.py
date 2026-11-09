@@ -25,9 +25,11 @@ from app.modules.inventory.app.use_cases import (
     SaveRecipe,
     UpdateSupply,
     VoidMovement,
+    EditMovement,
     order_real_minutes,
 )
 from app.modules.inventory.domain.inventory import (
+    MovementEdit,
     price_without_igv,
     weighted_unit_cost,
     ConsumptionTarget,
@@ -78,6 +80,7 @@ class _Repo:
         self.supplies: dict[UUID, Supply] = {}
         self.movements: list[Movement] = []
         self.recipes: dict[UUID, Recipe] = {}
+        self.edits: list[MovementEdit] = []
 
     async def list_supplies(self, *, include_inactive=True):
         return [s for s in sorted(self.supplies.values(), key=lambda s: s.sku) if include_inactive or s.is_active]
@@ -135,6 +138,15 @@ class _Repo:
         for i, m in enumerate(self.movements):
             if m.id == movement_id and not m.is_voided:
                 self.movements[i] = replace(m, voided_at=NOW, voided_by=actor_id, void_reason=reason)
+                return True
+        return False
+
+    async def edit_movement(self, movement_id, values, *, actor_id, reason, changes):
+        for i, m in enumerate(self.movements):
+            if m.id == movement_id and not m.is_voided:
+                self.movements[i] = replace(m, edited_at=NOW, edited_by=actor_id, **{k: _num(v) for k, v in values.items()})
+                self.edits.append(MovementEdit(id=uuid4(), movement_id=movement_id, edited_at=NOW, edited_by=actor_id,
+                                               reason=reason, changes=changes))
                 return True
         return False
 
@@ -286,7 +298,7 @@ def test_movements_set_stock_and_keep_cost_of_the_moment():
     repo = _Repo()
     shampoo = _supply(repo, min_stock=1000)
     register = RegisterMovement(repo=repo)
-    _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=3785, purchase_price=185, reason="F001-1", actor_id=ADMIN))
+    _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=3785, purchase_total=185, reason="F001-1", actor_id=ADMIN))
     _run(register.execute(type="waste", supply_id=shampoo.id, quantity=900, reason="Derrame", actor_id=ADMIN))
     _run(register.execute(type="adjustment", direction="out", supply_id=shampoo.id, quantity=2100, reason="Conteo", actor_id=ADMIN))
     _run(register.execute(type="adjustment", direction="in", supply_id=shampoo.id, quantity=100, reason="Conteo", actor_id=ADMIN))
@@ -302,16 +314,14 @@ def test_movement_rules():
     register = RegisterMovement(repo=repo)
     cases = [
         ({"type": "adjustment", "quantity": 5, "reason": "x"}, "MOVEMENT_DIRECTION_REQUIRED"),
-        ({"type": "purchase", "quantity": 5, "purchase_price": 1, "reason": "  "}, "MOVEMENT_REASON_REQUIRED"),
-        ({"type": "purchase", "quantity": 5, "purchase_price": 1, "reason": "x",
+        ({"type": "purchase", "quantity": 5, "purchase_total": 1, "reason": "  "}, "MOVEMENT_REASON_REQUIRED"),
+        ({"type": "purchase", "quantity": 5, "purchase_total": 1, "reason": "x",
           "occurred_on": today_lima() + timedelta(days=1)}, "MOVEMENT_DATE_IN_FUTURE"),
-        ({"type": "purchase", "quantity": 5, "purchase_price": 1, "reason": "x", "location": "Otra van"},
+        ({"type": "purchase", "quantity": 5, "purchase_total": 1, "reason": "x", "location": "Otra van"},
          "LOCATION_INVALID"),
         ({"type": "purchase", "quantity": 5, "reason": "x"}, "MOVEMENT_PRICE_REQUIRED"),
-        ({"type": "waste", "quantity": 5, "purchase_price": 1, "reason": "x"}, "MOVEMENT_PRICE_NOT_ALLOWED"),
-        ({"type": "purchase", "quantity": 5, "purchase_quantity": 1, "purchase_price": 1, "reason": "x"},
-         "MOVEMENT_QUANTITY_INVALID"),
-        ({"type": "waste", "purchase_quantity": 1, "reason": "x"}, "MOVEMENT_QUANTITY_INVALID"),
+        ({"type": "waste", "quantity": 5, "purchase_total": 1, "reason": "x"}, "MOVEMENT_PRICE_NOT_ALLOWED"),
+        ({"type": "purchase", "quantity": 0, "purchase_total": 1, "reason": "x"}, "MOVEMENT_QUANTITY_INVALID"),
     ]
     for kwargs, code in cases:
         with pytest.raises(HTTPException) as exc:
@@ -346,9 +356,10 @@ def test_purchase_price_updates_weighted_average_cost():
                                     actor_id=ADMIN))
     assert initial.unit_cost == pytest.approx(185 / 3785, rel=1e-5)
     assert repo.supplies[shampoo.id].purchase_cost == 185  # sin precio: no cambia el costo
-    bought = _run(register.execute(type="purchase", supply_id=shampoo.id, purchase_quantity=2, purchase_price=215,
+    # Se compra la cantidad real (2 galones = 7570 ml) por el total pagado (S/ 430 = S/ 215 por galón)
+    bought = _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=7570, purchase_total=430,
                                    reason="F001-2", actor_id=ADMIN))
-    assert (bought.quantity, bought.purchase_quantity, bought.purchase_price) == (7570, 2, 215)
+    assert (bought.quantity, bought.purchase_total) == (7570, 430)
     assert bought.unit_cost == pytest.approx(215 / 3785, rel=1e-5)          # la compra queda a su precio
     assert repo.supplies[shampoo.id].purchase_cost == pytest.approx(205, abs=0.01)  # (1×185 + 2×215) ÷ 3
     # Después la merma sale al costo promedio
@@ -388,12 +399,83 @@ def test_weighted_cost_ignores_negative_stock():
     assert weighted_unit_cost(100, 1.0, 100, 2.0) == 1.5
 
 
+def test_purchase_in_real_quantity_with_total_paid():
+    """Agua en recarga de 200 L: se compran 100 L por S/ 50 → S/ 0,50 por L, sin poner «0,5 recargas»."""
+    repo = _Repo()
+    water = _supply(repo, name="Agua", content=200, cost=120, consumption_unit="L")   # S/ 0,60 por L
+    register = RegisterMovement(repo=repo)
+    bought = _run(register.execute(type="purchase", supply_id=water.id, quantity=100, purchase_total=50,
+                                   reason="B001-9", actor_id=ADMIN))
+    assert (bought.quantity, bought.purchase_total, bought.unit_cost) == (100, 50, 0.5)
+    assert repo.supplies[water.id].purchase_cost == 100.0   # sin stock previo: 0,50 × 200 L
+
+
+def test_edit_movement_recalculates_stock_and_keeps_history():
+    repo = _Repo()
+    water = _supply(repo, name="Agua", content=200, cost=120, consumption_unit="L")
+    other = _supply(repo, name="Shampoo")
+    register, editor = RegisterMovement(repo=repo), EditMovement(repo=repo)
+    bought = _run(register.execute(type="purchase", supply_id=water.id, quantity=100, purchase_total=50,
+                                   reason="B001-9", actor_id=ADMIN))
+    cost_after_purchase = repo.supplies[water.id].purchase_cost
+    edited = _run(editor.execute(bought.id, changes={"quantity": 80, "reason": "B001-10"}, edit_reason=" Error de tipeo ",
+                                 actor_id=ADMIN))
+    assert (edited.quantity, edited.unit_cost, edited.reason) == (80, 0.625, "B001-10")   # 50 ÷ 80
+    assert (edited.edited_by, edited.can_edit) == (ADMIN, True)
+    [row_water, _] = _run(ListSupplies(repo=repo).execute())
+    assert row_water.stock == 80
+    assert repo.supplies[water.id].purchase_cost == cost_after_purchase  # el promedio no se recalcula
+    [edit] = repo.edits
+    assert edit.reason == "Error de tipeo"
+    assert edit.changes == {"quantity": {"before": 100, "after": 80}, "unit_cost": {"before": 0.5, "after": 0.625},
+                            "reason": {"before": "B001-9", "after": "B001-10"}}
+    # Mover a otro insumo
+    moved = _run(editor.execute(bought.id, changes={"supply_id": other.id}, edit_reason="Insumo equivocado", actor_id=ADMIN))
+    assert moved.supply_id == other.id and moved.unit_cost == 0.625
+    # Ajuste: cambiar la dirección invierte el signo
+    adj = _run(register.execute(type="adjustment", direction="out", supply_id=water.id, quantity=5, reason="Conteo",
+                                actor_id=ADMIN))
+    flipped = _run(editor.execute(adj.id, changes={"direction": "in"}, edit_reason="Era entrada", actor_id=ADMIN))
+    assert flipped.quantity == 5
+
+
+def test_edit_movement_rules():
+    repo = _Repo()
+    water = _supply(repo, name="Agua", content=200, cost=120, consumption_unit="L")
+    register, editor = RegisterMovement(repo=repo), EditMovement(repo=repo)
+    bought = _run(register.execute(type="purchase", supply_id=water.id, quantity=100, purchase_total=50,
+                                   reason="B001-9", actor_id=ADMIN))
+    waste = _run(register.execute(type="waste", supply_id=water.id, quantity=5, reason="Fuga", actor_id=ADMIN))
+    [recipe_consumption] = _run(repo.add_movements([{
+        "occurred_on": today_lima(), "type": "consumption", "supply_id": water.id, "quantity": Decimal("-10"),
+        "unit_cost": Decimal("0.5"), "location": None, "cost_center": None, "reason": "Receta", "order_id": uuid4(),
+        "recipe_id": uuid4(),
+    }]))
+    voided = _run(register.execute(type="waste", supply_id=water.id, quantity=1, reason="x", actor_id=ADMIN))
+    _run(VoidMovement(repo=repo).execute(voided.id, reason="Duplicado", actor_id=ADMIN))
+    cases = [
+        (bought.id, {"quantity": 90}, " ", "EDIT_REASON_REQUIRED"),
+        (uuid4(), {"quantity": 90}, "x", "MOVEMENT_NOT_FOUND"),
+        (recipe_consumption.id, {"quantity": 9}, "x", "MOVEMENT_NOT_EDITABLE"),
+        (voided.id, {"quantity": 2}, "x", "MOVEMENT_NOT_EDITABLE"),
+        (bought.id, {"quantity": 100}, "x", "MOVEMENT_UNCHANGED"),
+        (bought.id, {"purchase_total": None}, "x", "MOVEMENT_PRICE_REQUIRED"),
+        (waste.id, {"purchase_total": 3}, "x", "MOVEMENT_PRICE_NOT_ALLOWED"),
+        (bought.id, {"occurred_on": today_lima() + timedelta(days=1)}, "x", "MOVEMENT_DATE_IN_FUTURE"),
+        (bought.id, {"supply_id": uuid4()}, "x", "SUPPLY_NOT_FOUND"),
+    ]
+    for movement_id, changes, reason, code in cases:
+        with pytest.raises(HTTPException) as exc:
+            _run(editor.execute(movement_id, changes=changes, edit_reason=reason, actor_id=ADMIN))
+        assert _detail(exc)["code"] == code, code
+
+
 def test_void_manual_movement_stops_counting():
     repo = _Repo()
     shampoo = _supply(repo)
     register = RegisterMovement(repo=repo)
-    _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=3785, purchase_price=185, reason="F001-1", actor_id=ADMIN))
-    wrong = _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=3785, purchase_price=185, reason="F001-1", actor_id=ADMIN))
+    _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=3785, purchase_total=185, reason="F001-1", actor_id=ADMIN))
+    wrong = _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=3785, purchase_total=185, reason="F001-1", actor_id=ADMIN))
     assert wrong.can_void
     voided = _run(VoidMovement(repo=repo).execute(wrong.id, reason=" Duplicado ", actor_id=ADMIN))
     assert (voided.is_voided, voided.can_void, voided.void_reason, voided.voided_by) == (True, False, "Duplicado", ADMIN)
@@ -429,13 +511,13 @@ def test_order_consumption_cannot_be_voided():
 def test_supply_and_void_repository_roundtrip_sqlite():
     """Marca, proveedores y anulación con el repositorio real."""
     from app.modules.iam.infra.models import UserModel
-    from app.modules.inventory.infra.models import MovementModel
+    from app.modules.inventory.infra.models import MovementEditModel, MovementModel
 
     async def scenario():
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all, tables=[
-                UserModel.__table__, SupplyModel.__table__, MovementModel.__table__,
+                UserModel.__table__, SupplyModel.__table__, MovementModel.__table__, MovementEditModel.__table__,
             ])
         session = async_sessionmaker(engine, expire_on_commit=False)()
         repo = PostgresInventoryRepository(session=session)
@@ -458,6 +540,15 @@ def test_supply_and_void_repository_roundtrip_sqlite():
         assert [m.id for m in await repo.list_movements(include_voided=True)] == [b.id, a.id]
         voided = await repo.get_movement(b.id)
         assert (voided.is_voided, voided.void_reason, voided.voided_by) == (True, "Duplicado", ADMIN)
+        # Edición con historial; un anulado ya no se edita
+        changes = {"quantity": {"before": 3.785, "after": 2.0}}
+        assert await repo.edit_movement(a.id, {"quantity": Decimal("2")}, actor_id=ADMIN, reason="Tipeo", changes=changes)
+        assert not await repo.edit_movement(b.id, {"quantity": Decimal("1")}, actor_id=ADMIN, reason="x", changes={})
+        edited = await repo.get_movement(a.id)
+        assert (edited.quantity, edited.edited_by) == (2.0, ADMIN) and edited.edited_at is not None
+        [edit] = await repo.list_movement_edits(a.id)
+        assert (edit.reason, edit.changes, edit.edited_by) == ("Tipeo", changes, ADMIN)
+        assert (await repo.stock_by_supply())[supply.id] == pytest.approx(2.0)
         await session.close()
         await engine.dispose()
     _run(scenario())

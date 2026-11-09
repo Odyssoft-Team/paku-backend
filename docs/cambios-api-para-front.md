@@ -762,3 +762,21 @@ dispara no se le notifica.
   (= `price` ÷ (1 + IGV)) y `margin` pasa a ser **precio sin IGV − costo total** (antes: precio − costo). `RecipeOut`
   suma `igv_percent` (de Parámetros generales). Solo recetas: simulador, costo de orden y campañas no cambian.
 - **Compatible** (mismo campo `margin`, valor nuevo). **Sin migración.** **Apps:** admin (Insumos, Recetas y costeo).
+
+## C-50 · Inventario: compra con cantidad real y total pagado; editar movimientos (feature 0021, 2026-11-09)
+
+- **Registrar movimiento** (`POST /admin/inventory/movements`): `quantity` vuelve a ser **obligatoria** y siempre en
+  unidad de consumo (100 L). Se quitan `purchase_quantity` y `purchase_price` (C-48); ahora va `purchase_total`
+  (S/ pagado por la entrada): obligatorio en `purchase`, opcional en `initial_stock`. Costo por unidad = total ÷
+  cantidad; el costo del insumo pasa al promedio ponderado. `MovementOut`: `purchase_total` en lugar de
+  `purchase_quantity` / `purchase_price`.
+- **Nuevo:** `PATCH /admin/inventory/movements/{id}` con `edit_reason` (obligatorio) y solo lo que cambia:
+  `occurred_on`, `supply_id`, `quantity`, `purchase_total` (null lo quita; en compra es obligatorio), `direction`
+  (ajustes), `reason`, `location`, `cost_center`, `lot`, `expires_on`. El tipo no se edita. El costo promedio del
+  insumo no se recalcula. 404 `MOVEMENT_NOT_FOUND` / `SUPPLY_NOT_FOUND`; 409 `MOVEMENT_NOT_EDITABLE` (anulado o
+  consumo por receta) / `MOVEMENT_UNCHANGED` / `SUPPLY_INACTIVE`; 422 `EDIT_REASON_REQUIRED` y las reglas del registro.
+- **Nuevo:** `GET /admin/inventory/movements/{id}/edits` → `[{id, edited_at, edited_by, edited_by_name, reason,
+  changes: {campo: {before, after}}}]`, la más reciente primero.
+- `MovementOut` suma `can_edit`, `edited_at` y `edited_by_name`.
+- **Rompe** C-48 (no desplegado): quien envíe `purchase_quantity` / `purchase_price` debe enviar `quantity` y
+  `purchase_total`. **Migración:** `8f9a0b1c2d3e` (backfill del total en las entradas con precio). **Apps:** admin.
