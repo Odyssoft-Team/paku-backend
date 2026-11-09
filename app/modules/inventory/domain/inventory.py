@@ -1,7 +1,8 @@
 """Inventario de insumos (feature 0009).
 
-- El stock de un insumo es la suma de sus movimientos (con signo). Nada se borra: los errores se corrigen
-  con un ajuste.
+- El stock de un insumo es la suma de sus movimientos (con signo) no anulados. Nada se borra: un movimiento
+  manual se puede anular (queda en el historial con quién, cuándo y por qué, y deja de contar); el consumo
+  automático de una orden no se anula.
 - Cada movimiento guarda el costo por unidad de consumo vigente al registrarlo; cambiar después el costo
   del insumo no cambia el costo de lo ya consumido.
 - Las recetas tienen la misma forma que la tabla de precios: una tabla por servicio y por adicional, con
@@ -29,7 +30,7 @@ CATEGORIES: dict[str, str] = {
     "cleaning": "Limpieza",
     "spare_part": "Repuesto",
 }
-CONSUMPTION_UNITS: tuple[str, ...] = ("ml", "g", "unidad")
+CONSUMPTION_UNITS: tuple[str, ...] = ("ml", "L", "g", "unidad")
 
 # Ubicaciones y centros de costo (confirmados por el dueño 2026-10-29: una sola van por ahora)
 LOCATIONS: tuple[str, ...] = ("Almacén central", "Paku 01")
@@ -50,6 +51,8 @@ MOVEMENT_TYPES: dict[str, tuple[str, int]] = {
     "adjustment": ("Ajuste", 0),
     "waste": ("Merma", -1),
 }
+# Los que llevan precio de compra (S/ por unidad de compra): obligatorio en compra, opcional en stock inicial
+PRICED_MOVEMENT_TYPES: tuple[str, ...] = ("purchase", "initial_stock")
 
 # Tramos de peso del documento (W01…W06) = tramos de la tabla de precios. Solo para mostrar el tamaño de una
 # mascota (CRM); las recetas guardan el tramo como en los precios (weight_min / weight_max).
@@ -89,6 +92,9 @@ class Supply:
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    brand: Optional[str] = None
+    description: Optional[str] = None
+    suppliers: list[dict] = field(default_factory=list)   # ver SUPPLIER_FIELDS
 
     @property
     def unit_cost(self) -> float:
@@ -116,6 +122,26 @@ class Movement:
     expires_on: Optional[date] = None
     created_by: Optional[UUID] = None   # None = sistema (consumo automático)
     created_by_name: Optional[str] = None
+    purchase_quantity: Optional[float] = None   # en unidades de compra, si se ingresó así
+    purchase_price: Optional[float] = None      # S/ por unidad de compra pagado en esta entrada
+    voided_at: Optional[datetime] = None
+    voided_by: Optional[UUID] = None
+    voided_by_name: Optional[str] = None
+    void_reason: Optional[str] = None
+
+    @property
+    def is_voided(self) -> bool:
+        return self.voided_at is not None
+
+    @property
+    def is_recipe_consumption(self) -> bool:
+        """Consumo generado por la receta de una orden terminada (lo usa el costeo de la orden)."""
+        return self.type == "consumption" and self.recipe_id is not None
+
+    @property
+    def can_void(self) -> bool:
+        """Se anulan solo los manuales; el consumo por receta de una orden queda."""
+        return not self.is_voided and not self.is_recipe_consumption
 
     @property
     def code(self) -> str:
@@ -170,6 +196,24 @@ class Recipe:
 
 # ─── Reglas ──────────────────────────────────────────────────────────────────
 
+# Proveedores de un insumo (feature 0021): lista propia de cada insumo; solo el nombre es obligatorio.
+SUPPLIER_FIELDS: tuple[str, ...] = ("name", "phone", "address", "bank_account", "ruc")
+
+
+def normalize_suppliers(raw: Any) -> list[dict]:
+    """Limpia la lista de proveedores. Vacío = sin dato. Lanza ValueError(código, índice) si algo no cumple."""
+    out: list[dict] = []
+    for i, item in enumerate(raw or []):
+        item = item if isinstance(item, dict) else {}
+        clean = {k: (str(item.get(k) or "").strip() or None) for k in SUPPLIER_FIELDS}
+        if not clean["name"]:
+            raise ValueError("SUPPLIER_NAME_REQUIRED", i)
+        if clean["ruc"] and not (clean["ruc"].isdigit() and len(clean["ruc"]) == 11):
+            raise ValueError("SUPPLIER_RUC_INVALID", i)
+        out.append(clean)
+    return out
+
+
 def stock_status(stock: float, min_stock: float) -> str:
     """`out` (agotado), `low` (bajo el mínimo) u `ok`."""
     if stock <= 0:
@@ -183,6 +227,15 @@ def signed_quantity(movement_type: str, quantity: float, direction: Optional[str
     if sign == 0:
         sign = 1 if direction == "in" else -1
     return sign * abs(quantity)
+
+
+def weighted_unit_cost(stock: float, current_unit_cost: float, quantity: float, new_unit_cost: float) -> float:
+    """Costo promedio ponderado por unidad de consumo tras una entrada con precio. Un stock negativo cuenta como 0."""
+    stock = max(stock, 0.0)
+    total = stock + quantity
+    if total <= 0:
+        return new_unit_cost
+    return (stock * current_unit_cost + quantity * new_unit_cost) / total
 
 
 def next_code(existing: list[str], prefix: str, width: int = 3) -> str:

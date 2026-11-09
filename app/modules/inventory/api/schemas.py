@@ -25,10 +25,30 @@ class InventoryConfigOut(BaseModel):
 
 # ─── Insumos ─────────────────────────────────────────────────────────────────
 
+class SupplierIn(BaseModel):
+    """Proveedor de un insumo. Solo el nombre es obligatorio; vacío = sin dato."""
+    name: str = Field(min_length=1, max_length=200)
+    phone: Optional[str] = Field(default=None, max_length=30)
+    address: Optional[str] = Field(default=None, max_length=300)
+    bank_account: Optional[str] = Field(default=None, max_length=100, description="Banco y número de cuenta / CCI")
+    ruc: Optional[str] = Field(default=None, max_length=11, description="11 dígitos")
+
+
+class SupplierOut(BaseModel):
+    name: str
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    bank_account: Optional[str] = None
+    ruc: Optional[str] = None
+
+
 class SupplyOut(BaseModel):
     id: UUID
     sku: str
     name: str
+    brand: Optional[str] = None
+    description: Optional[str] = None
+    suppliers: list[SupplierOut] = Field(default_factory=list)
     category: str
     category_label: str
     purchase_unit: str
@@ -49,6 +69,9 @@ class SupplyOut(BaseModel):
 
 class SupplyCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    brand: Optional[str] = Field(default=None, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    suppliers: list[SupplierIn] = Field(default_factory=list)
     category: str
     purchase_unit: str = Field(min_length=1, max_length=50)
     purchase_content: float = Field(gt=0)
@@ -62,6 +85,9 @@ class SupplyCreateIn(BaseModel):
 class SupplyUpdateIn(BaseModel):
     """Solo las claves enviadas. Cambiar el costo no cambia el de lo ya registrado."""
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    brand: Optional[str] = Field(default=None, max_length=100, description="Vacío o null = sin marca")
+    description: Optional[str] = Field(default=None, max_length=2000, description="Vacío o null = sin descripción")
+    suppliers: Optional[list[SupplierIn]] = Field(default=None, description="Reemplaza la lista completa")
     category: Optional[str] = None
     purchase_unit: Optional[str] = Field(default=None, min_length=1, max_length=50)
     purchase_content: Optional[float] = Field(default=None, gt=0)
@@ -98,12 +124,30 @@ class MovementOut(BaseModel):
     created_by: Optional[UUID] = None
     created_by_name: Optional[str] = Field(default=None, description="null = sistema (consumo automático)")
     created_at: datetime
+    purchase_quantity: Optional[float] = Field(default=None, description="Cantidad en unidades de compra, si se ingresó así")
+    purchase_price: Optional[float] = Field(default=None, description="S/ por unidad de compra pagado en esta entrada")
+    voided_at: Optional[datetime] = Field(default=None, description="null = vigente; anulado no cuenta en el stock")
+    voided_by: Optional[UUID] = None
+    voided_by_name: Optional[str] = None
+    void_reason: Optional[str] = None
+    can_void: bool = Field(default=False, description="Manual y vigente: se puede anular")
+
+
+class MovementVoidIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=500, description="Motivo de la anulación")
 
 
 class MovementCreateIn(BaseModel):
     type: Literal["initial_stock", "purchase", "consumption", "adjustment", "waste"]
     supply_id: UUID
-    quantity: float = Field(gt=0, description="Siempre positiva; el signo sale del tipo (o de direction)")
+    quantity: Optional[float] = Field(
+        default=None, gt=0, description="En unidad de consumo, siempre positiva; el signo sale del tipo (o de direction). "
+        "Enviar quantity o purchase_quantity, no ambos")
+    purchase_quantity: Optional[float] = Field(
+        default=None, gt=0, description="En unidades de compra (solo purchase / initial_stock); se convierte con el contenido")
+    purchase_price: Optional[float] = Field(
+        default=None, ge=0, description="S/ por unidad de compra. Obligatorio en purchase, opcional en initial_stock; "
+        "el costo del insumo pasa al promedio ponderado")
     direction: Optional[Literal["in", "out"]] = Field(default=None, description="Obligatorio en adjustment")
     occurred_on: Optional[date] = Field(default=None, description="Por defecto hoy (Lima); no puede ser futura")
     location: Optional[str] = None

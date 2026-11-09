@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Identity, Index, Integer, Numeric, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Identity, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -23,6 +23,10 @@ class SupplyModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     sku: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    brand: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # [{name, phone, address, bank_account, ruc}] — solo name obligatorio
+    suppliers: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     category: Mapped[str] = mapped_column(String(30), nullable=False)
     purchase_unit: Mapped[str] = mapped_column(String(50), nullable=False)
     purchase_content: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
@@ -37,7 +41,7 @@ class SupplyModel(Base):
 
 
 class MovementModel(Base):
-    """Movimiento de stock. No se edita ni se borra: los errores se corrigen con un ajuste."""
+    """Movimiento de stock. No se edita ni se borra; uno manual se puede anular (voided_at) y deja de contar."""
     __tablename__ = "inventory_movements"
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
@@ -59,6 +63,13 @@ class MovementModel(Base):
     expires_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_by: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)  # null = sistema
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    # Entrada con precio (feature 0021): cantidad en unidades de compra y S/ por unidad de compra
+    purchase_quantity: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 3), nullable=True)
+    purchase_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    # Anulación (feature 0021): null = vigente
+    voided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    voided_by: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_inventory_movements_occurred_on", "occurred_on"),

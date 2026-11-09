@@ -17,6 +17,7 @@ from app.modules.inventory.api.schemas import (
     MissingRecipeOut,
     MovementCreateIn,
     MovementOut,
+    MovementVoidIn,
     OrderCostCellOut,
     OrderCostLineOut,
     OrderCostOut,
@@ -35,6 +36,7 @@ from app.modules.inventory.api.schemas import (
     SimulationLineOut,
     SimulationOut,
     SimulationSupplyOut,
+    SupplierOut,
     SupplyCreateIn,
     SupplyOut,
     SupplyUpdateIn,
@@ -49,6 +51,7 @@ from app.modules.inventory.app.use_cases import (
     SaveRecipe,
     SupplyRow,
     UpdateSupply,
+    VoidMovement,
     cell_supplies_cost,
     order_labor_rates,
 )
@@ -114,7 +117,8 @@ async def inventory_config(_: CurrentUser = Depends(require_roles("admin"))) -> 
 def _supply_out(row: SupplyRow) -> SupplyOut:
     s = row.supply
     return SupplyOut(
-        id=s.id, sku=s.sku, name=s.name, category=s.category, category_label=CATEGORIES.get(s.category, s.category),
+        id=s.id, sku=s.sku, name=s.name, brand=s.brand, description=s.description,
+        suppliers=[SupplierOut(**x) for x in s.suppliers], category=s.category, category_label=CATEGORIES.get(s.category, s.category),
         purchase_unit=s.purchase_unit, purchase_content=s.purchase_content, consumption_unit=s.consumption_unit,
         purchase_cost=s.purchase_cost, unit_cost=round(s.unit_cost, 6), min_stock=s.min_stock,
         tracks_lot=s.tracks_lot, tracks_expiry=s.tracks_expiry, is_active=s.is_active,
@@ -151,6 +155,10 @@ async def update_supply(
 ) -> SupplyOut:
     """Edita o desactiva (`is_active`) un insumo. Solo cambia lo enviado."""
     fields = {k: getattr(payload, k) for k in payload.model_fields_set}
+    if fields.get("suppliers") is not None:
+        fields["suppliers"] = [x.model_dump() for x in payload.suppliers]
+    elif "suppliers" in fields:
+        fields["suppliers"] = []
     return _supply_out(await UpdateSupply(repo=repo).execute(supply_id, fields=fields))
 
 
@@ -167,6 +175,9 @@ def _movement_out(m: Movement, supply: Optional[Supply]) -> MovementOut:
         unit_cost=m.unit_cost, cost=round(m.cost, 2), location=m.location, cost_center=m.cost_center,
         order_id=m.order_id, recipe_id=m.recipe_id, reason=m.reason, lot=m.lot, expires_on=m.expires_on,
         created_by=m.created_by, created_by_name=m.created_by_name, created_at=m.created_at,
+        purchase_quantity=m.purchase_quantity, purchase_price=m.purchase_price,
+        voided_at=m.voided_at, voided_by=m.voided_by, voided_by_name=m.voided_by_name, void_reason=m.void_reason,
+        can_void=m.can_void,
     )
 
 
@@ -177,13 +188,15 @@ async def list_movements(
     order_id: Optional[UUID] = Query(None),
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    include_voided: bool = Query(False, description="Incluir los anulados (marcados con voided_at)"),
     limit: int = Query(500, ge=1, le=5000),
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresInventoryRepository = Depends(get_repo),
 ) -> list[MovementOut]:
-    """Movimientos del más reciente al más antiguo (fecha y número)."""
+    """Movimientos del más reciente al más antiguo (fecha y número). Sin los anulados salvo `include_voided`."""
     movements = await repo.list_movements(
-        type=type, supply_id=supply_id, order_id=order_id, date_from=date_from, date_to=date_to, limit=limit,
+        type=type, supply_id=supply_id, order_id=order_id, date_from=date_from, date_to=date_to,
+        include_voided=include_voided, limit=limit,
     )
     supplies = await repo.get_supplies(list({m.supply_id for m in movements}))
     return [_movement_out(m, supplies.get(m.supply_id)) for m in movements]
@@ -195,14 +208,28 @@ async def register_movement(
     current: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresInventoryRepository = Depends(get_repo),
 ) -> MovementOut:
-    """Registra un movimiento manual. No se editan ni se borran: los errores se corrigen con un ajuste."""
+    """Registra un movimiento manual. No se editan ni se borran: un manual se puede anular (POST …/void)."""
     movement = await RegisterMovement(repo=repo).execute(
-        type=payload.type, supply_id=payload.supply_id, quantity=payload.quantity, direction=payload.direction,
+        type=payload.type, supply_id=payload.supply_id, quantity=payload.quantity,
+        purchase_quantity=payload.purchase_quantity, purchase_price=payload.purchase_price, direction=payload.direction,
         occurred_on=payload.occurred_on, location=payload.location, cost_center=payload.cost_center,
         order_id=payload.order_id, reason=payload.reason, lot=payload.lot, expires_on=payload.expires_on,
         actor_id=current.id,
     )
     return _movement_out(await repo.get_movement(movement.id) or movement, await repo.get_supply(movement.supply_id))
+
+
+@admin_router.post("/movements/{movement_id}/void", response_model=MovementOut)
+async def void_movement(
+    movement_id: UUID,
+    payload: MovementVoidIn,
+    current: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresInventoryRepository = Depends(get_repo),
+) -> MovementOut:
+    """Anula un movimiento manual: queda en el historial y deja de contar en el stock. 404 MOVEMENT_NOT_FOUND;
+    409 MOVEMENT_ALREADY_VOIDED / MOVEMENT_NOT_VOIDABLE (consumo de una orden); 422 VOID_REASON_REQUIRED."""
+    movement = await VoidMovement(repo=repo).execute(movement_id, reason=payload.reason, actor_id=current.id)
+    return _movement_out(movement, await repo.get_supply(movement.supply_id))
 
 
 @admin_router.get("/summary", response_model=InventorySummaryOut)

@@ -35,7 +35,8 @@ class PostgresInventoryRepository:
     @staticmethod
     def _to_supply(m: SupplyModel) -> Supply:
         return Supply(
-            id=m.id, sku=m.sku, name=m.name, category=m.category, purchase_unit=m.purchase_unit,
+            id=m.id, sku=m.sku, name=m.name, brand=m.brand, description=m.description,
+            suppliers=list(m.suppliers or []), category=m.category, purchase_unit=m.purchase_unit,
             purchase_content=_f(m.purchase_content), consumption_unit=m.consumption_unit,
             purchase_cost=_f(m.purchase_cost), min_stock=_f(m.min_stock), tracks_lot=bool(m.tracks_lot),
             tracks_expiry=bool(m.tracks_expiry), is_active=bool(m.is_active),
@@ -86,8 +87,13 @@ class PostgresInventoryRepository:
         return self._to_supply(m)
 
     async def stock_by_supply(self, *, until: Optional[date] = None) -> dict[UUID, float]:
-        """Stock de cada insumo = suma de sus movimientos (con `until`: los de fecha hasta ese día, incluido)."""
-        stmt = select(MovementModel.supply_id, func.sum(MovementModel.quantity)).group_by(MovementModel.supply_id)
+        """Stock de cada insumo = suma de sus movimientos no anulados (con `until`: los de fecha hasta ese día,
+        incluido)."""
+        stmt = (
+            select(MovementModel.supply_id, func.sum(MovementModel.quantity))
+            .where(MovementModel.voided_at.is_(None))
+            .group_by(MovementModel.supply_id)
+        )
         if until is not None:
             stmt = stmt.where(MovementModel.occurred_on <= until)
         return {sid: _f(total) for sid, total in (await self._session.execute(stmt)).all()}
@@ -97,13 +103,18 @@ class PostgresInventoryRepository:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _to_movement(m: MovementModel, created_by_name: Optional[str] = None) -> Movement:
+    def _to_movement(
+        m: MovementModel, created_by_name: Optional[str] = None, voided_by_name: Optional[str] = None
+    ) -> Movement:
         return Movement(
             id=m.id, seq=m.seq, occurred_on=m.occurred_on, type=m.type, supply_id=m.supply_id,
             quantity=_f(m.quantity), unit_cost=_f(m.unit_cost), location=m.location, cost_center=m.cost_center,
             reason=m.reason, created_at=m.created_at, order_id=m.order_id, recipe_id=m.recipe_id,
             recipe_cell_id=m.recipe_cell_id, lot=m.lot,
             expires_on=m.expires_on, created_by=m.created_by, created_by_name=created_by_name,
+            purchase_quantity=None if m.purchase_quantity is None else float(m.purchase_quantity),
+            purchase_price=None if m.purchase_price is None else float(m.purchase_price),
+            voided_at=m.voided_at, voided_by=m.voided_by, voided_by_name=voided_by_name, void_reason=m.void_reason,
         )
 
     async def add_movements(self, movements: list[dict], *, commit: bool = True) -> list[Movement]:
@@ -120,14 +131,27 @@ class PostgresInventoryRepository:
 
     @staticmethod
     def _with_author():
-        """SELECT de movimientos con el nombre de quien lo registró (null = sistema)."""
+        """SELECT de movimientos con el nombre de quien lo registró (null = sistema) y de quien lo anuló."""
+        from sqlalchemy.orm import aliased
+
         from app.modules.iam.infra.models import UserModel
 
-        name = func.concat(UserModel.first_name, " ", UserModel.last_name)
-        return select(MovementModel, name).outerjoin(UserModel, UserModel.id == MovementModel.created_by)
+        author, voider = aliased(UserModel), aliased(UserModel)
+        return (
+            select(
+                MovementModel,
+                func.concat(author.first_name, " ", author.last_name),
+                func.concat(voider.first_name, " ", voider.last_name),
+            )
+            .outerjoin(author, author.id == MovementModel.created_by)
+            .outerjoin(voider, voider.id == MovementModel.voided_by)
+        )
 
     def _rows_to_movements(self, rows) -> list[Movement]:
-        return [self._to_movement(m, ((n or "").strip() or None) if m.created_by else None) for m, n in rows]
+        def clean(name, user_id):
+            return ((name or "").strip() or None) if user_id else None
+
+        return [self._to_movement(m, clean(n, m.created_by), clean(v, m.voided_by)) for m, n, v in rows]
 
     async def get_movement(self, movement_id: UUID) -> Optional[Movement]:
         rows = (await self._session.execute(self._with_author().where(MovementModel.id == movement_id))).all()
@@ -142,14 +166,17 @@ class PostgresInventoryRepository:
         order_id: Optional[UUID] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        include_voided: bool = False,
         limit: int = 500,
     ) -> list[Movement]:
-        """Del más reciente al más antiguo (fecha y número)."""
+        """Del más reciente al más antiguo (fecha y número). Sin los anulados salvo `include_voided`."""
         stmt = (
             self._with_author()
             .order_by(desc(MovementModel.occurred_on), desc(MovementModel.seq))
             .limit(limit)
         )
+        if not include_voided:
+            stmt = stmt.where(MovementModel.voided_at.is_(None))
         if type:
             stmt = stmt.where(MovementModel.type == type)
         if supply_id:
@@ -162,6 +189,16 @@ class PostgresInventoryRepository:
             stmt = stmt.where(MovementModel.occurred_on <= date_to)
         return self._rows_to_movements((await self._session.execute(stmt)).all())
 
+    async def void_movement(self, movement_id: UUID, *, actor_id: UUID, reason: str) -> bool:
+        """Marca el movimiento como anulado si aún no lo está. False si no existe o ya estaba anulado."""
+        result = await self._session.execute(
+            update(MovementModel)
+            .where(MovementModel.id == movement_id, MovementModel.voided_at.is_(None))
+            .values(voided_at=utcnow(), voided_by=actor_id, void_reason=reason)
+        )
+        await self._session.commit()
+        return (result.rowcount or 0) > 0
+
     async def has_order_consumption(self, order_id: UUID) -> bool:
         stmt = select(MovementModel.id).where(
             MovementModel.order_id == order_id, MovementModel.type == "consumption"
@@ -173,7 +210,7 @@ class PostgresInventoryRepository:
         stmt = select(
             func.coalesce(func.sum(-MovementModel.quantity * MovementModel.unit_cost), 0),
             func.count(func.distinct(MovementModel.order_id)),
-        ).where(MovementModel.type == "consumption")
+        ).where(MovementModel.type == "consumption", MovementModel.voided_at.is_(None))
         if date_from:
             stmt = stmt.where(MovementModel.occurred_on >= date_from)
         if date_to:

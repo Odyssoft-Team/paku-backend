@@ -22,8 +22,8 @@ según su receta y dar el costo de cada orden (insumos + mano de obra del groome
 
 - Comisión de pasarela, variable del groomer y otros costos directos del costeo (Finanzas).
 - Stock por ubicación (hay una sola van): el stock es global; la ubicación queda como dato del movimiento.
-- Lotes con stock propio, alertas de vencimiento, proveedores y órdenes de compra.
-- Costo promedio ponderado: se usa el costo estándar del insumo.
+- Lotes con stock propio, alertas de vencimiento y órdenes de compra. (Proveedores por insumo: feature 0021.)
+- Costo promedio ponderado: se usa el costo estándar del insumo. (Desde la feature 0021 la compra lleva precio y el costo pasa al promedio ponderado.)
 
 ## Comportamiento esperado
 
@@ -32,7 +32,7 @@ según su receta y dar el costo de cada orden (insumos + mano de obra del groome
 2. **Dado** un insumo, **entonces** su stock es la suma de sus movimientos; estado `out` (≤ 0), `low` (bajo
    el mínimo) u `ok`; valor = max(stock, 0) × costo por unidad.
 3. **Dado** un movimiento manual, **entonces** compra y stock inicial suman, merma y consumo restan y el
-   ajuste suma (entrada) o resta (salida). Motivo obligatorio. Nada se borra: se corrige con un ajuste.
+   ajuste suma (entrada) o resta (salida). Motivo obligatorio. Nada se borra: se corrige con un ajuste. (Desde la feature 0021 un movimiento manual se puede anular.)
 4. **Dado** cada movimiento, **entonces** guarda el costo por unidad del momento.
 5. **Dada** una receta, **entonces** tiene la misma forma que la tabla de precios: una por servicio y una
    por adicional (los adicionales existen por servicio, igual que sus precios), filas = tipo de pelaje +

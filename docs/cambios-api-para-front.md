@@ -734,3 +734,22 @@ dispara no se le notifica.
 - Todavía no se emiten comprobantes (decisiones pendientes en `specs/features/0020-boletas-nubefact/spec.md`).
 - **Compatible.** **Migración:** `6d7e8f9a0b1c` (`invoicing_providers`). Usa `CREDENTIALS_ENCRYPTION_KEY` (C-44).
   **Apps:** admin (Configuración · Integraciones).
+
+## C-48 · Inventario: ficha del insumo, precio en la compra y anulación (feature 0021, 2026-11-09)
+
+- **Insumos** (`GET/POST/PATCH /admin/inventory/supplies`): nuevos `brand`, `description` (opcionales; vacío = sin
+  dato) y `suppliers: [{name, phone, address, bank_account, ruc}]` (solo `name` obligatorio; `ruc` de 11 dígitos).
+  En `PATCH`, `suppliers` reemplaza la lista completa. 422 `SUPPLIER_NAME_REQUIRED` / `SUPPLIER_RUC_INVALID` con
+  `index`. `GET /admin/inventory/config` → `consumption_units` incluye `L`.
+- **Registrar movimiento** (`POST /admin/inventory/movements`): `quantity` pasa a opcional; se envía `quantity`
+  (unidad de consumo) **o** `purchase_quantity` (unidades de compra, solo `purchase` / `initial_stock`).
+  `purchase_price` (S/ por unidad de compra) es **obligatorio en `purchase`** y opcional en `initial_stock`; el
+  movimiento queda a ese precio y el costo del insumo pasa al promedio ponderado. 422 `MOVEMENT_PRICE_REQUIRED` /
+  `MOVEMENT_PRICE_NOT_ALLOWED` / `MOVEMENT_PRICE_INVALID` / `MOVEMENT_QUANTITY_INVALID`.
+- **Nuevo:** `POST /admin/inventory/movements/{id}/void` con `{reason}` → el movimiento con `voided_at`. Deja de
+  contar en stock, valor y consumo; no se borra. 404 `MOVEMENT_NOT_FOUND`; 409 `MOVEMENT_ALREADY_VOIDED` /
+  `MOVEMENT_NOT_VOIDABLE` (consumo por receta de una orden); 422 `VOID_REASON_REQUIRED`.
+- `GET /admin/inventory/movements`: sin los anulados salvo `include_voided=true`. `MovementOut` suma
+  `purchase_quantity`, `purchase_price`, `voided_at`, `voided_by`, `voided_by_name`, `void_reason` y `can_void`.
+- **Rompe** solo para quien registre compras sin `purchase_price` (el admin ya lo envía). **Migración:**
+  `7e8f9a0b1c2d`. **Apps:** admin (Inventario · Insumos y Movimientos).

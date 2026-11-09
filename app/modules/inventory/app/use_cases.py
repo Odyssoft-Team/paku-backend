@@ -19,6 +19,7 @@ from app.modules.inventory.domain.inventory import (
     SERVICE_COST_CENTER,
     SERVICE_LOCATION,
     TARGET_TYPES,
+    PRICED_MOVEMENT_TYPES,
     ConsumptionPlan,
     Recipe,
     RecipeCell,
@@ -26,11 +27,13 @@ from app.modules.inventory.domain.inventory import (
     Supply,
     base_weight_kg,
     next_code,
+    normalize_suppliers,
     order_targets,
     plan_consumption,
     same_cells,
     signed_quantity,
     stock_status,
+    weighted_unit_cost,
 )
 from app.modules.store.domain.pricing import FALLBACK_CATEGORY
 
@@ -59,7 +62,7 @@ def supply_row(supply: Supply, stock: float) -> SupplyRow:
 
 
 _SUPPLY_FIELDS = (
-    "name", "category", "purchase_unit", "purchase_content", "consumption_unit", "purchase_cost",
+    "name", "brand", "description", "suppliers", "category", "purchase_unit", "purchase_content", "consumption_unit", "purchase_cost",
     "min_stock", "tracks_lot", "tracks_expiry", "is_active",
 )
 
@@ -72,6 +75,17 @@ def _supply_fields(fields: dict) -> dict:
             out[key] = (out[key] or "").strip()
             if not out[key]:
                 raise _invalid("SUPPLY_FIELD_REQUIRED", f"El campo {key} es obligatorio.", field=key)
+    for key in ("brand", "description"):  # opcionales: vacío = sin dato
+        if key in out:
+            out[key] = (out[key] or "").strip() or None
+    if "suppliers" in out:
+        try:
+            out["suppliers"] = normalize_suppliers(out["suppliers"])
+        except ValueError as exc:
+            code, index = exc.args
+            message = ("Cada proveedor necesita un nombre." if code == "SUPPLIER_NAME_REQUIRED"
+                       else "El RUC del proveedor tiene 11 dígitos.")
+            raise _invalid(code, message, index=index) from exc
     if "category" in out and out["category"] not in CATEGORIES:
         raise _invalid("SUPPLY_CATEGORY_INVALID", "Categoría inválida. Usa una de: " + ", ".join(CATEGORIES) + ".")
     if "consumption_unit" in out and out["consumption_unit"] not in CONSUMPTION_UNITS:
@@ -140,7 +154,10 @@ class UpdateSupply:
 
 @dataclass
 class RegisterMovement:
-    """Movimiento manual. Los consumos por servicio los registra solo `OrderConsumption`."""
+    """Movimiento manual. Los consumos por servicio los registra solo `OrderConsumption`.
+
+    Compra (obligatorio) y stock inicial (opcional) llevan `purchase_price` (S/ por unidad de compra). Esa entrada
+    se registra a ese precio y el costo del insumo pasa al promedio ponderado con el stock que había."""
     repo: Any
 
     async def execute(
@@ -148,9 +165,11 @@ class RegisterMovement:
         *,
         type: str,
         supply_id: UUID,
-        quantity: float,
         reason: str,
         actor_id: UUID,
+        quantity: Optional[float] = None,
+        purchase_quantity: Optional[float] = None,
+        purchase_price: Optional[float] = None,
         direction: Optional[str] = None,
         occurred_on: Optional[date] = None,
         location: Optional[str] = None,
@@ -161,8 +180,18 @@ class RegisterMovement:
     ):
         if type not in MOVEMENT_TYPES:
             raise _invalid("MOVEMENT_TYPE_INVALID", "Tipo inválido. Usa uno de: " + ", ".join(MOVEMENT_TYPES) + ".")
-        if not quantity or quantity <= 0:
+        if (quantity is None) == (purchase_quantity is None):
+            raise _invalid("MOVEMENT_QUANTITY_INVALID", "Indica la cantidad en unidad de consumo o en unidades de compra.")
+        if purchase_quantity is not None and type not in PRICED_MOVEMENT_TYPES:
+            raise _invalid("MOVEMENT_QUANTITY_INVALID", "Las unidades de compra solo van en compras y stock inicial.")
+        if (quantity is not None and quantity <= 0) or (purchase_quantity is not None and purchase_quantity <= 0):
             raise _invalid("MOVEMENT_QUANTITY_INVALID", "La cantidad debe ser mayor que 0.")
+        if purchase_price is not None and type not in PRICED_MOVEMENT_TYPES:
+            raise _invalid("MOVEMENT_PRICE_NOT_ALLOWED", "El precio solo va en compras y stock inicial.")
+        if type == "purchase" and purchase_price is None:
+            raise _invalid("MOVEMENT_PRICE_REQUIRED", "Indica el precio de compra por unidad de compra.")
+        if purchase_price is not None and purchase_price < 0:
+            raise _invalid("MOVEMENT_PRICE_INVALID", "El precio de compra no puede ser negativo.")
         if type == "adjustment" and direction not in ("in", "out"):
             raise _invalid("MOVEMENT_DIRECTION_REQUIRED", "Indica si el ajuste suma (in) o resta (out).")
         if not (reason or "").strip():
@@ -179,12 +208,23 @@ class RegisterMovement:
             raise _error(status.HTTP_404_NOT_FOUND, "SUPPLY_NOT_FOUND", "Insumo no encontrado.")
         if not supply.is_active:
             raise _error(status.HTTP_409_CONFLICT, "SUPPLY_INACTIVE", "El insumo está desactivado.")
+
+        if purchase_quantity is not None:
+            quantity = purchase_quantity * supply.purchase_content
+        unit_cost = supply.unit_cost
+        new_purchase_cost = None
+        if purchase_price is not None:
+            unit_cost = purchase_price / supply.purchase_content
+            stock = (await self.repo.stock_by_supply()).get(supply.id, 0.0)
+            average = weighted_unit_cost(stock, supply.unit_cost, quantity, unit_cost)
+            new_purchase_cost = Decimal(str(round(average * supply.purchase_content, 2)))
+
         [movement] = await self.repo.add_movements([{
             "occurred_on": day,
             "type": type,
             "supply_id": supply.id,
-            "quantity": Decimal(str(signed_quantity(type, quantity, direction))),
-            "unit_cost": Decimal(str(round(supply.unit_cost, 6))),
+            "quantity": Decimal(str(round(signed_quantity(type, quantity, direction), 3))),
+            "unit_cost": Decimal(str(round(unit_cost, 6))),
             "location": location,
             "cost_center": cost_center,
             "order_id": order_id,
@@ -192,8 +232,35 @@ class RegisterMovement:
             "lot": (lot or "").strip() or None,
             "expires_on": expires_on,
             "created_by": actor_id,
-        }])
+            "purchase_quantity": None if purchase_quantity is None else Decimal(str(purchase_quantity)),
+            "purchase_price": None if purchase_price is None else Decimal(str(round(purchase_price, 2))),
+        }], commit=new_purchase_cost is None)
+        if new_purchase_cost is not None:
+            # El costo del insumo pasa al promedio ponderado (misma transacción que la entrada)
+            await self.repo.update_supply(supply.id, {"purchase_cost": new_purchase_cost})
         return movement
+
+
+@dataclass
+class VoidMovement:
+    """Anula un movimiento manual: queda en el historial y deja de contar en el stock. No se borra."""
+    repo: Any
+
+    async def execute(self, movement_id: UUID, *, reason: str, actor_id: UUID):
+        reason = (reason or "").strip()
+        if not reason:
+            raise _invalid("VOID_REASON_REQUIRED", "Indica el motivo de la anulación.")
+        movement = await self.repo.get_movement(movement_id)
+        if movement is None:
+            raise _error(status.HTTP_404_NOT_FOUND, "MOVEMENT_NOT_FOUND", "Movimiento no encontrado.")
+        if movement.is_voided:
+            raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_ALREADY_VOIDED", "El movimiento ya está anulado.")
+        if movement.is_recipe_consumption:
+            raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_NOT_VOIDABLE",
+                         "El consumo automático de una orden no se puede anular.")
+        if not await self.repo.void_movement(movement.id, actor_id=actor_id, reason=reason):
+            raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_ALREADY_VOIDED", "El movimiento ya está anulado.")
+        return await self.repo.get_movement(movement.id)
 
 
 @dataclass(frozen=True)
