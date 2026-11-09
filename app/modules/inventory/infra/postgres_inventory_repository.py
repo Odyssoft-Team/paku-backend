@@ -76,14 +76,17 @@ class PostgresInventoryRepository:
         await self._session.refresh(m)
         return self._to_supply(m)
 
-    async def update_supply(self, supply_id: UUID, patch: dict) -> Supply:
+    async def update_supply(self, supply_id: UUID, patch: dict, *, commit: bool = True) -> Supply:
         m = await self._session.get(SupplyModel, supply_id)
         if m is None:
             raise ValueError("supply_not_found")
         for key, value in patch.items():
             setattr(m, key, value)
         m.updated_at = utcnow()
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
         await self._session.refresh(m)
         return self._to_supply(m)
 
@@ -197,19 +200,22 @@ class PostgresInventoryRepository:
             stmt = stmt.where(MovementModel.occurred_on <= date_to)
         return self._rows_to_movements((await self._session.execute(stmt)).all())
 
-    async def void_movement(self, movement_id: UUID, *, actor_id: UUID, reason: str) -> bool:
-        """Marca el movimiento como anulado si aún no lo está. False si no existe o ya estaba anulado."""
+    async def void_movement(self, movement_id: UUID, *, actor_id: UUID, reason: str, commit: bool = True) -> bool:
+        """Marca el movimiento como anulado si aún no lo está. False si no existe o ya estaba anulado.
+        `commit=False` deja la transacción abierta (para recalcular el costo en la misma)."""
         result = await self._session.execute(
             update(MovementModel)
             .where(MovementModel.id == movement_id, MovementModel.voided_at.is_(None))
             .values(voided_at=utcnow(), voided_by=actor_id, void_reason=reason)
         )
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
         return (result.rowcount or 0) > 0
 
     async def edit_movement(self, movement_id: UUID, values: dict, *, actor_id: UUID, reason: str,
-                            changes: dict) -> bool:
-        """Aplica la edición y guarda su historial en la misma transacción. False si ya no es editable (anulado)."""
+                            changes: dict, commit: bool = True) -> bool:
+        """Aplica la edición y guarda su historial en la misma transacción. False si ya no es editable (anulado).
+        `commit=False` deja la transacción abierta (para recalcular el costo en la misma)."""
         now = utcnow()
         result = await self._session.execute(
             update(MovementModel)
@@ -221,8 +227,21 @@ class PostgresInventoryRepository:
             return False
         self._session.add(MovementEditModel(movement_id=movement_id, edited_at=now, edited_by=actor_id,
                                             reason=reason, changes=changes))
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
         return True
+
+    async def supply_movements(self, supply_id: UUID) -> list[Movement]:
+        """Todos los movimientos vigentes de un insumo, en orden (fecha y número), para recalcular su costo."""
+        rows = (await self._session.execute(
+            select(MovementModel)
+            .where(MovementModel.supply_id == supply_id, MovementModel.voided_at.is_(None))
+            .order_by(MovementModel.occurred_on, MovementModel.seq)
+        )).scalars().all()
+        return [self._to_movement(m) for m in rows]
+
+    async def commit(self) -> None:
+        await self._session.commit()
 
     async def list_movement_edits(self, movement_id: UUID) -> list[MovementEdit]:
         """Ediciones de un movimiento, de la más reciente a la más antigua, con el nombre de quien editó."""

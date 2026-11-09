@@ -29,6 +29,7 @@ from app.modules.inventory.app.use_cases import (
     order_real_minutes,
 )
 from app.modules.inventory.domain.inventory import (
+    replay_average_cost,
     MovementEdit,
     price_without_igv,
     weighted_unit_cost,
@@ -81,6 +82,7 @@ class _Repo:
         self.movements: list[Movement] = []
         self.recipes: dict[UUID, Recipe] = {}
         self.edits: list[MovementEdit] = []
+        self.commits = 0
 
     async def list_supplies(self, *, include_inactive=True):
         return [s for s in sorted(self.supplies.values(), key=lambda s: s.sku) if include_inactive or s.is_active]
@@ -103,7 +105,7 @@ class _Repo:
         self.supplies[s.id] = s
         return s
 
-    async def update_supply(self, supply_id, patch):
+    async def update_supply(self, supply_id, patch, *, commit=True):
         if supply_id not in self.supplies:
             raise ValueError("supply_not_found")
         self.supplies[supply_id] = replace(self.supplies[supply_id], **{k: _num(v) for k, v in patch.items()})
@@ -134,14 +136,14 @@ class _Repo:
     async def get_movement(self, movement_id):
         return next((m for m in self.movements if m.id == movement_id), None)
 
-    async def void_movement(self, movement_id, *, actor_id, reason):
+    async def void_movement(self, movement_id, *, actor_id, reason, commit=True):
         for i, m in enumerate(self.movements):
             if m.id == movement_id and not m.is_voided:
                 self.movements[i] = replace(m, voided_at=NOW, voided_by=actor_id, void_reason=reason)
                 return True
         return False
 
-    async def edit_movement(self, movement_id, values, *, actor_id, reason, changes):
+    async def edit_movement(self, movement_id, values, *, actor_id, reason, changes, commit=True):
         for i, m in enumerate(self.movements):
             if m.id == movement_id and not m.is_voided:
                 self.movements[i] = replace(m, edited_at=NOW, edited_by=actor_id, **{k: _num(v) for k, v in values.items()})
@@ -149,6 +151,13 @@ class _Repo:
                                                reason=reason, changes=changes))
                 return True
         return False
+
+    async def supply_movements(self, supply_id):
+        return sorted((m for m in self.movements if m.supply_id == supply_id and not m.is_voided),
+                      key=lambda m: (m.occurred_on, m.seq))
+
+    async def commit(self):
+        self.commits += 1
 
     async def has_order_consumption(self, order_id):
         return any(m.order_id == order_id and m.type == "consumption" for m in self.movements)
@@ -417,14 +426,13 @@ def test_edit_movement_recalculates_stock_and_keeps_history():
     register, editor = RegisterMovement(repo=repo), EditMovement(repo=repo)
     bought = _run(register.execute(type="purchase", supply_id=water.id, quantity=100, purchase_total=50,
                                    reason="B001-9", actor_id=ADMIN))
-    cost_after_purchase = repo.supplies[water.id].purchase_cost
     edited = _run(editor.execute(bought.id, changes={"quantity": 80, "reason": "B001-10"}, edit_reason=" Error de tipeo ",
                                  actor_id=ADMIN))
     assert (edited.quantity, edited.unit_cost, edited.reason) == (80, 0.625, "B001-10")   # 50 ÷ 80
     assert (edited.edited_by, edited.can_edit) == (ADMIN, True)
     [row_water, _] = _run(ListSupplies(repo=repo).execute())
     assert row_water.stock == 80
-    assert repo.supplies[water.id].purchase_cost == cost_after_purchase  # el promedio no se recalcula
+    assert repo.supplies[water.id].purchase_cost == 125.0   # promedio recalculado: 0,625 × 200 L
     [edit] = repo.edits
     assert edit.reason == "Error de tipeo"
     assert edit.changes == {"quantity": {"before": 100, "after": 80}, "unit_cost": {"before": 0.5, "after": 0.625},
@@ -432,6 +440,8 @@ def test_edit_movement_recalculates_stock_and_keeps_history():
     # Mover a otro insumo
     moved = _run(editor.execute(bought.id, changes={"supply_id": other.id}, edit_reason="Insumo equivocado", actor_id=ADMIN))
     assert moved.supply_id == other.id and moved.unit_cost == 0.625
+    assert repo.supplies[water.id].purchase_cost == 125.0   # sin entradas vigentes: la ficha no cambia
+    assert repo.supplies[other.id].purchase_cost == pytest.approx(0.625 * 3785, abs=0.01)
     # Ajuste: cambiar la dirección invierte el signo
     adj = _run(register.execute(type="adjustment", direction="out", supply_id=water.id, quantity=5, reason="Conteo",
                                 actor_id=ADMIN))
@@ -468,6 +478,75 @@ def test_edit_movement_rules():
         with pytest.raises(HTTPException) as exc:
             _run(editor.execute(movement_id, changes=changes, edit_reason=reason, actor_id=ADMIN))
         assert _detail(exc)["code"] == code, code
+
+
+def test_replay_average_cost():
+    def mv(seq, qty, unit_cost, total=None, day=1, voided=False):
+        return Movement(id=uuid4(), seq=seq, occurred_on=date(2026, 11, day), type="purchase", supply_id=PRODUCT_ID,
+                        quantity=qty, unit_cost=unit_cost, location=None, cost_center=None, reason="x", created_at=NOW,
+                        purchase_total=total, voided_at=NOW if voided else None)
+    # 100 a 1,00 (sin total) + 100 por S/ 200 → 1,50; sale 150; entran 50 por S/ 150 (3,00) → (50×1,5 + 50×3) ÷ 100
+    movements = [mv(1, 100, 1.0), mv(2, 100, 2.0, 200), mv(3, -150, 1.5, day=2), mv(4, 50, 3.0, 150, day=3)]
+    assert replay_average_cost(movements) == pytest.approx(2.25)
+    assert replay_average_cost([mv(1, 100, 1.0), mv(2, 100, 2.0, 200, voided=True)]) == pytest.approx(1.0)
+    assert replay_average_cost([mv(1, -5, 1.0)]) is None
+    # El orden es por fecha, no por número: una compra con fecha anterior cuenta primero
+    assert replay_average_cost([mv(2, 100, 2.0, 200, day=5), mv(1, -100, 1.0, day=1)]) == pytest.approx(2.0)
+
+
+def test_void_purchase_recalculates_average_cost():
+    repo = _Repo()
+    shampoo = _supply(repo)                                            # S/ 185 el galón de 3785 ml
+    register = RegisterMovement(repo=repo)
+    _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=3785, purchase_total=185, reason="F1",
+                          actor_id=ADMIN))
+    expensive = _run(register.execute(type="purchase", supply_id=shampoo.id, quantity=3785, purchase_total=265,
+                                      reason="F2", actor_id=ADMIN))
+    assert repo.supplies[shampoo.id].purchase_cost == pytest.approx(225, abs=0.01)   # (185 + 265) ÷ 2
+    _run(VoidMovement(repo=repo).execute(expensive.id, reason="Duplicado", actor_id=ADMIN))
+    assert repo.supplies[shampoo.id].purchase_cost == pytest.approx(185, abs=0.01)   # vuelve al de la compra vigente
+    [row] = _run(ListSupplies(repo=repo).execute())
+    assert row.stock == 3785 and row.value == pytest.approx(185, abs=0.01)
+    assert repo.commits >= 1
+    # Anular una salida no toca el costo
+    waste = _run(register.execute(type="waste", supply_id=shampoo.id, quantity=100, reason="x", actor_id=ADMIN))
+    _run(UpdateSupply(repo=repo).execute(shampoo.id, fields={"purchase_cost": 200}))
+    _run(VoidMovement(repo=repo).execute(waste.id, reason="x", actor_id=ADMIN))
+    assert repo.supplies[shampoo.id].purchase_cost == 200
+
+
+def test_void_recalculates_cost_with_real_repository_sqlite():
+    """Anular y recalcular el costo quedan en la misma transacción con el repositorio real."""
+    from app.modules.iam.infra.models import UserModel
+    from app.modules.inventory.infra.models import MovementEditModel, MovementModel
+
+    async def scenario():
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all, tables=[
+                UserModel.__table__, SupplyModel.__table__, MovementModel.__table__, MovementEditModel.__table__,
+            ])
+        session = async_sessionmaker(engine, expire_on_commit=False)()
+        repo = PostgresInventoryRepository(session=session)
+        supply = await repo.create_supply(sku="INS-001", fields={
+            "name": "Agua", "category": "consumable", "purchase_unit": "Recarga", "purchase_content": Decimal("200"),
+            "consumption_unit": "L", "purchase_cost": Decimal("100"), "min_stock": Decimal("0"),
+        })
+        a, b = await repo.add_movements([
+            {"seq": 1, "occurred_on": date(2026, 11, 1), "type": "purchase", "supply_id": supply.id,
+             "quantity": Decimal("100"), "unit_cost": Decimal("0.5"), "purchase_total": Decimal("50"), "reason": "B1"},
+            {"seq": 2, "occurred_on": date(2026, 11, 2), "type": "purchase", "supply_id": supply.id,
+             "quantity": Decimal("100"), "unit_cost": Decimal("1"), "purchase_total": Decimal("100"), "reason": "B2"},
+        ])
+        await repo.update_supply(supply.id, {"purchase_cost": Decimal("150")})           # promedio 0,75 × 200
+        await VoidMovement(repo=repo).execute(b.id, reason="Duplicado", actor_id=ADMIN)
+        await session.close()
+        check = PostgresInventoryRepository(session=async_sessionmaker(engine, expire_on_commit=False)())
+        assert (await check.get_supply(supply.id)).purchase_cost == 100.0               # 0,50 × 200: solo la vigente
+        assert (await check.stock_by_supply())[supply.id] == 100.0
+        assert (await check.get_movement(b.id)).is_voided
+        await engine.dispose()
+    _run(scenario())
 
 
 def test_void_manual_movement_stops_counting():

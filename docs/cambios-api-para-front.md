@@ -780,3 +780,11 @@ dispara no se le notifica.
 - `MovementOut` suma `can_edit`, `edited_at` y `edited_by_name`.
 - **Rompe** C-48 (no desplegado): quien envíe `purchase_quantity` / `purchase_price` debe enviar `quantity` y
   `purchase_total`. **Migración:** `8f9a0b1c2d3e` (backfill del total en las entradas con precio). **Apps:** admin.
+
+## C-51 · Inventario: anular o editar una entrada recalcula el costo promedio (feature 0021, 2026-11-09)
+
+- `POST /admin/inventory/movements/{id}/void` y `PATCH /admin/inventory/movements/{id}`: si el movimiento es (o pasa
+  a ser) una entrada, el `purchase_cost` del insumo se recalcula repasando sus movimientos vigentes en orden; si
+  cambia el insumo, se recalculan los dos. Misma transacción que la anulación o la edición. Sin entradas vigentes la
+  ficha no cambia. Antes (C-48 / C-50) el promedio no se recalculaba.
+- **Compatible** (mismas rutas y respuestas). **Sin migración.** **Apps:** admin (recargar Insumos para ver el costo).

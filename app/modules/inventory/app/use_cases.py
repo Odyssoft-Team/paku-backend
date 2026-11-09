@@ -30,6 +30,7 @@ from app.modules.inventory.domain.inventory import (
     normalize_suppliers,
     order_targets,
     plan_consumption,
+    replay_average_cost,
     same_cells,
     signed_quantity,
     stock_status,
@@ -266,11 +267,22 @@ def _same_value(a, b) -> bool:
     return a == b
 
 
+async def recalculate_average_cost(repo, supply_ids: list[UUID]) -> None:
+    """Recalcula el costo promedio de los insumos repasando sus movimientos vigentes y confirma la transacción.
+    Sin entradas vigentes el costo de la ficha no cambia. Lo ya registrado no cambia de costo."""
+    for supply_id in supply_ids:
+        supply = await repo.get_supply(supply_id)
+        average = replay_average_cost(await repo.supply_movements(supply_id)) if supply else None
+        if average is not None:
+            purchase_cost = Decimal(str(round(average * supply.purchase_content, 2)))
+            await repo.update_supply(supply_id, {"purchase_cost": purchase_cost}, commit=False)
+    await repo.commit()
+
+
 @dataclass
 class EditMovement:
     """Edita un movimiento manual y guarda el historial (antes y después). El stock se recalcula solo porque es
-    la suma de los movimientos. El costo promedio del insumo **no** se recalcula (se corrige en la ficha si hace
-    falta)."""
+    la suma de los movimientos; si toca una entrada, el costo promedio del insumo se recalcula."""
     repo: Any
 
     async def execute(self, movement_id: UUID, *, changes: dict, edit_reason: str, actor_id: UUID):
@@ -332,8 +344,14 @@ class EditMovement:
         if not diff:
             raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_UNCHANGED", "El movimiento no tiene cambios.")
         values = {k: (Decimal(str(v)) if isinstance(v, float) else v) for k, v in new.items() if k in diff}
-        if not await self.repo.edit_movement(m.id, values, actor_id=actor_id, reason=edit_reason, changes=diff):
+        if not await self.repo.edit_movement(m.id, values, actor_id=actor_id, reason=edit_reason, changes=diff,
+                                             commit=False):
             raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_NOT_EDITABLE", "Un movimiento anulado no se edita.")
+        # Si era o pasa a ser una entrada, se recalcula el costo promedio del insumo (y del anterior si cambió)
+        affected = []
+        if m.quantity > 0 or new["quantity"] > 0:
+            affected = list(dict.fromkeys([m.supply_id, supply.id]))
+        await recalculate_average_cost(self.repo, affected)
         return await self.repo.get_movement(m.id)
 
 
@@ -354,8 +372,10 @@ class VoidMovement:
         if movement.is_recipe_consumption:
             raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_NOT_VOIDABLE",
                          "El consumo automático de una orden no se puede anular.")
-        if not await self.repo.void_movement(movement.id, actor_id=actor_id, reason=reason):
+        if not await self.repo.void_movement(movement.id, actor_id=actor_id, reason=reason, commit=False):
             raise _error(status.HTTP_409_CONFLICT, "MOVEMENT_ALREADY_VOIDED", "El movimiento ya está anulado.")
+        # Si era una entrada, el costo promedio se recalcula sin ella (misma transacción)
+        await recalculate_average_cost(self.repo, [movement.supply_id] if movement.quantity > 0 else [])
         return await self.repo.get_movement(movement.id)
 
 

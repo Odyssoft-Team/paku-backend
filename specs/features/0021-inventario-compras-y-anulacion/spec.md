@@ -36,7 +36,7 @@ creado: 2026-11-09
 9. **Dado** un movimiento manual vigente, **entonces** se puede **editar** todo menos el tipo (fecha, insumo,
    cantidad, total pagado, entrada/salida de un ajuste, motivo, ubicación, centro de costo, lote, vencimiento) con
    motivo de edición obligatorio. Cada edición guarda quién, cuándo, el motivo y los valores antes y después. El
-   stock se recalcula solo; el **costo promedio del insumo no se recalcula**. No se editan los anulados ni el
+   stock se recalcula solo y, si toca una entrada, el costo promedio (regla 10). No se editan los anulados ni el
    consumo por receta de una orden. Para cambiar el tipo: anular y registrar de nuevo.
 
 8. **Dada** una celda de receta con precio, **entonces** el margen = precio sin IGV − costo (insumos + minutos ×
@@ -44,10 +44,11 @@ creado: 2026-11-09
    S/ 75 con 18 % → S/ 63,56. **Solo en Recetas** (2026-11-09): Simulador, costo de una orden y Resultados de
    campañas siguen restando del precio con IGV.
 
-## Pendiente de confirmar
-
-- Anular una compra **no recalcula** el costo promedio (las compras posteriores ya lo usaron). Si hace falta,
-  el costo se corrige a mano en la ficha. Propuesta por defecto, no aprobada.
+10. **Dado** que se anula o se edita una entrada (confirmado por el dueño 2026-11-09), **entonces** el costo
+    promedio del insumo se **recalcula** repasando en orden (fecha y número) todos sus movimientos vigentes: cada
+    entrada pondera con su costo (con total pagado: total ÷ cantidad; si no, el costo con que se registró) y las
+    salidas solo bajan el stock (un stock negativo cuenta como 0). Sin entradas vigentes, la ficha no cambia. El
+    recálculo reemplaza una corrección manual hecha en la ficha. Lo ya registrado no cambia de costo.
 
 ## Fuera de alcance
 

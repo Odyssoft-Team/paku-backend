@@ -264,6 +264,19 @@ def weighted_unit_cost(stock: float, current_unit_cost: float, quantity: float, 
     return (stock * current_unit_cost + quantity * new_unit_cost) / total
 
 
+def replay_average_cost(movements: list["Movement"]) -> Optional[float]:
+    """Costo promedio ponderado por unidad de consumo repasando los movimientos vigentes de un insumo en orden
+    (fecha y número). Cada entrada pondera con su costo (con total pagado: total ÷ cantidad; si no, el costo con
+    que se registró); las salidas solo bajan el stock. None si no hay ninguna entrada."""
+    stock, average = 0.0, None
+    for m in sorted((m for m in movements if not m.is_voided), key=lambda m: (m.occurred_on, m.seq)):
+        if m.quantity > 0:
+            cost = m.purchase_total / m.quantity if m.purchase_total is not None else m.unit_cost
+            average = cost if average is None else weighted_unit_cost(stock, average, m.quantity, cost)
+        stock += m.quantity
+    return average
+
+
 def next_code(existing: list[str], prefix: str, width: int = 3) -> str:
     """Correlativo siguiente para `prefix` (INS-) entre los códigos existentes."""
     numbers = []
