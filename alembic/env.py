@@ -51,6 +51,7 @@ def _get_metadata():
     from app.modules.campaigns.infra.models import CampaignModel, CampaignRedemptionModel  # noqa: F401
     from app.modules.messaging.infra.models import ChannelProviderModel, NotificationLogModel  # noqa: F401
     from app.modules.invoicing.infra.models import InvoicingProviderModel  # noqa: F401
+    from app.modules.complaints.infra.models import ComplaintCounterModel, ComplaintModel  # noqa: F401
 
     return Base.metadata
 

@@ -780,3 +780,19 @@ dispara no se le notifica.
 - `MovementOut` suma `can_edit`, `edited_at` y `edited_by_name`.
 - **Rompe** C-48 (no desplegado): quien envíe `purchase_quantity` / `purchase_price` debe enviar `quantity` y
   `purchase_total`. **Migración:** `8f9a0b1c2d3e` (backfill del total en las entradas con precio). **Apps:** admin.
+
+## C-51 · Libro de Reclamaciones virtual (feature 0022, 2026-11-09)
+
+- **Nuevo (público, sin sesión):** `POST /complaints` con `consumer_name`, `doc_type` (`dni|ce|pasaporte|ruc`),
+  `doc_number`, `email`, `phone?`, `address?`, `is_minor`, `guardian_name?` (obligatorio si `is_minor`),
+  `item_type` (`servicio|producto`), `item_description`, `order_reference?`, `amount_claimed?`, `kind`
+  (`reclamo|queja`), `detail`, `request` → 201 `{id, code, created_at, response_due, email, provider_legal_name,
+  provider_ruc, provider_address}`. 422 `COMPLAINT_INVALID` con `field`; 429 `TOO_MANY_ATTEMPTS`. Envía la copia al
+  consumidor y un aviso al correo de reclamos.
+- **Nuevo (admin):** `GET /admin/complaints?status=received|answered&limit&offset` → `{items, total}` (cada ítem con
+  `code`, `kind_label`, `status_label`, `response_due`, `overdue`); `GET /admin/complaints/{id}` (suma `sheet:
+  [{label, value}]`, `response`, `responded_at`); `POST /admin/complaints/{id}/answer` `{response}` → 404
+  `COMPLAINT_NOT_FOUND`, 409 `COMPLAINT_ALREADY_ANSWERED`, 422 `COMPLAINT_INVALID`.
+- **Parámetros generales:** nuevos `company_legal_name`, `company_address`, `complaints_email`; `company_ruc` tiene
+  valor por defecto.
+- **Compatible.** **Migración:** `9a0b1c2d3e4f`. **Apps:** web (Libro de Reclamaciones) y admin.
