@@ -788,3 +788,18 @@ dispara no se le notifica.
   cambia el insumo, se recalculan los dos. Misma transacción que la anulación o la edición. Sin entradas vigentes la
   ficha no cambia. Antes (C-48 / C-50) el promedio no se recalculaba.
 - **Compatible** (mismas rutas y respuestas). **Sin migración.** **Apps:** admin (recargar Insumos para ver el costo).
+## C-52 · Libro de Reclamaciones virtual (feature 0022, 2026-11-09)
+
+- **Nuevo (público, sin sesión):** `POST /complaints` con `consumer_name`, `doc_type` (`dni|ce|pasaporte|ruc`),
+  `doc_number`, `email`, `phone?`, `address?`, `is_minor`, `guardian_name?` (obligatorio si `is_minor`),
+  `item_type` (`servicio|producto`), `item_description`, `order_reference?`, `amount_claimed?`, `kind`
+  (`reclamo|queja`), `detail`, `request` → 201 `{id, code, created_at, response_due, email, provider_legal_name,
+  provider_ruc, provider_address}`. 422 `COMPLAINT_INVALID` con `field`; 429 `TOO_MANY_ATTEMPTS`. Envía la copia al
+  consumidor y un aviso al correo de reclamos.
+- **Nuevo (admin):** `GET /admin/complaints?status=received|answered&limit&offset` → `{items, total}` (cada ítem con
+  `code`, `kind_label`, `status_label`, `response_due`, `overdue`); `GET /admin/complaints/{id}` (suma `sheet:
+  [{label, value}]`, `response`, `responded_at`); `POST /admin/complaints/{id}/answer` `{response}` → 404
+  `COMPLAINT_NOT_FOUND`, 409 `COMPLAINT_ALREADY_ANSWERED`, 422 `COMPLAINT_INVALID`.
+- **Parámetros generales:** nuevos `company_legal_name`, `company_address`, `complaints_email`; `company_ruc` tiene
+  valor por defecto.
+- **Compatible.** **Migración:** `9a0b1c2d3e4f`. **Apps:** web (Libro de Reclamaciones) y admin.

@@ -44,9 +44,16 @@ SECTIONS: dict[str, str] = {
 
 FIELDS: tuple[SettingField, ...] = (
     SettingField("company_name", "company", "Nombre comercial", "text", default="Paku"),
-    SettingField("company_ruc", "company", "RUC", "ruc"),
+    SettingField("company_ruc", "company", "RUC", "ruc", default="20615013898"),
     SettingField("contact_phone", "company", "Teléfono de contacto", "phone"),
     SettingField("contact_email", "company", "Correo de contacto", "email"),
+    SettingField("company_legal_name", "company", "Razón social", "text", default="SMARTPETSOLUTIONS S.A.C.",
+                 help="Aparece en cada hoja del Libro de Reclamaciones."),
+    SettingField("company_address", "company", "Domicilio", "text",
+                 default="Av. San Borja Sur 586, Dpto. 902, San Borja, Lima, Perú",
+                 help="Aparece en cada hoja del Libro de Reclamaciones."),
+    SettingField("complaints_email", "company", "Correo que recibe los reclamos", "email",
+                 default="admin@paku.com.pe", help="Recibe un aviso por cada hoja del Libro de Reclamaciones."),
     SettingField("timezone", "operation", "Zona horaria", "readonly", default="America/Lima", editable=False,
                  help="Fija: todo el negocio corre en hora de Lima."),
     SettingField("currency", "operation", "Moneda", "readonly", default="PEN", editable=False,
