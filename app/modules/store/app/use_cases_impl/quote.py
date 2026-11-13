@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
+from app.modules.store.domain.addon_conflicts import first_conflict
 from app.modules.store.domain.eligibility import ineligibility
 from app.modules.store.domain.models import Species, breed_allowed
 from app.modules.store.infra.postgres_store_repository import PostgresStoreRepository
@@ -121,6 +122,7 @@ async def price_service(
     product_line = QuoteLine(target_id=product.id, name=product.name, price=product_price)
 
     addons_out: List[QuoteLine] = []
+    chosen_addons = []
     for addon_id in addon_ids or []:
         addon = await repo.get_addon(addon_id)
         if not addon or not addon.is_active:
@@ -152,6 +154,20 @@ async def price_service(
                 detail={"addon_id": str(addon_id), "reason": "no_price_rule"},
             )
         addons_out.append(QuoteLine(target_id=addon.id, name=addon.name, price=addon_price))
+        chosen_addons.append(addon)
+
+    # Alternativas o trabajo repetido: no se cobran juntos (store/domain/addon_conflicts.py)
+    conflict = first_conflict(a.code for a in chosen_addons)
+    if conflict:
+        names = [next(a.name for a in chosen_addons if a.code == code) for code in conflict]
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "ADDONS_INCOMPATIBLE",
+                "message": f"«{names[0]}» y «{names[1]}» no se pueden combinar: elige solo uno.",
+                "addon_codes": list(conflict),
+            },
+        )
 
     total = product_line.price + sum(a.price for a in addons_out)
     return QuoteResult(pet_id=pet.id, product=product_line, addons=addons_out, total=total)

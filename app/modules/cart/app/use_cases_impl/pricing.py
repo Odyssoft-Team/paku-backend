@@ -22,6 +22,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.modules.cart.domain.cart import CartItemKind
+from app.modules.store.domain.recommendations import UNAVAILABLE
 
 from .common import _kind_value, _meta_dict
 
@@ -123,6 +124,15 @@ class CartPricing:
             self.store_repo, pet=pet, product_id=product_id, addon_ids=addon_ids, answers=answers,
             breed_category=await self.store_repo.price_category_for(pet.breed_id),
         )
+        # Un adicional que las reglas marcan NO_DISPONIBLE para esta mascota (p. ej. Retoque Paku sobre 25 kg)
+        # tampoco se puede elegir a mano: antes solo se ocultaba en /store/recommendations.
+        blocked = [a for a in recommendation.get("addons", []) if a.get("selected") and a.get("action") == UNAVAILABLE]
+        if blocked:
+            raise _error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "ADDON_NOT_AVAILABLE",
+                "Un adicional elegido no está disponible para tu mascota. Quítalo para continuar.",
+                addon_code=blocked[0]["code"],
+            )
         priced = {quote.product.target_id: quote.product}
         priced.update({a.target_id: a for a in quote.addons})
 

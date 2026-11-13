@@ -1,8 +1,9 @@
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from app.modules.store.domain.addon_conflicts import conflicts_of
 from app.modules.store.domain.models import Species
 
 
@@ -48,6 +49,14 @@ class AddonOut(BaseModel):
     code: Optional[str] = None                 # ADD_DESLANADO_INT… (hoja 18, 0008)
     requires_photo: bool = False               # el cliente sube fotos antes de pagar
     duration_extra_min: Optional[int] = None   # pendiente del negocio
+    # Códigos de adicionales que no se pueden combinar con este (store/domain/addon_conflicts.py)
+    incompatible_with: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _fill_incompatible(self) -> "AddonOut":
+        if not self.incompatible_with:
+            self.incompatible_with = conflicts_of(self.code)
+        return self
 
 
 class ProductDetailOut(ProductOut):
@@ -273,6 +282,13 @@ class AddonRecommendationOut(BaseModel):
     rule_id: Optional[str]
     text: Optional[str]
     requires_photo: bool
+    incompatible_with: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _fill_incompatible(self) -> "AddonRecommendationOut":
+        if not self.incompatible_with:
+            self.incompatible_with = conflicts_of(self.code)
+        return self
 
 
 class ReviewOut(BaseModel):
