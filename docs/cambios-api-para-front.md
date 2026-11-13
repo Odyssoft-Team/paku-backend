@@ -809,7 +809,7 @@ dispara no se le notifica.
 - `POST /store/quote` y el carrito rechazan con 422 `ADDONS_INCOMPATIBLE` (`message`, `addon_codes`) las
   combinaciones que son alternativas o repiten trabajo: Corte estético + Rapado corporal (`ADD_CORTE_EST` /
   `ADD_CORTE_CORTO`), Desmotado localizado + extendido, Retoque de carita + Retoque Paku (`ADD_RETOQUE_CARITA` /
-  `ADD_RETOQUE`), y Corte estético + cualquiera de los dos retoques. Reglas en `store/domain/addon_conflicts.py`.
+  `ADD_RETOQUE`), y Corte estético o Rapado corporal + cualquiera de los dos retoques (ambos incluyen el acabado). Reglas en `store/domain/addon_conflicts.py`.
 - El carrito rechaza con 422 `ADDON_NOT_AVAILABLE` (`addon_code`) un adicional que las reglas de recomendación
   marcan `NO_DISPONIBLE` para la mascota (antes solo se ocultaba en `/store/recommendations` y se podía elegir a mano).
 - `AddonOut` (detalle del servicio y admin) y los adicionales de `/store/recommendations` suman

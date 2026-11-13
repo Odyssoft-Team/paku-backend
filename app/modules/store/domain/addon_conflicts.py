@@ -4,7 +4,8 @@ Son alternativas o cubren el mismo trabajo; sumarlos cobraría dos veces lo mism
 - Corte estético y Rapado corporal con máquina son alternativas.
 - Desmotado localizado y extendido no se suman por el mismo desmotado.
 - Retoque de carita no se suma a Retoque Paku (Retoque Paku ya incluye carita, patas y cola).
-- Los retoques no se suman a un Corte estético, que ya incluye los acabados.
+- Los retoques no se suman a un Corte estético ni a un Rapado corporal: ambos ya incluyen el acabado de carita,
+  patas y cola (confirmado por el cliente el 2026-11-13).
 
 Se identifican por código (`store_addons.code`): un adicional sin código no participa.
 """
@@ -18,6 +19,8 @@ CONFLICTS: tuple[frozenset[str], ...] = (
     frozenset({"ADD_RETOQUE_CARITA", "ADD_RETOQUE"}),
     frozenset({"ADD_CORTE_EST", "ADD_RETOQUE"}),
     frozenset({"ADD_CORTE_EST", "ADD_RETOQUE_CARITA"}),
+    frozenset({"ADD_CORTE_CORTO", "ADD_RETOQUE"}),
+    frozenset({"ADD_CORTE_CORTO", "ADD_RETOQUE_CARITA"}),
 )
 
 

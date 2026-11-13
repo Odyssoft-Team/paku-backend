@@ -86,14 +86,17 @@ def test_conflict_pairs():
     assert first_conflict(["ADD_CORTE_EST", "ADD_RETOQUE"]) is not None
     assert first_conflict(["ADD_CORTE_EST", "ADD_RETOQUE_CARITA"]) is not None
     # Combinaciones válidas
-    assert first_conflict(["ADD_CORTE_CORTO", "ADD_RETOQUE"]) is None
+    assert first_conflict(["ADD_CORTE_CORTO", "ADD_RETOQUE"]) is not None        # el rapado incluye los acabados
+    assert first_conflict(["ADD_CORTE_CORTO", "ADD_RETOQUE_CARITA"]) is not None
+    assert first_conflict(["ADD_CORTE_CORTO", "ADD_DESMOTADO_EXT"]) is None
     assert first_conflict(["ADD_DESMOTADO_EXT", "ADD_CORTE_EST", "ADD_TOOTHBRUSH"]) is None
     assert first_conflict([None, "ADD_RETOQUE"]) is None   # sin código no participa
     assert conflicts_of("ADD_CORTE_EST") == ["ADD_CORTE_CORTO", "ADD_RETOQUE", "ADD_RETOQUE_CARITA"]
     assert conflicts_of("ADD_TOOTHBRUSH") == [] and conflicts_of(None) == []
 
 
-@pytest.mark.parametrize("a,b", [(CORTE, RAPADO), (LOC, EXT), (CARITA, RETOQUE), (CORTE, RETOQUE), (CORTE, CARITA)])
+@pytest.mark.parametrize("a,b", [(CORTE, RAPADO), (LOC, EXT), (CARITA, RETOQUE), (CORTE, RETOQUE), (CORTE, CARITA),
+                                 (RAPADO, RETOQUE), (RAPADO, CARITA)])
 def test_quote_rejects_incompatible_addons(a, b):
     with pytest.raises(HTTPException) as err:
         _run(price_service(_Store(), pet=_pet(), product_id=BATH, addon_ids=[a, b, CEPILLO]))
@@ -103,8 +106,8 @@ def test_quote_rejects_incompatible_addons(a, b):
 
 
 def test_quote_accepts_compatible_addons():
-    result = _run(price_service(_Store(), pet=_pet(), product_id=BATH, addon_ids=[RAPADO, RETOQUE, EXT, CEPILLO]))
-    assert result.total == 250.0
+    result = _run(price_service(_Store(), pet=_pet(), product_id=BATH, addon_ids=[RAPADO, EXT, CEPILLO]))
+    assert result.total == 200.0
 
 
 def test_addon_out_lists_incompatible_codes():
