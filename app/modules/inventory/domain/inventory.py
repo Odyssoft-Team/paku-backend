@@ -20,7 +20,7 @@ from datetime import date, datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from app.modules.store.domain.pricing import DEFAULT_WEIGHT_TIERS, FALLBACK_CATEGORY
+from app.modules.store.domain.pricing import DEFAULT_WEIGHT_TIERS
 
 # ─── Listas fijas (GET /admin/inventory/config) ──────────────────────────────
 
@@ -292,22 +292,14 @@ def same_cells(a: list[RecipeCell], b: list[RecipeCell]) -> bool:
 
 
 def find_cell(cells: list[RecipeCell], *, breed_category: str, weight: float) -> tuple[Optional[RecipeCell], Optional[str]]:
-    """Celda que aplica y su fila, con la regla del precio (`price_detail_for`): la fila del pelaje y, si no
-    tiene esa celda, la fila "mestizo"; el tramo que contiene el peso (redondeado hacia arriba al centésimo)."""
+    """Celda que aplica y su fila, con la misma regla del precio (`price_detail_for`): solo la fila de la
+    categoría de la mascota, sin respaldo en "mestizo"; el tramo que contiene el peso (redondeado hacia arriba
+    al centésimo)."""
     weight = math.ceil(round(float(weight), 6) * 100) / 100
-
-    def _in(category: str) -> Optional[RecipeCell]:
-        found = [c for c in cells if c.breed_category == category and c.contains(weight)]
-        return max(found, key=lambda c: c.weight_min) if found else None
-
-    cell = _in(breed_category)
-    if cell is not None:
-        return cell, breed_category
-    if breed_category != FALLBACK_CATEGORY:
-        cell = _in(FALLBACK_CATEGORY)
-        if cell is not None:
-            return cell, FALLBACK_CATEGORY
-    return None, None
+    found = [c for c in cells if c.breed_category == breed_category and c.contains(weight)]
+    if not found:
+        return None, None
+    return max(found, key=lambda c: c.weight_min), breed_category
 
 
 @dataclass(frozen=True)

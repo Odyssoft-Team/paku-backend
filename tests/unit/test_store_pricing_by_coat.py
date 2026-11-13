@@ -58,7 +58,7 @@ def test_price_category_falls_back_to_mestizo():
 
 
 class FakeRepo:
-    """Reglas: {(target_id, categoría): precio}. Con respaldo a "mestizo" como el repo real."""
+    """Reglas: {(target_id, categoría): precio}. Sin respaldo a "mestizo", como el repo real (2026-11-13)."""
 
     def __init__(self, rules=None):
         self.rules = rules or {}
@@ -94,8 +94,6 @@ class FakeRepo:
         self.asked.append(breed_category)
         if (target_id, breed_category) in self.rules:
             return self.rules[(target_id, breed_category)], breed_category
-        if (target_id, "mestizo") in self.rules:
-            return self.rules[(target_id, "mestizo")], "mestizo"
         return None, None
 
     async def price_for(self, **kw):
@@ -121,11 +119,13 @@ def test_quote_uses_coat_type_rule():
     assert repo.asked[0] == "double_short"
 
 
-def test_quote_mestizo_and_missing_coat_use_mestizo_row():
+def test_quote_without_coat_row_has_no_fallback():
     repo = FakeRepo({(CLASICO, "mestizo"): 90.0})
     assert run(price_service(repo, pet=_pet("dog_mixed"), product_id=CLASICO)).product.price == 90.0
-    # Labrador sin fila de su pelaje → respaldo "mestizo" (nunca queda sin precio si existe)
-    assert run(price_service(repo, pet=_pet("labrador"), product_id=CLASICO)).product.price == 90.0
+    # Labrador sin fila de su pelaje: ya no se cotiza con la fila "mestizo"
+    with pytest.raises(HTTPException) as exc:
+        run(price_service(repo, pet=_pet("labrador"), product_id=CLASICO))
+    assert exc.value.status_code == 422
 
 
 # ─── Validación de la tabla ───────────────────────────────────────────────────
@@ -187,7 +187,7 @@ def test_create_single_rule_accepts_coat_types_only():
 # ─── Simulador ────────────────────────────────────────────────────────────────
 
 
-def test_simulation_reports_category_fallback_and_breed_filter():
+def test_simulation_reports_category_and_breed_filter():
     repo = FakeRepo({
         (CLASICO, "double_short"): 110.0,
         (CLASICO, "mestizo"): 90.0,
@@ -203,7 +203,8 @@ def test_simulation_reports_category_fallback_and_breed_filter():
     clasico = result.products[0]
     assert clasico.price == 110.0 and clasico.used_fallback is False
     nails = clasico.addons[0]
-    assert nails.price == 15.0 and nails.used_fallback is True and nails.category_used == "mestizo"
+    # Sin fila de su pelaje el adicional no tiene precio (antes tomaba la fila "mestizo")
+    assert nails.price is None and nails.used_fallback is False
 
 
 def test_simulation_rejects_invalid_weight():

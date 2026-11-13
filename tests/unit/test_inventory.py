@@ -274,9 +274,8 @@ def _rc(category, tier, minutes=0):
 def test_find_cell_uses_the_price_rule():
     cells = [_rc("double_long", T3, 90), _rc("mestizo", T2, 60), _rc("mestizo", T3, 80)]
     assert find_cell(cells, breed_category="double_long", weight=18)[1] == "double_long"
-    # Falta la celda del pelaje en ese peso: usa la fila "mestizo", como el precio
-    cell, used = find_cell(cells, breed_category="double_long", weight=10)
-    assert (used, cell.labor_minutes) == ("mestizo", 60)
+    # Falta la celda del pelaje en ese peso: no se usa la fila "mestizo" (sin respaldo, como el precio)
+    assert find_cell(cells, breed_category="double_long", weight=10) == (None, None)
     # 5,004 kg se redondea a 5,01: tramo 2 (igual que price_detail_for)
     assert find_cell(cells, breed_category="mestizo", weight=5.004)[0].weight_min == 5.01
     assert find_cell(cells, breed_category="double_long", weight=3) == (None, None)
@@ -731,11 +730,12 @@ def test_done_order_consumes_with_measured_weight_once():
     assert _detail(exc)["code"] == "CONSUMPTION_ALREADY_REGISTERED"
 
 
-def test_coat_without_cell_falls_back_to_mestizo():
+def test_coat_without_cell_has_no_fallback():
     ctx = _setup_consumption(category="simple_short")
     plan = _run(ctx.consumption.plan(_order(ctx.pet, measured=10.0)))
-    assert [(pc.target.name, pc.category_used) for pc in plan.cells] == [("Spa Deluxe", "mestizo")]
-    assert [t.name for t in plan.missing] == ["Deslanado intensivo"]  # el deslanado no aplica a pelo corto
+    # Sin celda para su pelaje no se usa la fila "mestizo": no hay consumo y queda como faltante
+    assert plan.cells == []
+    assert sorted(t.name for t in plan.missing) == ["Deslanado intensivo", "Spa Deluxe"]
 
 
 def test_consumption_only_for_done_service_orders():

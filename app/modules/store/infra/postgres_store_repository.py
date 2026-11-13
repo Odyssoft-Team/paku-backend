@@ -444,7 +444,7 @@ class PostgresStoreRepository:
         breed_category: str,
         weight: float,
     ) -> tuple[Optional[float], Optional[str]]:
-        """Precio y categoría de la regla usada (la del pelaje o el respaldo "mestizo")."""
+        """Precio y categoría de la regla usada: solo la fila de la categoría de la mascota (sin respaldo)."""
         from app.modules.store.infra.db_models import StorePriceRuleModel
 
         # Los tramos son "5 < peso ≤ 15" y se guardan como 5.01–15: un peso con más de 2 decimales
@@ -470,9 +470,9 @@ class PostgresStoreRepository:
             result = await self._session.execute(stmt)
             return result.scalars().first()
 
+        # Sin respaldo (pedido del cliente, 2026-11-13): una celda sin precio no se cotiza con la fila "mestizo";
+        # el servicio o adicional no está disponible para ese pelaje y peso.
         rule = await _find(breed_category)
-        if rule is None and breed_category != "mestizo":
-            rule = await _find("mestizo")
 
         if rule is None:
             return None, None

@@ -47,11 +47,11 @@ RECIPES = {
                            _cell("corto", 5.01, 15, 60, (SHAMPOO, 120), (TOALLA, 3)),
                            _cell("mestizo", 5.01, 15, 70, (SHAMPOO, 150), (TOALLA, 3))]),
     PERF.id: Recipe(id=uuid4(), target_type="addon", target_id=PERF.id, version=1, is_current=True, created_at=NOW,
-                    cells=[_cell("mestizo", 0, None, 5, (PERFUME, 10))]),
+                    cells=[_cell("corto", 0, None, 5, (PERFUME, 10)), _cell("mestizo", 0, None, 5, (PERFUME, 10))]),
     # CORTE no tiene receta
 }
 PRICES = {(BANO.id, "corto", "5.01-15"): 70.0, (BANO.id, "mestizo", "5.01-15"): 80.0,
-          (PERF.id, "mestizo", "0-"): 15.0}
+          (PERF.id, "corto", "0-"): 15.0, (PERF.id, "mestizo", "0-"): 15.0}
 
 
 class StoreRepo:
@@ -108,9 +108,9 @@ def test_simulation_costs_and_margin():
     # Base: celda corto 5.01–15 → 120 ml shampoo (S/ 12) + 3 toallas (S/ 1.50), 60 min, precio S/ 70
     assert (base.recipe_version, base.category_used, base.labor_minutes, base.price) == ("R2", "corto", 60, 70.0)
     assert round(base.supplies_cost, 2) == 13.5
-    # Perfume: solo fila mestizo → respaldo; 10 ml × 0.30 = S/ 3, 5 min, precio S/ 15
+    # Perfume: fila de su pelaje; 10 ml × 0.30 = S/ 3, 5 min, precio S/ 15
     assert (perfume.category_used, perfume.labor_minutes, perfume.price, round(perfume.supplies_cost, 2)) == (
-        "mestizo", 5, 15.0, 3.0)
+        "corto", 5, 15.0, 3.0)
     # 65 min × S/ 30 / h = 32.50; costo 16.50 + 32.50 = 49; margen 85 − 49 = 36 (42.4 %)
     assert (sim.price, sim.supplies_cost, sim.labor_minutes, sim.labor_cost, sim.total_cost) == (
         85.0, 16.5, 65, 32.5, 49.0)

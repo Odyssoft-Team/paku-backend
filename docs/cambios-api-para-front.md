@@ -816,3 +816,14 @@ dispara no se le notifica.
   `incompatible_with: [códigos]` para que la web y la app deshabiliten la opción incompatible.
 - **Compatible.** **Sin migración.** Los adicionales sin código no participan: en Fresco y Limpio hay que asignar
   `ADD_CORTE_EST` a «Corte estético» y `ADD_RETOQUE_CARITA` a «Retoque de carita» (admin → Tienda).
+
+## C-54 · Sin tarifa de respaldo "mestizo" (2026-11-13)
+
+- El precio (`POST /store/quote`, carrito, detalle del servicio, simulador de precios) y la receta que se descuenta
+  usan solo la fila de la categoría de la mascota. Antes, si faltaba la fila de su pelaje, se usaba la fila
+  "mestizo"; ahora esa celda no tiene precio y el servicio o adicional no está disponible (422 "No price rule
+  found" / `no_price_rule`), como pidió el cliente: una celda sin precio no se habilita con un precio de respaldo.
+- La categoría "mestizo" sigue existiendo para mascotas sin pelaje asignado (mestizos sin manto, razas escritas a
+  mano). `used_fallback` del simulador queda siempre en `false`.
+- Con los datos del 13/11 no cambia ningún precio: la única fila "mestizo" con precio es la del Cepillo dental, que
+  además tiene precio en los 6 pelajes. **Compatible.** **Sin migración.** **Apps:** ninguna.
