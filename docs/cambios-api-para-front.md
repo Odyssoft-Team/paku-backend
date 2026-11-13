@@ -808,11 +808,11 @@ dispara no se le notifica.
 
 - `POST /store/quote` y el carrito rechazan con 422 `ADDONS_INCOMPATIBLE` (`message`, `addon_codes`) las
   combinaciones que son alternativas o repiten trabajo: Corte estético + Rapado corporal (`ADD_CORTE_EST` /
-  `ADD_CORTE_CORTO`), Desmotado localizado + extendido, Retoque de carita + Retoque Paku (`ADD_CARITA` /
+  `ADD_CORTE_CORTO`), Desmotado localizado + extendido, Retoque de carita + Retoque Paku (`ADD_RETOQUE_CARITA` /
   `ADD_RETOQUE`), y Corte estético + cualquiera de los dos retoques. Reglas en `store/domain/addon_conflicts.py`.
 - El carrito rechaza con 422 `ADDON_NOT_AVAILABLE` (`addon_code`) un adicional que las reglas de recomendación
   marcan `NO_DISPONIBLE` para la mascota (antes solo se ocultaba en `/store/recommendations` y se podía elegir a mano).
 - `AddonOut` (detalle del servicio y admin) y los adicionales de `/store/recommendations` suman
   `incompatible_with: [códigos]` para que la web y la app deshabiliten la opción incompatible.
 - **Compatible.** **Sin migración.** Los adicionales sin código no participan: en Fresco y Limpio hay que asignar
-  `ADD_CORTE_EST` a «Corte estético» y `ADD_CARITA` a «Retoque de carita» (admin → Tienda).
+  `ADD_CORTE_EST` a «Corte estético» y `ADD_RETOQUE_CARITA` a «Retoque de carita» (admin → Tienda).

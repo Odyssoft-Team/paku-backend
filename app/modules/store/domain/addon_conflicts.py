@@ -15,9 +15,9 @@ from typing import Iterable, Optional
 CONFLICTS: tuple[frozenset[str], ...] = (
     frozenset({"ADD_CORTE_EST", "ADD_CORTE_CORTO"}),
     frozenset({"ADD_DESMOTADO_LOC", "ADD_DESMOTADO_EXT"}),
-    frozenset({"ADD_CARITA", "ADD_RETOQUE"}),
+    frozenset({"ADD_RETOQUE_CARITA", "ADD_RETOQUE"}),
     frozenset({"ADD_CORTE_EST", "ADD_RETOQUE"}),
-    frozenset({"ADD_CORTE_EST", "ADD_CARITA"}),
+    frozenset({"ADD_CORTE_EST", "ADD_RETOQUE_CARITA"}),
 )
 
 

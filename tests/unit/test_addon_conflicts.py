@@ -22,7 +22,7 @@ CARITA = uuid4()
 LOC = uuid4()
 EXT = uuid4()
 CEPILLO = uuid4()
-CODES = {CORTE: "ADD_CORTE_EST", RAPADO: "ADD_CORTE_CORTO", RETOQUE: "ADD_RETOQUE", CARITA: "ADD_CARITA",
+CODES = {CORTE: "ADD_CORTE_EST", RAPADO: "ADD_CORTE_CORTO", RETOQUE: "ADD_RETOQUE", CARITA: "ADD_RETOQUE_CARITA",
          LOC: "ADD_DESMOTADO_LOC", EXT: "ADD_DESMOTADO_EXT", CEPILLO: "ADD_TOOTHBRUSH"}
 NAMES = {CORTE: "Corte estético", RAPADO: "Rapado corporal con máquina", RETOQUE: "Retoque Paku",
          CARITA: "Retoque de carita", LOC: "Desmotado localizado", EXT: "Desmotado extendido",
@@ -82,14 +82,14 @@ def _pet(weight=12.0):
 def test_conflict_pairs():
     assert first_conflict(["ADD_CORTE_EST", "ADD_CORTE_CORTO"]) == ("ADD_CORTE_CORTO", "ADD_CORTE_EST")
     assert first_conflict(["ADD_DESMOTADO_LOC", "ADD_DESMOTADO_EXT"]) is not None
-    assert first_conflict(["ADD_CARITA", "ADD_RETOQUE"]) is not None
+    assert first_conflict(["ADD_RETOQUE_CARITA", "ADD_RETOQUE"]) is not None
     assert first_conflict(["ADD_CORTE_EST", "ADD_RETOQUE"]) is not None
-    assert first_conflict(["ADD_CORTE_EST", "ADD_CARITA"]) is not None
+    assert first_conflict(["ADD_CORTE_EST", "ADD_RETOQUE_CARITA"]) is not None
     # Combinaciones válidas
     assert first_conflict(["ADD_CORTE_CORTO", "ADD_RETOQUE"]) is None
     assert first_conflict(["ADD_DESMOTADO_EXT", "ADD_CORTE_EST", "ADD_TOOTHBRUSH"]) is None
     assert first_conflict([None, "ADD_RETOQUE"]) is None   # sin código no participa
-    assert conflicts_of("ADD_CORTE_EST") == ["ADD_CARITA", "ADD_CORTE_CORTO", "ADD_RETOQUE"]
+    assert conflicts_of("ADD_CORTE_EST") == ["ADD_CORTE_CORTO", "ADD_RETOQUE", "ADD_RETOQUE_CARITA"]
     assert conflicts_of("ADD_TOOTHBRUSH") == [] and conflicts_of(None) == []
 
 
@@ -110,7 +110,7 @@ def test_quote_accepts_compatible_addons():
 def test_addon_out_lists_incompatible_codes():
     out = AddonOut(id=uuid4(), product_id=BATH, name="Corte estético", description=None, species=Species.dog,
                    allowed_breeds=None, is_active=True, code="ADD_CORTE_EST")
-    assert out.incompatible_with == ["ADD_CARITA", "ADD_CORTE_CORTO", "ADD_RETOQUE"]
+    assert out.incompatible_with == ["ADD_CORTE_CORTO", "ADD_RETOQUE", "ADD_RETOQUE_CARITA"]
 
 
 def _cart(pet, addon_id, answers):
