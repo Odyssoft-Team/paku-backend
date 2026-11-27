@@ -25,6 +25,11 @@ del dueño; "Para después" ya está entendido y se programa más adelante.
   guardarla aparte (si se pierde, hay que volver a ingresar la API key). Sin ella el admin no puede guardar la key.
 - **Resend:** verificar el dominio paku.com.pe (registros SPF y DKIM en el DNS) antes de enviar desde
   `hola@paku.com.pe`; sin verificar, Resend rechaza el envío y la prueba del admin muestra el motivo.
+- **Intifact** (C-55): en el admin, Configuración → Integraciones → Intifact: key `fact_test_…` y RUC de la
+  empresa sandbox para probar; luego `fact_live_…` y el RUC de Paku. Crear las series (B…, F…) con el
+  correlativo inicial si ya se usaron en otro sistema. Webhook (planes de pago): registrar
+  `https://<api>/invoicing/webhook` en el portal con los eventos `document.*` y `ticket.resolved`, y pegar el
+  secreto. Requiere `CREDENTIALS_ENCRYPTION_KEY`. Instalar `openpyxl` (`requirements.txt`).
 - **Migración `4d5e6f7a8b9c`** (C-21, `orders.reserved_date` + relleno): corre sola al arrancar el contenedor.
 - **Verificar en el contenedor** que la versión instalada de `exponent_server_sdk` acepte `channel_id`
   (no está instalado localmente). Si no lo acepta, el push se envía igual sin esos campos y queda un

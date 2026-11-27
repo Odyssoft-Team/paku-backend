@@ -1,6 +1,6 @@
 ---
 feature: 0020-boletas-nubefact
-estado: in-progress
+estado: abandoned   # reemplazada por 0023-facturacion-intifact (Intifact en lugar de Nubefact)
 repos: [paku-backend, paku-admin]
 creado: 2026-11-02
 ---

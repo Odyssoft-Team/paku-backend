@@ -38,9 +38,10 @@ El slug es corto y en kebab-case: `0007-culqi-checkout`.
 | 0017 | `resultados-campanas` | paku-backend, paku-admin | in-progress |
 | 0018 | `correo-resend` | paku-backend, paku-admin | in-progress |
 | 0019 | `simulador-servicio` | paku-backend, paku-admin | in-progress |
-| 0020 | `boletas-nubefact` | paku-backend, paku-admin | in-progress |
+| 0020 | `boletas-nubefact` | paku-backend, paku-admin | abandoned (→ 0023) |
 | 0021 | `inventario-compras-y-anulacion` | paku-backend, paku-admin | in-progress |
 | 0022 | `libro-de-reclamaciones` | paku-backend, paku-web, paku-admin | in-progress |
+| 0023 | `facturacion-intifact` | paku-backend, paku-admin, paku-web | in-progress |
 
 ## Cross-repo
 

@@ -176,6 +176,17 @@ def start_scheduler() -> None:
         max_instances=1,
         coalesce=True,
     )
+    # Facturación electrónica (feature 0023): estado SUNAT de los comprobantes en curso y emisión automática
+    from app.modules.invoicing.app.jobs import run_invoicing_jobs
+
+    scheduler.add_job(
+        run_invoicing_jobs,
+        trigger=IntervalTrigger(minutes=10),
+        id="invoicing_jobs",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.start()
     logger.info("APScheduler started")
 

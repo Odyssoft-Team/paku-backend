@@ -51,7 +51,7 @@ from app.modules.campaigns.api.router import router as campaigns_router, admin_r
 from app.modules.dashboard.api.router import admin_router as dashboard_admin_router
 from app.modules.reports.api.router import admin_router as reports_admin_router
 from app.modules.messaging.api.router import admin_router as messaging_admin_router
-from app.modules.invoicing.api.router import admin_router as invoicing_admin_router
+from app.modules.invoicing.api.router import router as invoicing_router, admin_router as invoicing_admin_router
 from app.modules.complaints.api.router import router as complaints_router, admin_router as complaints_admin_router
 
 
@@ -108,6 +108,8 @@ app.add_middleware(
     allow_credentials=("*" not in origins),
     allow_methods=["*"],
     allow_headers=["*"],
+    # Nombre del archivo en las descargas (comprobantes, reportes contables)
+    expose_headers=["Content-Disposition"],
 )
 
 
@@ -157,6 +159,7 @@ app.include_router(messaging_admin_router, prefix="/admin")
 app.include_router(invoicing_admin_router, prefix="/admin")
 app.include_router(complaints_admin_router, prefix="/admin")
 app.include_router(complaints_router)
+app.include_router(invoicing_router)
 app.include_router(campaigns_router)
 app.include_router(media_router)
 

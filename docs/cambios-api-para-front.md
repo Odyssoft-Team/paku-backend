@@ -827,3 +827,51 @@ dispara no se le notifica.
   mano). `used_fallback` del simulador queda siempre en `false`.
 - Con los datos del 13/11 no cambia ningún precio: la única fila "mestizo" con precio es la del Cepillo dental, que
   además tiene precio en los 6 pelajes. **Compatible.** **Sin migración.** **Apps:** ninguna.
+
+## C-55 · Facturación electrónica con Intifact; se retira Nubefact (feature 0023, 2026-11-26)
+
+- **Rompe (solo admin):** se eliminan `GET/PUT /admin/integrations/nubefact` y `POST /admin/integrations/nubefact/test`
+  (C-47). Nubefact no se usa: el proveedor es Intifact.
+- **Integración (admin):** `GET /admin/integrations/intifact` → `{enabled, configured, api_url, api_key_mask
+  (fact_test_…abcd, nunca la key), environment (test | live, lo decide la key), company_ruc, webhook_secret_mask,
+  webhook_path, auto_issue, issue_trigger, email_customer, status (not_configured | disabled | active | error), last_test_at,
+  last_test_ok, last_test_error, encryption_ready, updated_at, updated_by, readiness}`. `readiness`: RUC, nombre y
+  razón social de Paku, `igv_percent`, `customers`, `customers_with_dni`, `boleta_series`, `factura_series`.
+  `PUT` con `{enabled, api_key?, company_ruc, webhook_secret?, auto_issue, issue_trigger?, email_customer}` (vacíos
+  conservan los secretos guardados; `issue_trigger` ausente conserva el guardado; 422 `INVOICING_INVALID` con `field`; 503 `ENCRYPTION_UNAVAILABLE`). `POST …/test` → `{ok,
+  message}`: lista las empresas de la cuenta y verifica el RUC emisor; **no emite nada**.
+- **Series:** `GET/POST /admin/invoicing/series`, `PATCH /admin/invoicing/series/{id}` → `{id, type (BOLETA |
+  FACTURA), doc_type, series, first_number, is_active, issued, last_number, next_number}`. B… para boletas, F… para
+  facturas; una activa por tipo. 409 `SERIES_EXISTS`, `SERIES_IN_USE` (no se renombra una serie usada).
+- **Momento de emisión:** `issue_trigger` = `service` (por defecto: la orden queda lista al realizarse el servicio; un
+  ajuste por peso, cuando su orden original está realizada) o `payment` (al confirmarse el pago). La emisión manual
+  siempre está disponible para las órdenes listas; `auto_issue` emite solas las que no necesitan datos del admin.
+- **Pendientes:** `GET /admin/invoicing/pending?date_from&date_to&q&page&page_size` → `{items, total, total_amount,
+  issue_trigger}`: órdenes pagadas (servicio o ajuste por peso), no canceladas, sin comprobante vigente y listas según
+  `issue_trigger`, con el cliente sugerido, `auto_issuable`, `failed_attempts` y `last_error`.
+- **Emisión:** `POST /admin/invoicing/orders/{order_id}/preview` (no envía nada) y `…/issue` con `{type, customer_doc_type?,
+  customer_doc_number?, customer_name?, customer_address?, customer_email?}`. En boletas, sin documento se usa el DNI
+  del perfil o consumidor final (solo por debajo de S/ 700). Errores: 409 `ORDER_NOT_PAID`, `ORDER_CANCELLED`,
+  `ORDER_NOT_READY` (con `service`, el servicio aún no se realiza), `DOCUMENT_EXISTS`, `SERIES_NOT_CONFIGURED`, `TOTAL_MISMATCH`, `INVOICING_NOT_CONFIGURED`; 422 `INVOICING_INVALID`
+  (con `field`) o `INTIFACT_ERROR`; 502 si Intifact no responde. `GET /admin/invoicing/orders/{order_id}/documents`.
+- **Emisión de varias:** `POST /admin/invoicing/issue-batch` con `{order_ids}` (1 a 50) → `{items: [{order_id, ok,
+  document?, code?, message?}], issued, failed}`. Boletas con los datos del perfil, como la emisión automática; una a
+  la vez y un error no detiene las demás. `code`: `NEEDS_CUSTOMER_DATA` (emitir de a una), `ORDER_NOT_READY`,
+  `DOCUMENT_EXISTS`, `NOT_FOUND`, `INTIFACT_ERROR`… 422 sin órdenes o con más de 50.
+- **Registro:** `GET /admin/invoicing/documents?type&status (o PENDIENTE / FALLIDO)&date_from&date_to&q&environment&page
+  &page_size` → `{items, total, accepted_amount}`. `GET /admin/invoicing/documents/{id}` (con `lines`, `hash`,
+  `void_reason`, `days_left_to_void`), `POST …/{id}/refresh`, `POST …/{id}/void` con `{reason}` (solo aceptados,
+  hasta 7 días: 409 `NOT_VOIDABLE`, `VOID_PERIOD_EXPIRED`), `GET …/{id}/pdf?format=a4|ticket80|ticket58`, `…/xml`,
+  `…/cdr` (409 `CDR_NOT_READY`).
+- **Clientes de facturación:** `GET /admin/invoicing/customers?q&origin (USER | COMPANY)&with_documents&page&page_size`,
+  `GET /admin/invoicing/customers/search?q` (autocompletar), `POST /admin/invoicing/companies`,
+  `PATCH /admin/invoicing/companies/{id}` (409 `COMPANY_EXISTS`).
+- **Contabilidad:** `GET /admin/invoicing/accounting` → meses `{month, boletas, facturas, voided, total}`;
+  `GET /admin/invoicing/accounting/{AAAA-MM}/{resumen-totales | resumen-facturas | compendio-boletas |
+  compendio-facturas | registro-ventas}` (xlsx, zip o txt PLE 14.1).
+- **App del cliente (nuevo, opcional):** `GET /invoicing/orders/{order_id}/documents` → `[{id, type, full_number,
+  issue_date, total, status, pdf_available}]` (404 si la orden no es suya) y `GET /invoicing/documents/{id}/pdf`.
+  Además, al aceptarse el comprobante el cliente recibe un correo con el enlace al PDF.
+- **Webhook:** `POST /invoicing/webhook` (lo llama Intifact; firma HMAC-SHA256). Registrar en el portal de Intifact.
+- **Migración:** `0b1c2d3e4f5a` y `1c2d3e4f5a6b` (`issue_trigger`). Dependencia nueva: `openpyxl`. **Apps:** admin (sección Facturación electrónica y
+  Configuración · Integraciones); app y web de clientes (opcional).

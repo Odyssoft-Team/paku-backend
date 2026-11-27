@@ -112,8 +112,10 @@ Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada sp
   Siguen: plantillas Jinja2 y primeros correos, webhook y bajas, constructor visual
 - [x] 6.15 Simulador de un servicio (servicio, adicionales, raza y peso → insumos, stock, costo y margen) —
   `specs/features/0019-simulador-servicio`, C-46, sin migración
-- [ ] 6.16 Boletas con Nubefact — `specs/features/0020-boletas-nubefact`. Fase 1 (conexión y vista de capacidades):
-  C-47, migración `6d7e8f9a0b1c`. Falta emitir (decisiones pendientes en el spec)
+- [x] ~~6.16 Boletas con Nubefact~~ (0020, abandonada el 2026-11-26: el proveedor es Intifact)
+- [ ] 6.17 Facturación electrónica con Intifact — `specs/features/0023-facturacion-intifact`, C-55, migración
+  `0b1c2d3e4f5a`. Backend hecho (boletas, facturas, series, pendientes, anulación, webhook, emisión automática,
+  reportes contables, comprobantes en la app). Falta: admin y prueba con una key `fact_test_`
 
 ### Al final de la etapa 1
 - [ ] Pagos/Culqi (`pendientes-pagos-culqi.md`)
