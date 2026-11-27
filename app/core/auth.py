@@ -13,6 +13,8 @@ from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.settings import settings
 
+logger = logging.getLogger(__name__)
+
 security = HTTPBearer()
 
 @dataclass(frozen=True)
@@ -247,12 +249,29 @@ def require_roles(*roles: str):
     return _check
 
 
+async def profile_complete_in_db(user_id: UUID) -> bool:
+    """La marca del token se emite al iniciar sesión: si el usuario completó su perfil después (en «Mi perfil»), el
+    token sigue diciendo incompleto hasta renovarse. Se confirma en la base: marcado completo o con teléfono, sexo y
+    fecha de nacimiento."""
+    from app.core.db import AsyncSessionLocal
+    from app.modules.iam.domain.user import has_required_profile
+    from app.modules.iam.infra.models import UserModel
+
+    try:
+        async with AsyncSessionLocal() as session:
+            user = await session.get(UserModel, user_id)
+    except Exception:
+        logger.exception("No se pudo confirmar el perfil del usuario %s", user_id)
+        return False
+    return user is not None and (bool(user.profile_completed) or has_required_profile(user))
+
+
 def require_profile_complete():
     """Guard que rechaza requests de usuarios sociales con perfil incompleto.
     Usar en endpoints que requieren phone/sex/birth_date (booking, órdenes, etc.).
     """
     async def _check(current: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-        if not current.profile_completed:
+        if not current.profile_completed and not await profile_complete_in_db(current.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={

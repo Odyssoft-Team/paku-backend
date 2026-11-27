@@ -931,3 +931,12 @@ dispara no se le notifica.
   receta lo seguía descontando (y la tienda no vendía el servicio por su stock). Quitarlo o reemplazarlo en esas
   recetas y volver a intentar. Las versiones viejas de una receta no bloquean.
 - **Sin migración.** **Apps:** admin (Insumos muestra el mensaje; Recetas avisa si ya usa un insumo desactivado).
+
+## C-61 · El perfil se completa desde «Mi perfil» (2026-11-26)
+
+- Un usuario de login social (perfil incompleto) que guarda teléfono, sexo y fecha de nacimiento con `PUT /users/me`
+  queda con `profile_completed=true`. Antes solo lo hacía `PUT /users/me/complete`, que la web no usa, y la reserva
+  respondía siempre 403 `PROFILE_INCOMPLETE`.
+- La reserva (`require_profile_complete`) ya no depende solo de la marca del token: si dice incompleto, se confirma en
+  la base (completo o con los tres datos). No hace falta volver a iniciar sesión.
+- **Sin migración.** **Apps:** ninguna (web y app quedan destrabadas sin cambios).

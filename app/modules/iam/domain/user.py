@@ -102,6 +102,12 @@ class User:
         )
 
 
+def has_required_profile(user) -> bool:
+    """Datos que se piden para reservar: teléfono, sexo y fecha de nacimiento (los que el login social no trae)."""
+    return bool((getattr(user, "phone", None) or "").strip()) and getattr(user, "sex", None) is not None \
+        and getattr(user, "birth_date", None) is not None
+
+
 class UserRepository(Protocol):
     async def add(self, user: User) -> None:
         ...

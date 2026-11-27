@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from types import SimpleNamespace
 from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
 
 from app.core.auth import hash_password
-from app.modules.iam.domain.user import Address, Role, Sex, User, UserRepository
+from app.modules.iam.domain.user import Address, Role, Sex, User, UserRepository, has_required_profile
 
 
 @dataclass
@@ -87,6 +88,9 @@ class UpdateProfile:
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
             )
 
+        new_phone = phone if phone is not None else user.phone
+        new_sex = sex if sex is not None else user.sex
+        new_birth = birth_date if birth_date is not None else user.birth_date
         updated = User(
             id=user.id,
             email=user.email,
@@ -94,12 +98,15 @@ class UpdateProfile:
             role=user.role,
             is_active=user.is_active,
             created_at=user.created_at,
-            phone=phone if phone is not None else user.phone,
+            phone=new_phone,
             first_name=first_name if first_name is not None else user.first_name,
             last_name=last_name if last_name is not None else user.last_name,
-            sex=sex if sex is not None else user.sex,
-            birth_date=birth_date if birth_date is not None else user.birth_date,
-            profile_completed=user.profile_completed,  # preservar siempre
+            sex=new_sex,
+            birth_date=new_birth,
+            # Nunca vuelve a incompleto; se completa al tener teléfono, sexo y fecha de nacimiento (desde «Mi perfil»,
+            # no solo con PUT /users/me/complete)
+            profile_completed=user.profile_completed or has_required_profile(
+                SimpleNamespace(phone=new_phone, sex=new_sex, birth_date=new_birth)),
             dni=dni if dni is not None else user.dni,
             address=address if address is not None else user.address,
             profile_photo_url=profile_photo_url
