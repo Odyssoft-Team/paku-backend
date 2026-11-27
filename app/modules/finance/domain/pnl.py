@@ -25,24 +25,54 @@ def r2(x: float) -> float:
     return round(x + 0.0, 2)
 
 
+MAX_RANGE_DAYS = 366
+
+
 @dataclass(frozen=True)
 class Period:
-    month: str          # YYYY-MM
+    """Un mes (`month`) o un rango de días cualquiera (`month` None), ambos extremos incluidos."""
     start: date
-    end: date           # último día del mes
-    cut: date           # último día con datos: hoy si el mes está en curso
-    is_open: bool       # mes en curso (o futuro): lo que pase después aún lo cambia
+    end: date
+    cut: date           # último día con datos: hoy si el período está en curso
+    is_open: bool       # llega a hoy (o al futuro): lo que pase después aún lo cambia
+    month: Optional[str] = None   # YYYY-MM si el período es un mes calendario
 
     @property
-    def days_in_month(self) -> int:
+    def days_in_period(self) -> int:
         return (self.end - self.start).days + 1
+
+    @property
+    def days_in_month(self) -> Optional[int]:
+        return self.days_in_period if self.month else None
 
     @property
     def days_elapsed(self) -> int:
         return max(0, (self.cut - self.start).days + 1)
 
+    @property
+    def is_full_month(self) -> bool:
+        """Mes calendario completo y cerrado: el costo del groomer va entero, sin prorrateo."""
+        return self.month is not None and not self.is_open
+
+    def month_segments(self) -> list[tuple[date, date, int]]:
+        """Tramos por mes calendario de los días transcurridos (inicio → corte): (desde, hasta, días del mes)."""
+        out = []
+        day = self.start
+        while day <= self.cut:
+            last = date(day.year, day.month, calendar.monthrange(day.year, day.month)[1])
+            until = min(last, self.cut)
+            out.append((day, until, last.day))
+            day = date.fromordinal(until.toordinal() + 1)
+        return out
+
     def __contains__(self, day: Optional[date]) -> bool:
         return day is not None and self.start <= day <= self.end
+
+
+def _with_cut(start: date, end: date, today: date, month: Optional[str] = None) -> Period:
+    # Período futuro: el corte queda antes del inicio (sin días transcurridos)
+    cut = min(end, today) if start <= today else date.fromordinal(start.toordinal() - 1)
+    return Period(start=start, end=end, cut=cut, is_open=end >= today, month=month)
 
 
 def month_period(month: str, today: date) -> Period:
@@ -53,10 +83,16 @@ def month_period(month: str, today: date) -> Period:
     except (ValueError, TypeError) as exc:
         raise ValueError("El mes va como AAAA-MM.") from exc
     end = date(year, mon, calendar.monthrange(year, mon)[1])
-    is_open = end >= today
-    # Mes futuro: el corte queda antes del inicio (sin días transcurridos)
-    cut = min(end, today) if start <= today else date.fromordinal(start.toordinal() - 1)
-    return Period(month=f"{year:04d}-{mon:02d}", start=start, end=end, cut=cut, is_open=is_open)
+    return _with_cut(start, end, today, month=f"{year:04d}-{mon:02d}")
+
+
+def range_period(date_from: date, date_to: date, today: date) -> Period:
+    """Rango de días (ambos incluidos; un solo día = «hoy» u otro día). ValueError si no es válido."""
+    if date_from > date_to:
+        raise ValueError("La fecha inicial debe ser anterior o igual a la final.")
+    if (date_to - date_from).days + 1 > MAX_RANGE_DAYS:
+        raise ValueError(f"El rango admite hasta {MAX_RANGE_DAYS} días.")
+    return _with_cut(date_from, date_to, today)
 
 
 def net_of_igv(total: float, igv_percent: float) -> float:
@@ -140,8 +176,8 @@ class MovementFact:
 class GroomerMonth:
     groomer_id: UUID
     name: str
-    monthly_cost: float               # del registro vigente al corte, prorrateado si el mes está abierto
-    full_monthly_cost: float
+    monthly_cost: float               # costo del período: el mensual de cada mes × días cubiertos ÷ días del mes
+    full_monthly_cost: float          # costo mensual del registro vigente al corte
     assigned: float                   # mano de obra de receta de sus servicios del mes
     services: int
 
@@ -269,8 +305,8 @@ def build_pnl(
         unabsorbed = _sum(g.unabsorbed for g in groomers)
         lines.append(Line(
             "unabsorbed_labor", "Mano de obra no utilizada", unabsorbed, ESTIMATED, "cost",
-            note=("Costo del groomer prorrateado a los días transcurridos − lo asignado a servicios"
-                  if period.is_open else "Costo mensual del groomer − lo asignado a servicios"),
+            note=("Costo mensual del groomer − lo asignado a servicios" if period.is_full_month
+                  else "Costo del groomer prorrateado a los días del período − lo asignado a servicios"),
             count=len(groomers)))
     else:
         lines.append(Line("unabsorbed_labor", "Mano de obra no utilizada", None, NOT_CONFIGURED, "cost",

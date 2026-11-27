@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,7 +23,7 @@ from app.modules.finance.api.schemas import (
     ServiceCostOut,
 )
 from app.modules.finance.app.use_cases import build_monthly_pnl
-from app.modules.finance.domain.pnl import MonthlyPnl, month_period
+from app.modules.finance.domain.pnl import MonthlyPnl, month_period, range_period
 
 admin_router = APIRouter(prefix="/finance", tags=["finance-admin"])
 
@@ -32,8 +33,8 @@ def pnl_out(p: MonthlyPnl) -> MonthlyPnlOut:
     lc = p.labor_comparison
     return MonthlyPnlOut(
         period=PeriodOut(month=period.month, start=period.start, end=period.end, cut=period.cut,
-                         is_open=period.is_open, days_in_month=period.days_in_month,
-                         days_elapsed=period.days_elapsed),
+                         is_open=period.is_open, days_in_period=period.days_in_period,
+                         days_in_month=period.days_in_month, days_elapsed=period.days_elapsed),
         igv_percent=p.igv_percent, fee_card_percent=p.fee_card_percent, fee_yape_percent=p.fee_yape_percent,
         lines=[LineOut(**asdict(ln)) for ln in p.lines],
         sales_with_igv=p.sales_with_igv, discounts=p.discounts, receivable=p.receivable,
@@ -54,19 +55,28 @@ def pnl_out(p: MonthlyPnl) -> MonthlyPnlOut:
 async def monthly_pnl(
     month: Optional[str] = Query(None, description="AAAA-MM (el mes en curso por defecto).",
                                  pattern=r"^\d{4}-\d{2}$"),
+    date_from: Optional[date] = Query(None, description="Rango: primer día (incluido). Va con date_to; gana a month."),
+    date_to: Optional[date] = Query(None, description="Rango: último día (incluido). Hoy = date_from = date_to = hoy."),
     _: CurrentUser = Depends(require_roles("admin")),
     session: AsyncSession = Depends(get_async_session),
 ) -> MonthlyPnlOut:
     """
-    P&L de un mes con datos reales: ventas sin IGV (de los comprobantes), costo del servicio (insumos, mermas, mano
-    de obra de receta, mano de obra no utilizada y comisión de la pasarela), margen bruto y utilidad parcial. Cada
-    línea dice su estado (`real`, `estimated`, `partial`, `not_configured` con importe null) y trae el detalle
-    (ventas, costeo por servicio, movimientos y groomers) para rastrear cada importe. El mes de una venta es el del
-    servicio realizado. 422 si el mes no es válido.
+    P&L de un mes o de un rango de días con datos reales: ventas sin IGV (de los comprobantes), costo del servicio
+    (insumos, mermas, mano de obra de receta, mano de obra no utilizada y comisión de la pasarela), margen bruto y
+    utilidad parcial. Cada línea dice su estado (`real`, `estimated`, `partial`, `not_configured` con importe null) y
+    trae el detalle (ventas, costeo por servicio, movimientos y groomers) para rastrear cada importe. La venta va al
+    día del servicio realizado. En un rango (o el mes en curso), el costo del groomer se prorratea por los días que
+    cubre de cada mes. 422 `PERIOD_INVALID` si el mes o el rango no son válidos (hasta 366 días).
     """
-    month = month or today_lima().strftime("%Y-%m")
+    today = today_lima()
     try:
-        month_period(month, today_lima())
+        if date_from is not None or date_to is not None:
+            if date_from is None or date_to is None:
+                raise ValueError("Indica la fecha inicial y la final.")
+            range_period(date_from, date_to, today)
+        else:
+            month = month or today.strftime("%Y-%m")
+            month_period(month, today)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail={"code": "MONTH_INVALID", "message": str(exc)}) from exc
-    return pnl_out(await build_monthly_pnl(session).execute(month=month))
+        raise HTTPException(status_code=422, detail={"code": "PERIOD_INVALID", "message": str(exc)}) from exc
+    return pnl_out(await build_monthly_pnl(session).execute(month=month, date_from=date_from, date_to=date_to))

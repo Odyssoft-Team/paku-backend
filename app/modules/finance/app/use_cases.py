@@ -22,6 +22,7 @@ from app.modules.finance.domain.pnl import (
     build_pnl,
     month_period,
     net_of_igv,
+    range_period,
     r2,
     recipe_on,
 )
@@ -66,8 +67,15 @@ class BuildMonthlyPnl:
     settings: Callable     # async (key) -> valor efectivo de Parámetros generales
     today: Callable[[], date] = today_lima
 
-    async def execute(self, *, month: str) -> MonthlyPnl:
-        period = month_period(month, self.today())   # ValueError → 422 en el router
+    async def execute(self, *, month: Optional[str] = None, date_from: Optional[date] = None,
+                      date_to: Optional[date] = None) -> MonthlyPnl:
+        """Un mes (`month`) o un rango de días (`date_from` y `date_to`, ambos incluidos). ValueError si no es válido."""
+        if date_from is not None or date_to is not None:
+            if date_from is None or date_to is None:
+                raise ValueError("Indica la fecha inicial y la final.")
+            period = range_period(date_from, date_to, self.today())
+        else:
+            period = month_period(month or self.today().strftime("%Y-%m"), self.today())
         start, end = lima_start(period.start), lima_start(period.end + timedelta(days=1))
         igv = _f(await self.settings("igv_percent"))
         fee_card = await self.settings("pos_fee_card_percent")
@@ -171,15 +179,22 @@ class BuildMonthlyPnl:
         names.update(users)
         out = []
         for gid in candidates:
-            profile = profile_on(by_groomer.get(gid, []), period.cut)
-            if profile is None:
+            mine_profiles = by_groomer.get(gid, [])
+            # Costo del período: por cada mes que cubre, su costo mensual × días cubiertos ÷ días de ese mes (un mes
+            # cerrado completo va entero)
+            cost, found = 0.0, False
+            for seg_from, seg_to, days_of_month in period.month_segments():
+                profile = profile_on(mine_profiles, seg_to)
+                if profile is not None:
+                    found = True
+                    cost += profile.monthly_cost * ((seg_to - seg_from).days + 1) / days_of_month
+            current = profile_on(mine_profiles, period.cut)
+            if not found or current is None:
                 continue
-            full = profile.monthly_cost
-            monthly = full * period.days_elapsed / period.days_in_month if period.is_open else full
             mine = [c for c in costs if c.groomer_id == gid and c.labor_rate_source == "groomer"]
             out.append(GroomerMonth(
-                groomer_id=gid, name=full_name(names.get(gid)) or str(gid), monthly_cost=r2(monthly),
-                full_monthly_cost=r2(full), assigned=r2(sum(c.labor_cost or 0 for c in mine)),
+                groomer_id=gid, name=full_name(names.get(gid)) or str(gid), monthly_cost=r2(cost),
+                full_monthly_cost=r2(current.monthly_cost), assigned=r2(sum(c.labor_cost or 0 for c in mine)),
                 services=sum(1 for c in costs if c.groomer_id == gid)))
         return sorted(out, key=lambda g: g.name)
 

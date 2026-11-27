@@ -10,12 +10,13 @@ LineStatus = Literal["real", "estimated", "partial", "not_configured"]
 
 
 class PeriodOut(BaseModel):
-    month: str = Field(..., description="AAAA-MM")
+    month: Optional[str] = Field(None, description="AAAA-MM si se pidió un mes; null en un rango de fechas.")
     start: date
     end: date
-    cut: date = Field(..., description="Último día con datos (hoy si el mes está en curso).")
-    is_open: bool = Field(..., description="Mes en curso: lo que se registre después aún lo cambia.")
-    days_in_month: int
+    cut: date = Field(..., description="Último día con datos (hoy si el período está en curso).")
+    is_open: bool = Field(..., description="Llega a hoy: lo que se registre después aún lo cambia.")
+    days_in_period: int
+    days_in_month: Optional[int] = Field(None, description="Solo si se pidió un mes (igual a days_in_period).")
     days_elapsed: int
 
 

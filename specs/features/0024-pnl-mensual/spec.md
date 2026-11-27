@@ -69,6 +69,13 @@ y movimientos que la forman. Lo que aún no se registra sale «no configurado»,
 - **Cobrado pendiente de reprogramar o reembolsar:** órdenes de servicio canceladas y pagadas cuya última
   actualización (la cancelación) cae en el mes, como en el Dashboard.
 
+## Período (dueño, 2026-11-26)
+
+- Se consulta un **mes**, **hoy** o un **rango de fechas** (ambos días incluidos, hasta 366 días). Ventas, costos,
+  movimientos y canceladas se filtran por día igual que en un mes.
+- El costo del groomer de un rango es el costo mensual de cada mes que cubre × días cubiertos ÷ días de ese mes (la
+  misma regla que el mes en curso). Un mes cerrado completo va entero.
+
 ## Comportamiento esperado
 
 1. **Dado** un mes, **cuando** el admin pide el P&L, **entonces** recibe cada línea con su importe, su estado
@@ -85,7 +92,7 @@ y movimientos que la forman. Lo que aún no se registra sale «no configurado»,
 
 ## Criterios de aceptación
 
-- [x] `GET /admin/finance/pnl?month=YYYY-MM`, solo lectura, sin migración.
+- [x] `GET /admin/finance/pnl?month=YYYY-MM` o `?date_from&date_to`, solo lectura, sin migración (C-56, C-58).
 - [x] Parámetros generales: «Comisión de Culqi con tarjeta (%)» y «Comisión de Culqi con Yape (%)».
 - [x] Tests de período, venta sin IGV, receta por fecha, mano de obra no utilizada, mermas y comisión.
 - [x] Admin: «Cierre mensual / P&L» con datos reales y detalle por línea (sin «Demo»).

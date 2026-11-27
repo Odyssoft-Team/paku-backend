@@ -904,3 +904,13 @@ dispara no se le notifica.
   de llamar a Culqi: **no hubo cobro**. Tratarlo como los otros errores sin cobro (C-23) y mostrar `message`.
 - **Sin migración.** **Apps:** web (lo muestra). La app de clientes no cambia: si intenta pagar sin insumos recibe el
   409 y no se cobra.
+
+## C-58 · P&L por rango de fechas y «hoy» (feature 0024, 2026-11-26)
+
+- `GET /admin/finance/pnl` acepta, además de `month`, **`date_from` y `date_to`** (AAAA-MM-DD, ambos incluidos; hasta
+  366 días; «hoy» = los dos con la fecha de hoy). Con rango, `month` se ignora.
+- `period`: `month` pasa a ser **null en un rango**; nuevo `days_in_period`; `days_in_month` solo con mes (null en
+  rango). 422 `PERIOD_INVALID` (antes `MONTH_INVALID`) si el mes o el rango no son válidos.
+- Costo del groomer en un rango (o en el mes en curso): el costo mensual de cada mes × días que cubre ÷ días de ese
+  mes. Un mes cerrado completo va entero, como antes.
+- **Sin migración.** **Apps:** admin (Cierre mensual / P&L).

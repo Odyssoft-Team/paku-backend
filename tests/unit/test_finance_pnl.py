@@ -245,6 +245,34 @@ def test_missing_fee_percent_is_not_configured_and_future_month_is_empty():
     run(scenario)
 
 
+def test_date_range_today_and_range_across_months():
+    async def scenario(ctx):
+        o, _ = await _november(ctx)
+        # Rango dentro de noviembre (mes cerrado): A (10/11) y B (25/11), no D (28/11); groomer 16 de 30 días
+        p = await ctx.use_case(date(2026, 12, 10)).execute(date_from=date(2026, 11, 10), date_to=date(2026, 11, 25))
+        assert p.period.month is None and p.period.days_in_period == 16 and not p.period.is_open
+        assert {s.order_id for s in p.sales} == {o["a"].id, o["b"].id, o["adj_a"].id}
+        assert p.groomers[0].monthly_cost == pytest.approx(2000 * 16 / 30, abs=0.01)
+        assert "prorrateado" in _lines(p)["unabsorbed_labor"].note
+        assert (_lines(p)["supplies"].amount, _lines(p)["shrinkage"].amount) == (1.0, 7.0)
+
+        # «Hoy» (28/11): solo D; un día de costo del groomer y período abierto
+        p = await ctx.use_case(date(2026, 11, 28)).execute(date_from=date(2026, 11, 28), date_to=date(2026, 11, 28))
+        assert [s.order_id for s in p.sales] == [o["d"].id] and p.period.is_open
+        assert p.groomers[0].monthly_cost == pytest.approx(2000 / 30, abs=0.01)
+
+        # Rango de dos meses: 6 días de noviembre (÷ 30) + 5 de diciembre (÷ 31)
+        p = await ctx.use_case(date(2026, 12, 10)).execute(date_from=date(2026, 11, 25), date_to=date(2026, 12, 5))
+        assert {s.order_id for s in p.sales} == {o["b"].id, o["c"].id, o["d"].id}
+        assert p.groomers[0].monthly_cost == pytest.approx(2000 * (6 / 30 + 5 / 31), abs=0.01)
+
+        with pytest.raises(ValueError):
+            await ctx.use_case(date(2026, 12, 10)).execute(date_from=date(2026, 11, 25), date_to=date(2026, 11, 1))
+        with pytest.raises(ValueError):
+            await ctx.use_case(date(2026, 12, 10)).execute(date_from=date(2026, 11, 25))
+    run(scenario)
+
+
 def test_domain_helpers():
     with pytest.raises(ValueError):
         month_period("2026-13", date(2026, 11, 26))
