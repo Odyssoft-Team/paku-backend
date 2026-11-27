@@ -15,6 +15,7 @@ from app.modules.orders.app.use_cases_impl.transitions import (  # noqa: F401
     AcceptOrder,
     ArriveOrder,
     CancelOrder,
+    CancelUnpaidOrder,
     CompleteOrder,
     DepartOrder,
 )

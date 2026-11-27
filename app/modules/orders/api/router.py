@@ -33,6 +33,7 @@ from app.modules.orders.app.use_cases import (
     ArriveOrder,
     AssignOrder,
     CancelOrder,
+    CancelUnpaidOrder,
     CompleteOrder,
     ConfirmCashPayment,
     ConfirmOrderPayment,
@@ -650,6 +651,24 @@ async def pay_order(
         email=current.email,
         source_id=payload.source_id,
     )
+    return _order_out(order)
+
+
+@router.post("/{id}/cancel-unpaid", response_model=OrderOut)
+async def cancel_unpaid_order(
+    id: UUID,
+    current: CurrentUser = Depends(get_current_user),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+    holds_repo=Depends(get_holds_repo),
+    pets_repo: PetRepository = Depends(get_pets_repo),
+) -> OrderOut:
+    """
+    El cliente cancela su reserva **sin pagar** (pendiente o fallida) para pedir de nuevo; libera el cupo y el cupón.
+    Solo una orden de servicio propia antes de que el groomer salga. 404 si no es suya; 409 `ORDER_NOT_CANCELLABLE`
+    (pagada o ya en curso) o `ADJUSTMENT_NOT_CANCELLABLE` (saldo por peso).
+    """
+    order = await CancelUnpaidOrder(repo=repo, holds_repo=holds_repo, pets_repo=pets_repo).execute(
+        order_id=id, user_id=current.id)
     return _order_out(order)
 
 

@@ -940,3 +940,11 @@ dispara no se le notifica.
 - La reserva (`require_profile_complete`) ya no depende solo de la marca del token: si dice incompleto, se confirma en
   la base (completo o con los tres datos). No hace falta volver a iniciar sesión.
 - **Sin migración.** **Apps:** ninguna (web y app quedan destrabadas sin cambios).
+
+## C-62 · El cliente cancela su reserva sin pagar (2026-11-26)
+
+- **Nuevo:** `POST /orders/{id}/cancel-unpaid` (cliente) → `OrderOut` cancelada. Libera el cupo y el cupón. Solo su
+  orden de servicio, con pago pendiente o fallido y en estado `created` (antes de que el groomer salga). 404 si no es
+  suya; 409 `ORDER_NOT_CANCELLABLE` (pagada, en verificación o ya en curso) o `ADJUSTMENT_NOT_CANCELLABLE` (saldo por
+  peso). Para salir de una reserva que no se puede pagar (p. ej. `PAYMENT_3DS_REQUIRED`) y pedir de nuevo.
+- **Sin migración.** **Apps:** web (botón «Cancelar esta reserva» en el pago); app de clientes (opcional).

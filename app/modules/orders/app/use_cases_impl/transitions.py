@@ -188,6 +188,33 @@ async def release_order_hold(holds_repo, order: Order, orders_repo=None) -> Orde
 
 
 @dataclass
+class CancelUnpaidOrder:
+    """El cliente abandona una reserva que no pagó (p. ej. su tarjeta pide 3DS o la rechazan) para poder pedir de
+    nuevo: libera el cupo y el cupón. Solo su orden de servicio, sin pagar (pendiente o fallida) y antes de que el
+    groomer salga. Un ajuste por peso no se cancela así (es un saldo que debe)."""
+    repo: PostgresOrderRepository
+    holds_repo: object = None
+    pets_repo: object = None
+
+    async def execute(self, *, order_id: UUID, user_id: UUID) -> Order:
+        try:
+            order = await self.repo.get_order(id=order_id, user_id=user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found") from exc
+        if order.parent_order_id is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+                "code": "ADJUSTMENT_NOT_CANCELLABLE",
+                "message": "El saldo por diferencia de peso no se cancela: págalo para pedir otro servicio."})
+        if order.payment_status.value not in ("pending", "failed") or order.status != OrderStatus.created:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+                "code": "ORDER_NOT_CANCELLABLE",
+                "message": "Esta reserva ya no se puede cancelar desde aquí (está pagada o el servicio ya empezó). "
+                           "Escríbenos para ayudarte."})
+        return await CancelOrder(repo=self.repo, holds_repo=self.holds_repo, pets_repo=self.pets_repo).execute(
+            order_id=order_id)
+
+
+@dataclass
 class CancelOrder:
     repo: PostgresOrderRepository
     holds_repo: object = None  # PostgresHoldRepository
