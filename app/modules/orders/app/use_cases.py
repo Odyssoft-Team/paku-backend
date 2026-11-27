@@ -28,6 +28,7 @@ from app.modules.orders.app.use_cases_impl.admin_orders import (  # noqa: F401
 from app.modules.orders.app.use_cases_impl.payment import (  # noqa: F401
     ConfirmCashPayment,
     PayOrder,
+    RegisterManualPayment,
 )
 from app.modules.orders.app.use_cases_impl.adjustment import CreateAdjustmentOrder  # noqa: F401
 

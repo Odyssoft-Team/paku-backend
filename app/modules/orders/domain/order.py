@@ -54,10 +54,17 @@ class PaymentStatus(str, Enum):
 # [NATURAL/BUSINESS]
 # Cómo se pagó la orden. "card"/"yape" pasan por Culqi (culqi_charge_id presente);
 # "cash" se confirma directo por el groomer al momento de la entrega, sin pasar por Culqi.
+# "transfer" y "other" (y también "cash") los registra un admin a mano: cobro fuera de la app (C-63).
 class PaymentMethod(str, Enum):
     card = "card"
     yape = "yape"
     cash = "cash"
+    transfer = "transfer"
+    other = "other"
+
+
+# Medios con los que un admin registra un cobro hecho fuera de la app (C-63)
+MANUAL_PAYMENT_METHODS = (PaymentMethod.cash, PaymentMethod.transfer, PaymentMethod.other)
 
 
 # [TECH]
@@ -175,6 +182,10 @@ class Order:
     # Campaña aplicada (feature 0013). total_snapshot ya es el neto; subtotal = total + descuento.
     discount_amount: Optional[float] = None
     campaign_id: Optional[UUID] = None
+    # Cobro registrado a mano por un admin (C-63): nota, quién y cuándo. None si se pagó por la app.
+    payment_note: Optional[str] = None
+    payment_registered_by: Optional[UUID] = None
+    payment_registered_at: Optional[datetime] = None
 
     # [TECH]
     # Factory creating Order with created status and timestamps.

@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -37,7 +37,11 @@ class OrderOut(BaseModel):
     # Pago: pending → verifying → paid | failed (ver POST /orders/{id}/pay)
     payment_status: PaymentStatus = PaymentStatus.pending
     culqi_charge_id: Optional[str] = None  # chr_(test|live)_XXXXXXXXXXXXXXXX
-    payment_method: Optional[PaymentMethod] = None  # card | yape | cash
+    payment_method: Optional[PaymentMethod] = None  # card | yape | cash | transfer | other
+    # Cobro registrado a mano por un admin (C-63)
+    payment_note: Optional[str] = None
+    payment_registered_by: Optional[UUID] = None
+    payment_registered_at: Optional[datetime] = None
     parent_order_id: Optional[UUID] = None  # presente solo en órdenes de ajuste
     # Proceso del servicio (solo con status=in_service): reception → bath → drying → finishing → return
     service_step: Optional[str] = None
@@ -222,6 +226,12 @@ class AssignmentOut(BaseModel):
     created_at: datetime
     # Orden actualizada con los nuevos datos
     order: OrderOut
+
+
+class ManualPaymentIn(BaseModel):
+    """Cobro hecho fuera de la app (C-63)."""
+    method: Literal["cash", "transfer", "other"]
+    note: str = Field(..., min_length=3, max_length=500, description="Cómo se cobró: n.º de operación, quién recibió…")
 
 
 class OrderReviewIn(BaseModel):

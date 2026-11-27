@@ -83,6 +83,10 @@ class OrderModel(Base):
     # Campaña aplicada (feature 0013): total_snapshot ya es el neto (subtotal − descuento)
     discount_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     campaign_id: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    # Cobro registrado a mano por un admin (C-63)
+    payment_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    payment_registered_by: Mapped[Optional[UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    payment_registered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)

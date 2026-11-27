@@ -61,7 +61,30 @@ class PostgresOrderRepository:
             completed_at=r.completed_at,
             discount_amount=float(r.discount_amount) if r.discount_amount is not None else None,
             campaign_id=r.campaign_id,
+            payment_note=r.payment_note,
+            payment_registered_by=r.payment_registered_by,
+            payment_registered_at=r.payment_registered_at,
         )
+
+    async def register_manual_payment(self, *, id: UUID, method: PaymentMethod, note: str, actor_id: UUID) -> Order:
+        """Cobro hecho fuera de la app, registrado por un admin (C-63). Solo desde pending o failed."""
+        from app.modules.orders.infra.models import OrderModel, utcnow
+        await self._ensure_ready()
+        model = await self._session.get(OrderModel, id)
+        if model is None:
+            raise ValueError("order_not_found")
+        if model.payment_status not in (PaymentStatus.pending.value, PaymentStatus.failed.value):
+            raise ValueError("payment_already_processed")
+        now = utcnow()
+        model.payment_status = PaymentStatus.paid.value
+        model.payment_method = method.value
+        model.payment_note = note
+        model.payment_registered_by = actor_id
+        model.payment_registered_at = now
+        model.updated_at = now
+        await self._session.commit()
+        await self._session.refresh(model)
+        return self._row_to_order(model)
 
     async def set_reservation(self, *, id: UUID, hold_id: Optional[UUID], reserved_date) -> Order:
         """Actualiza la reserva de cupo de la orden. hold_id=None conserva el anterior (historial)."""

@@ -10,6 +10,7 @@ from app.core.db import engine, get_async_session
 from app.modules.geo.infra.repository import PostgresDistrictRepository
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
 from app.modules.orders.api.schemas import (
+    ManualPaymentIn,
     OrderReviewIn,
     AssignmentOut,
     AssignOrderIn,
@@ -37,6 +38,7 @@ from app.modules.orders.app.use_cases import (
     CompleteOrder,
     ConfirmCashPayment,
     ConfirmOrderPayment,
+    RegisterManualPayment,
     CreateAdjustmentOrder,
     CreateOrderFromCart,
     DepartOrder,
@@ -572,6 +574,23 @@ async def admin_review_order(
                                   note=payload.note)
     if not payload.approved:
         order = await CancelOrder(repo=repo, holds_repo=holds_repo, pets_repo=pets_repo).execute(order_id=id)
+    return _order_out(order)
+
+
+@admin_router.post("/orders/{id}/register-payment", response_model=OrderOut)
+async def admin_register_payment(
+    id: UUID,
+    payload: ManualPaymentIn,
+    current: CurrentUser = Depends(require_roles("admin")),
+    repo: PostgresOrderRepository = Depends(get_orders_repo),
+) -> OrderOut:
+    """
+    Registra un cobro hecho fuera de la app (efectivo, transferencia u otro) con una nota (C-63): la orden queda
+    pagada, con quién y cuándo lo registró. Solo con pago pendiente o fallido y no cancelada. 404; 409
+    `ORDER_CANCELLED` o `PAYMENT_NOT_PENDING`; 422 `PAYMENT_METHOD_INVALID` o `PAYMENT_NOTE_REQUIRED`.
+    """
+    order = await RegisterManualPayment(orders_repo=repo).execute(
+        order_id=id, method=payload.method, note=payload.note, actor_id=current.id)
     return _order_out(order)
 
 

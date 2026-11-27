@@ -339,3 +339,44 @@ class ConfirmCashPayment:
                     detail="El pago de esta orden ya fue procesado",
                 ) from exc
             raise
+
+
+@dataclass
+class RegisterManualPayment:
+    """Un admin registra un cobro hecho fuera de la app (efectivo, transferencia u otro) con una nota obligatoria
+    (C-63). Para cerrar órdenes que se atendieron sin pagar por Culqi (p. ej. la tarjeta pidió 3DS). Solo órdenes no
+    canceladas con pago pendiente o fallido: una en verificación puede estar cobrándose en Culqi."""
+    orders_repo: PostgresOrderRepository
+
+    async def execute(self, *, order_id: UUID, method: str, note: str, actor_id: UUID) -> Order:
+        from app.modules.orders.domain.order import MANUAL_PAYMENT_METHODS, OrderStatus
+
+        try:
+            pay_method = PaymentMethod(method)
+        except ValueError:
+            pay_method = None
+        if pay_method not in MANUAL_PAYMENT_METHODS:
+            raise HTTPException(status_code=422, detail={
+                "code": "PAYMENT_METHOD_INVALID", "message": "El cobro manual es en efectivo, transferencia u otro."})
+        note = (note or "").strip()
+        if len(note) < 3:
+            raise HTTPException(status_code=422, detail={
+                "code": "PAYMENT_NOTE_REQUIRED", "message": "Indica cómo se cobró (p. ej. número de operación)."})
+        order = await self.orders_repo.get_order_admin(id=order_id)
+        if order is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        if order.status == OrderStatus.cancelled:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+                "code": "ORDER_CANCELLED", "message": "La orden está cancelada: no se registra un cobro."})
+        if order.payment_status.value not in ("pending", "failed"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+                "code": "PAYMENT_NOT_PENDING",
+                "message": "La orden ya está pagada o su pago se está verificando en Culqi.",
+            })
+        try:
+            return await self.orders_repo.register_manual_payment(
+                id=order_id, method=pay_method, note=note[:500], actor_id=actor_id)
+        except ValueError as exc:   # cambió de estado entre la lectura y la escritura
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={
+                "code": "PAYMENT_NOT_PENDING", "message": "La orden ya está pagada o su pago se está verificando."},
+            ) from exc

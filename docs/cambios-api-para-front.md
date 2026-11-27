@@ -948,3 +948,14 @@ dispara no se le notifica.
   suya; 409 `ORDER_NOT_CANCELLABLE` (pagada, en verificación o ya en curso) o `ADJUSTMENT_NOT_CANCELLABLE` (saldo por
   peso). Para salir de una reserva que no se puede pagar (p. ej. `PAYMENT_3DS_REQUIRED`) y pedir de nuevo.
 - **Sin migración.** **Apps:** web (botón «Cancelar esta reserva» en el pago); app de clientes (opcional).
+
+## C-63 · Cobro registrado a mano por un admin (2026-11-26)
+
+- **Nuevo (admin):** `POST /admin/orders/{id}/register-payment` con `{method: cash | transfer | other, note}` →
+  `OrderOut` pagada. Para cobros hechos fuera de la app (p. ej. la tarjeta pidió 3DS y se pagó por transferencia).
+  Solo órdenes no canceladas con pago `pending` o `failed`. 404; 409 `ORDER_CANCELLED` o `PAYMENT_NOT_PENDING`; 422
+  `PAYMENT_METHOD_INVALID` o `PAYMENT_NOTE_REQUIRED`.
+- `OrderOut`: `payment_method` admite además `transfer` y `other`; nuevos `payment_note`, `payment_registered_by` y
+  `payment_registered_at` (null si se pagó por la app). La comisión de la pasarela del P&L no aplica a estos medios.
+- **Migración `2d3e4f5a6b7c`.** **Apps:** admin (detalle de la orden). Web y app: mostrar «Transferencia» / «Otro» si
+  llegan esos medios.
