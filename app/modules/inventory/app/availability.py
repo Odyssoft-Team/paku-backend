@@ -25,27 +25,56 @@ def _uuid(value) -> Optional[UUID]:
         return None
 
 
+@dataclass(frozen=True)
+class SupplyAvailability:
+    supply_id: UUID
+    stock: float
+    committed: float             # lo que consumirán los servicios vendidos sin realizar
+    committed_orders: int        # cuántos de esos servicios usan el insumo
+
+    @property
+    def available(self) -> float:
+        return self.stock - self.committed
+
+
+@dataclass(frozen=True)
+class AvailabilitySummary:
+    supplies: dict[UUID, SupplyAvailability]
+    pending_orders: list         # órdenes vendidas sin realizar (OrderModel)
+
+
 @dataclass
 class StockAvailability:
     repo: Any            # PostgresInventoryRepository
     consumption: Any     # OrderConsumption (plan de cada orden vendida: su pelaje y peso)
     _available: dict = field(default_factory=dict, init=False)   # exclude_order_id → disponible
 
-    async def available(self, *, exclude_order_id: Optional[UUID] = None) -> dict[UUID, float]:
-        """Stock − consumo comprometido de los servicios vendidos que aún no se realizan."""
-        if exclude_order_id in self._available:
-            return self._available[exclude_order_id]
+    async def summary(self, *, exclude_order_id: Optional[UUID] = None) -> AvailabilitySummary:
+        """Por insumo: stock, comprometido por los servicios vendidos que aún no se realizan y disponible."""
         stock = dict(await self.repo.stock_by_supply())
-        for order in await self.repo.sold_pending_orders(exclude_order_id=exclude_order_id):
+        committed: dict[UUID, float] = {}
+        users: dict[UUID, set] = {}
+        orders = await self.repo.sold_pending_orders(exclude_order_id=exclude_order_id)
+        for order in orders:
             try:
                 plan = await self.consumption.plan(order)
             except Exception:   # una orden que no se puede planear no compromete insumos; no bloquea la venta
                 logger.exception("availability: no se pudo planear la orden %s", order.id)
                 continue
             for _, line in plan.lines:
-                stock[line.supply_id] = stock.get(line.supply_id, 0.0) - float(line.quantity)
-        self._available[exclude_order_id] = stock
-        return stock
+                committed[line.supply_id] = committed.get(line.supply_id, 0.0) + float(line.quantity)
+                users.setdefault(line.supply_id, set()).add(order.id)
+        return AvailabilitySummary(
+            supplies={sid: SupplyAvailability(sid, stock.get(sid, 0.0), committed.get(sid, 0.0), len(users.get(sid, ())))
+                      for sid in set(stock) | set(committed)},
+            pending_orders=orders)
+
+    async def available(self, *, exclude_order_id: Optional[UUID] = None) -> dict[UUID, float]:
+        """Stock − consumo comprometido de los servicios vendidos que aún no se realizan."""
+        if exclude_order_id not in self._available:
+            summary = await self.summary(exclude_order_id=exclude_order_id)
+            self._available[exclude_order_id] = {sid: s.available for sid, s in summary.supplies.items()}
+        return self._available[exclude_order_id]
 
     async def for_pet(
         self, targets: list[ConsumptionTarget], *, breed_category: str, weight_kg: float,

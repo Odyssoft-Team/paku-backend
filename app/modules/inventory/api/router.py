@@ -12,6 +12,9 @@ from app.core.auth import CurrentUser, require_roles
 from app.core.db import engine, get_async_session
 from app.modules.inventory.api.schemas import (
     CodeLabelOut,
+    PendingOrderOut,
+    StockAvailabilityOut,
+    SupplyAvailabilityOut,
     InventoryConfigOut,
     InventorySummaryOut,
     MissingRecipeOut,
@@ -281,6 +284,37 @@ async def inventory_summary(
     """Valor del inventario y bajo mínimo (al día) y costo de los consumos por servicio del período."""
     summary = await GetInventorySummary(repo=repo).execute(date_from=date_from, date_to=date_to)
     return InventorySummaryOut(**summary.__dict__)
+
+
+@admin_router.get("/availability", response_model=StockAvailabilityOut)
+async def stock_availability_view(
+    _: CurrentUser = Depends(require_roles("admin")),
+    session: AsyncSession = Depends(get_async_session),
+) -> StockAvailabilityOut:
+    """
+    Feature 0025: por insumo, stock, lo comprometido por los servicios vendidos que aún no se realizan y lo
+    disponible para vender (lo que usa la tienda). Más las órdenes que comprometen insumos, para revisar si alguna
+    debería cerrarse o cancelarse.
+    """
+    from app.modules.inventory.app.availability import stock_availability
+
+    summary = await stock_availability(session).summary()
+    supplies = await PostgresInventoryRepository(session=session).get_supplies(list(summary.supplies))
+    return StockAvailabilityOut(
+        supplies=[
+            SupplyAvailabilityOut(
+                supply_id=sid, sku=supplies[sid].sku if sid in supplies else "", name=supplies[sid].name if sid in supplies else "",
+                consumption_unit=supplies[sid].consumption_unit if sid in supplies else "",
+                stock=round(s.stock, 3), committed=round(s.committed, 3), available=round(s.available, 3),
+                committed_orders=s.committed_orders)
+            for sid, s in sorted(summary.supplies.items(), key=lambda kv: supplies[kv[0]].name if kv[0] in supplies else "")
+        ],
+        pending_orders=[
+            PendingOrderOut(order_id=o.id, status=o.status, payment_status=o.payment_status,
+                            scheduled_at=o.scheduled_at, reserved_date=o.reserved_date, created_at=o.created_at)
+            for o in sorted(summary.pending_orders, key=lambda o: o.created_at)
+        ],
+    )
 
 
 # ------------------------------------------------------------------

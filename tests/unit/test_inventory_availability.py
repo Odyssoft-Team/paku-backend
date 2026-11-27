@@ -120,6 +120,21 @@ def test_sold_services_commit_supplies_until_the_last_one():
     run(scenario)
 
 
+def test_summary_shows_stock_committed_and_pending_orders():
+    async def scenario(ctx):
+        shampoo = await ctx.supply("Shampoo", 500)
+        idle = await ctx.supply("Gasas", 0)
+        await ctx.recipe(BATH, "product", shampoo, 100)
+        sold = [await ctx.order() for _ in range(3)]
+        await ctx.order(status="done")
+        summary = await ctx.stock.summary()
+        s = summary.supplies[shampoo.id]
+        assert (s.stock, s.committed, s.available, s.committed_orders) == (500.0, 300.0, 200.0, 3)
+        assert summary.supplies[idle.id].available == 0.0
+        assert {o.id for o in summary.pending_orders} == {o.id for o in sold}
+    run(scenario)
+
+
 def test_addon_is_checked_with_its_service_and_no_recipe_is_sellable():
     async def scenario(ctx):
         shampoo = await ctx.supply("Shampoo", 150)

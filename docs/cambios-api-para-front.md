@@ -914,3 +914,12 @@ dispara no se le notifica.
 - Costo del groomer en un rango (o en el mes en curso): el costo mensual de cada mes × días que cubre ÷ días de ese
   mes. Un mes cerrado completo va entero, como antes.
 - **Sin migración.** **Apps:** admin (Cierre mensual / P&L).
+
+## C-59 · Disponibilidad de insumos para vender (feature 0025, 2026-11-26)
+
+- **Nuevo (admin):** `GET /admin/inventory/availability` → `{supplies: [{supply_id, sku, name, consumption_unit, stock,
+  committed, available, committed_orders}], pending_orders: [{order_id, status, payment_status, scheduled_at,
+  reserved_date, created_at}]}`. `available = stock − committed` (lo que consumirán los servicios pagados o en
+  verificación sin realizar ni cancelar): es lo que usa la tienda para marcar «no disponible». `pending_orders` sirve
+  para detectar órdenes viejas que comprometen insumos y deberían cerrarse o cancelarse.
+- **Sin migración.** **Apps:** admin (Recetas).

@@ -431,3 +431,31 @@ class SimulationOut(BaseModel):
     margin_pct: Optional[float] = None
     max_services_with_stock: Optional[int] = Field(None, description="El insumo que primero se acaba manda.")
     warnings: list[str]
+
+
+# ---------- Disponibilidad para vender (feature 0025) ----------
+
+class SupplyAvailabilityOut(BaseModel):
+    supply_id: UUID
+    sku: str
+    name: str
+    consumption_unit: str
+    stock: float = Field(..., description="Suma de los movimientos vigentes.")
+    committed: float = Field(..., description="Lo que consumirán los servicios vendidos que aún no se realizan.")
+    available: float = Field(..., description="stock − committed: lo que la tienda puede vender.")
+    committed_orders: int = Field(..., description="Servicios vendidos sin realizar que usan el insumo.")
+
+
+class PendingOrderOut(BaseModel):
+    order_id: UUID
+    status: str
+    payment_status: str
+    scheduled_at: Optional[datetime] = None
+    reserved_date: Optional[date] = None
+    created_at: datetime
+
+
+class StockAvailabilityOut(BaseModel):
+    supplies: list[SupplyAvailabilityOut]
+    pending_orders: list[PendingOrderOut] = Field(
+        ..., description="Órdenes pagadas o en verificación sin realizar ni cancelar: comprometen insumos.")
