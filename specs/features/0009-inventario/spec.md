@@ -79,7 +79,8 @@ precio de la mascota) y `groomer_costs` (tarifa por hora).
 
 - **Costo estándar** del insumo (el de su ficha); la compra no lo recalcula.
 - **Adicionales comprados** se descuentan aunque el groomer no los marque como hechos.
-- **Stock negativo permitido** en el consumo automático (el servicio ya se hizo).
+- **Stock negativo permitido** en el consumo automático (el servicio ya se hizo). Desde la feature 0025 no se vende
+  un servicio sin insumos (descontado lo vendido), pero al realizarse el consumo se registra igual.
 - **Mano de obra estimada** usa siempre las recetas vigentes; los insumos ya registrados no cambian.
 
 ## Preguntas abiertas

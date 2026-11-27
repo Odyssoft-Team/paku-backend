@@ -893,3 +893,14 @@ dispara no se le notifica.
 - **Parámetros generales:** sección nueva «Finanzas» con `pos_fee_card_percent` y `pos_fee_yape_percent` (sin IGV,
   0 a 20; vacío = no configurado).
 - **Sin migración.** **Apps:** admin (Cierre mensual / P&L y Parámetros generales).
+
+## C-57 · No se vende un servicio sin insumos (feature 0025, 2026-11-26)
+
+- **Tienda (compatible):** con `pet_id`, `GET /store/categories/{slug}/products` y `GET /store/products/{id}` traen en
+  cada servicio y en cada adicional `stock_available` (bool; `true` sin mascota o sin receta) y `stock_message`
+  («Falta Shampoo»). Disponible = stock − consumo de los servicios pagados que aún no se realizan; un adicional se
+  evalúa junto con su servicio. El front lo muestra «No disponible por ahora» y no deja elegirlo.
+- **Pago:** `POST /orders/{id}/pay` puede responder **409 `{"code": "OUT_OF_STOCK", "message", "supplies"}`** antes
+  de llamar a Culqi: **no hubo cobro**. Tratarlo como los otros errores sin cobro (C-23) y mostrar `message`.
+- **Sin migración.** **Apps:** web (lo muestra). La app de clientes no cambia: si intenta pagar sin insumos recibe el
+  409 y no se cobra.

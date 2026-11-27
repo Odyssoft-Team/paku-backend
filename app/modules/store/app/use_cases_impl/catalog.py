@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -17,12 +17,36 @@ from app.modules.pets.domain.pet import PetRepository
 class ResolvedAddon:
     addon: Addon
     price: Optional[int]
+    stock_message: Optional[str] = None   # None = hay insumos (o no se revisó: sin mascota)
 
 
 @dataclass
 class ResolvedProduct:
     product: Product
     price: Optional[int]
+    stock_message: Optional[str] = None
+
+
+def _target(kind: str, item) -> Any:
+    from app.modules.inventory.domain.inventory import ConsumptionTarget
+
+    return ConsumptionTarget(kind, str(item.id), item.name)
+
+
+async def _stock_messages(availability, targets: list, *, breed_cat: str, weight: float, base=None) -> dict:
+    """ref_id → «Falta …» de los que no alcanzan (feature 0025). Si no se puede revisar, no bloquea la tienda."""
+    from app.modules.inventory.domain.availability import shortage_message
+
+    if availability is None or not targets:
+        return {}
+    try:
+        result = await availability.for_pet(targets, breed_category=breed_cat, weight_kg=weight, base=base)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("store: no se pudo revisar el stock de insumos")
+        return {}
+    return {ref: shortage_message(items) for ref, items in result.items() if items}
 
 
 @dataclass
@@ -37,6 +61,7 @@ class ListCategories:
 class ListProducts:
     repo: PostgresStoreRepository
     pets_repo: PetRepository
+    availability: Any = None   # inventory StockAvailability: marca los que no tienen insumos (con mascota)
 
     async def execute(
         self,
@@ -77,6 +102,11 @@ class ListProducts:
                 if price is None:
                     continue  # sin precio para su pelaje y peso: no se puede comprar
             result.append(ResolvedProduct(product=p, price=price))
+        if breed_cat is not None and weight is not None:
+            messages = await _stock_messages(self.availability, [_target("product", r.product) for r in result],
+                                             breed_cat=breed_cat, weight=weight)
+            for r in result:
+                r.stock_message = messages.get(str(r.product.id))
         return result
 
 
@@ -84,6 +114,7 @@ class ListProducts:
 class GetProduct:
     repo: PostgresStoreRepository
     pets_repo: PetRepository
+    availability: Any = None   # inventory StockAvailability (feature 0025)
 
     async def execute(
         self, *, product_id: UUID, pet_id: Optional[UUID] = None
@@ -126,7 +157,17 @@ class GetProduct:
                     continue  # no aplica a su pelaje o peso (p. ej. deslanado solo en doble manto)
             resolved_addons.append(ResolvedAddon(addon=a, price=addon_price))
 
-        return ResolvedProduct(product=product, price=product_price), resolved_addons
+        resolved = ResolvedProduct(product=product, price=product_price)
+        if breed_cat is not None and weight is not None:
+            base = _target("product", product)
+            own = await _stock_messages(self.availability, [base], breed_cat=breed_cat, weight=weight)
+            resolved.stock_message = own.get(base.ref_id)
+            # Cada adicional junto con su servicio
+            messages = await _stock_messages(self.availability, [_target("addon", ra.addon) for ra in resolved_addons],
+                                             breed_cat=breed_cat, weight=weight, base=base)
+            for ra in resolved_addons:
+                ra.stock_message = messages.get(str(ra.addon.id))
+        return resolved, resolved_addons
 
 
 async def _pet_breed(pets_repo: PetRepository, pet_id: UUID) -> tuple[Optional[str], Optional[str]]:

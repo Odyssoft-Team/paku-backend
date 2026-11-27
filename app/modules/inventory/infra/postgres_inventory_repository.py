@@ -102,6 +102,19 @@ class PostgresInventoryRepository:
             stmt = stmt.where(MovementModel.occurred_on <= until)
         return {sid: _f(total) for sid, total in (await self._session.execute(stmt)).all()}
 
+    async def sold_pending_orders(self, *, exclude_order_id: Optional[UUID] = None) -> list:
+        """Órdenes de servicio ya vendidas (pagadas o en verificación) que aún no se realizan ni se cancelan: su
+        consumo está comprometido (feature 0025). Al realizarse, el consumo se registra y dejan de estar aquí."""
+        from app.modules.orders.infra.models import OrderModel as O
+
+        stmt = select(O).where(
+            O.payment_status.in_(("paid", "verifying")), O.status.not_in(("done", "cancelled")),
+            O.parent_order_id.is_(None),
+        )
+        if exclude_order_id is not None:
+            stmt = stmt.where(O.id != exclude_order_id)
+        return list((await self._session.execute(stmt)).scalars().all())
+
     # ------------------------------------------------------------------
     # Movimientos
     # ------------------------------------------------------------------

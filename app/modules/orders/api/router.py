@@ -620,6 +620,7 @@ async def pay_order(
     users_repo: PostgresUserRepository = Depends(get_users_repo),
     districts_repo: PostgresDistrictRepository = Depends(get_districts_repo),
     photos_repo: PostgresOrderPhotoRepository = Depends(get_photos_repo),
+    session: AsyncSession = Depends(get_async_session),
 ) -> OrderOut:
     """
     Camino principal de pago: paku-backend orquesta el cobro contra culqi-python
@@ -631,13 +632,18 @@ async def pay_order(
     Puede devolver la orden en payment_status=paid, failed o verifying (cuando el
     resultado no pudo confirmarse a tiempo — el cronjob de reconciliación sigue
     intentando en segundo plano, ver app/core/scheduler.py).
+
+    409 OUT_OF_STOCK (feature 0025) antes de cobrar si algún insumo del servicio no alcanza: no hay cobro.
     """
+    from app.modules.inventory.app.availability import stock_availability
+
     order = await PayOrder(
         orders_repo=repo,
         culqi_client=CulqiPythonClient(),
         users_repo=users_repo,
         districts_repo=districts_repo,
         photos_repo=photos_repo,
+        stock=stock_availability(session),
     ).execute(
         order_id=id,
         user_id=current.id,

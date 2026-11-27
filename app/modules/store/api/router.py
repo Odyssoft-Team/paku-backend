@@ -91,6 +91,17 @@ async def list_categories(
     return [CategoryOut(**c.__dict__) for c in items]
 
 
+def get_stock_availability(session: AsyncSession = Depends(get_async_session)):
+    from app.modules.inventory.app.availability import stock_availability
+
+    return stock_availability(session)
+
+
+def _stock(message: Optional[str]) -> dict:
+    """Campos de insumos (feature 0025) de un servicio o adicional."""
+    return {"stock_available": message is None, "stock_message": message}
+
+
 @router.get("/categories/{slug}/products", response_model=List[ProductOut])
 async def list_products(
     slug: str,
@@ -99,14 +110,17 @@ async def list_products(
     current: Optional[CurrentUser] = Depends(get_optional_current_user),
     repo: PostgresStoreRepository = Depends(get_store_repo),
     pets_repo: PetRepository = Depends(get_pets_repo),
+    availability=Depends(get_stock_availability),
 ) -> List[ProductOut]:
+    """Con `pet_id`, cada servicio dice si hay insumos para esa mascota (`stock_available`, `stock_message`)."""
     await _check_pet_access(pet_id, current, pets_repo)
-    items = await ListProducts(repo=repo, pets_repo=pets_repo).execute(
+    items = await ListProducts(repo=repo, pets_repo=pets_repo, availability=availability).execute(
         category_slug=slug, pet_id=pet_id, species=species
     )
     # "Desde" (C-33): la web muestra el precio mínimo a quien no inició sesión
     return [
-        ProductOut(**rp.product.__dict__, price=rp.price, min_price=await repo.min_price_for(rp.product.id))
+        ProductOut(**rp.product.__dict__, price=rp.price, min_price=await repo.min_price_for(rp.product.id),
+                   **_stock(rp.stock_message))
         for rp in items
     ]
 
@@ -133,13 +147,17 @@ async def get_product(
     current: Optional[CurrentUser] = Depends(get_optional_current_user),
     repo: PostgresStoreRepository = Depends(get_store_repo),
     pets_repo: PetRepository = Depends(get_pets_repo),
+    availability=Depends(get_stock_availability),
 ) -> ProductDetailOut:
+    """Con `pet_id`, el servicio y cada adicional (junto con el servicio) dicen si hay insumos para esa mascota."""
     await _check_pet_access(pet_id, current, pets_repo)
-    rp, addons = await GetProduct(repo=repo, pets_repo=pets_repo).execute(product_id=id, pet_id=pet_id)
+    rp, addons = await GetProduct(repo=repo, pets_repo=pets_repo, availability=availability).execute(
+        product_id=id, pet_id=pet_id)
     return ProductDetailOut(
         **rp.product.__dict__,
         price=rp.price,
-        available_addons=[AddonOut(**ra.addon.__dict__, price=ra.price) for ra in addons],
+        **_stock(rp.stock_message),
+        available_addons=[AddonOut(**ra.addon.__dict__, price=ra.price, **_stock(ra.stock_message)) for ra in addons],
     )
 
 

@@ -34,6 +34,9 @@ class ProductOut(BaseModel):
     max_weight_kg: Optional[float] = None   # requisito de la mascota; null = sin límite
     max_age_months: Optional[int] = None    # requisito de la mascota; null = sin límite
     code: Optional[str] = None              # Clásico | Medicado | Premium | Seco (0008)
+    # Insumos (feature 0025): con mascota, false si algún insumo de su receta no alcanza (ya descontado lo vendido)
+    stock_available: bool = True
+    stock_message: Optional[str] = None     # «Falta Shampoo medicado»
 
 
 class AddonOut(BaseModel):
@@ -51,6 +54,9 @@ class AddonOut(BaseModel):
     duration_extra_min: Optional[int] = None   # pendiente del negocio
     # Códigos de adicionales que no se pueden combinar con este (store/domain/addon_conflicts.py)
     incompatible_with: List[str] = Field(default_factory=list)
+    # Insumos (feature 0025): con mascota, false si algún insumo de su receta (junto con su servicio) no alcanza
+    stock_available: bool = True
+    stock_message: Optional[str] = None     # «Falta Shampoo medicado»
 
     @model_validator(mode="after")
     def _fill_incompatible(self) -> "AddonOut":

@@ -7,6 +7,7 @@ ante caídas (estado "verifying" + cronjob de reconciliación en app/core/schedu
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
@@ -24,6 +25,8 @@ from app.modules.orders.domain.order import Order, PaymentMethod
 from app.modules.orders.infra.postgres_order_repository import PostgresOrderRepository
 from app.modules.iam.infra.postgres_user_repository import PostgresUserRepository
 from app.modules.geo.infra.repository import PostgresDistrictRepository
+
+logger = logging.getLogger(__name__)
 
 
 async def _build_antifraud_details(
@@ -171,6 +174,23 @@ def _resolve_payment_records(
     return "verifying", None
 
 
+async def _assert_stock(order: Order, stock) -> None:
+    """Feature 0025: no se cobra un servicio si algún insumo de su receta no alcanza (descontado lo ya vendido).
+    409 OUT_OF_STOCK, antes de llamar a Culqi. Un ajuste por peso no consume insumos. Si la revisión misma falla,
+    no bloquea el cobro (se registra en el log)."""
+    if stock is None or order.parent_order_id is not None:
+        return
+    from app.modules.inventory.app.availability import out_of_stock_error
+
+    try:
+        missing = await stock.order_shortages(order)
+    except Exception:
+        logger.exception("pay: no se pudo revisar el stock de la orden %s", order.id)
+        return
+    if missing:
+        raise out_of_stock_error(missing)
+
+
 async def _assert_required_photos(order: Order, photos_repo) -> None:
     """Corte estético, desmotado extendido o revisión manual exigen fotos antes de pagar (0008)."""
     from app.modules.orders.domain.photo import OrderPhotoKind
@@ -194,6 +214,8 @@ class PayOrder:
     users_repo: PostgresUserRepository
     districts_repo: PostgresDistrictRepository
     photos_repo: Optional[object] = None  # fotos previas requeridas (feature 0008)
+    # Insumos (feature 0025): inventory StockAvailability. Si el servicio no se puede hacer, no se cobra.
+    stock: Optional[object] = None
 
     async def execute(self, *, order_id: UUID, user_id: UUID, email: str, source_id: str) -> Order:
         try:
@@ -209,6 +231,7 @@ class PayOrder:
             return order
 
         await _assert_required_photos(order, self.photos_repo)
+        await _assert_stock(order, self.stock)
 
         amount_centavos = int(round(order.total_snapshot * 100))
         source_type = _source_type_from_source_id(source_id)
