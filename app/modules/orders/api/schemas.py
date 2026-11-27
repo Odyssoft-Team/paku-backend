@@ -230,7 +230,8 @@ class AssignmentOut(BaseModel):
 
 class ManualPaymentIn(BaseModel):
     """Cobro hecho fuera de la app (C-63)."""
-    method: Literal["cash", "transfer", "other"]
+    method: Literal["cash", "transfer", "other", "card", "yape"] = Field(
+        ..., description="card / yape = cobrado por Culqi fuera del flujo de la app (paga comisión).")
     note: str = Field(..., min_length=3, max_length=500, description="Cómo se cobró: n.º de operación, quién recibió…")
 
 

@@ -26,7 +26,7 @@ class SettingField:
     key: str
     section: str
     label: str
-    type: str                    # text | ruc | email | phone | time | percent | int | choice | readonly
+    type: str                    # text | ruc | email | phone | time | percent | int | amount | choice | readonly
     default: Any = None
     editable: bool = True
     help: Optional[str] = None
@@ -73,9 +73,15 @@ FIELDS: tuple[SettingField, ...] = (
                  help="Guarda el estado del inventario al terminar el día de corte (hora de Lima)."),
     # Comisión de la pasarela (feature 0024): costo del servicio en el P&L. Vacío = no configurada.
     SettingField("pos_fee_card_percent", "finance", "Comisión de Culqi con tarjeta (%)", "percent", min=0, max=20,
-                 help="Sin IGV, como la publica Culqi. Se aplica al total cobrado con tarjeta. Vacío = no se calcula."),
+                 help="Como la publica Culqi (inafecta a IGV). Se aplica al total cobrado con tarjeta. Vacío = no se calcula."),
+    SettingField("pos_fee_card_fixed", "finance", "Comisión fija de Culqi con tarjeta (S/ por cobro)", "amount",
+                 min=0, max=50,
+                 help="El monto fijo por transacción, en soles (Culqi lo publica en dólares: US$ 0.20 ≈ S/ 0.75). "
+                      "Vacío = 0."),
     SettingField("pos_fee_yape_percent", "finance", "Comisión de Culqi con Yape (%)", "percent", min=0, max=20,
-                 help="Sin IGV, como la publica Culqi. Se aplica al total cobrado con Yape. Vacío = no se calcula."),
+                 help="Como la publica Culqi (inafecta a IGV). Se aplica al total cobrado con Yape. Vacío = no se calcula."),
+    SettingField("pos_fee_yape_fixed", "finance", "Comisión fija de Culqi con Yape (S/ por cobro)", "amount",
+                 min=0, max=50, help="Monto fijo por transacción en soles, si Culqi lo cobra. Vacío = 0."),
 )
 FIELDS_BY_KEY: dict[str, SettingField] = {f.key: f for f in FIELDS}
 
@@ -109,7 +115,7 @@ def validate_value(key: str, value: Any) -> Any:
         raise SettingInvalid(key, f"«{field.label}»: usa una de " + ", ".join(field.options or {}) + ".")
     if field.type == "time" and not _TIME.match(value):
         raise SettingInvalid(key, f"«{field.label}» va en formato HH:MM (24 h).")
-    if field.type in ("percent", "int"):
+    if field.type in ("percent", "int", "amount"):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise SettingInvalid(key, f"«{field.label}» debe ser un número.")
         if field.type == "int" and int(value) != value:

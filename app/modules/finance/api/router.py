@@ -36,6 +36,7 @@ def pnl_out(p: MonthlyPnl) -> MonthlyPnlOut:
                          is_open=period.is_open, days_in_period=period.days_in_period,
                          days_in_month=period.days_in_month, days_elapsed=period.days_elapsed),
         igv_percent=p.igv_percent, fee_card_percent=p.fee_card_percent, fee_yape_percent=p.fee_yape_percent,
+        fee_card_fixed=p.fee_card_fixed, fee_yape_fixed=p.fee_yape_fixed,
         lines=[LineOut(**asdict(ln)) for ln in p.lines],
         sales_with_igv=p.sales_with_igv, discounts=p.discounts, receivable=p.receivable,
         receivable_orders=p.receivable_orders, entry_adjustments=p.entry_adjustments,

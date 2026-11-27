@@ -108,6 +108,8 @@ class MonthlyPnlOut(BaseModel):
     igv_percent: float
     fee_card_percent: Optional[float] = None
     fee_yape_percent: Optional[float] = None
+    fee_card_fixed: float = Field(0, description="S/ por cobro con tarjeta.")
+    fee_yape_fixed: float = Field(0, description="S/ por cobro con Yape.")
     lines: list[LineOut]
     sales_with_igv: float
     discounts: float = Field(..., description="Descuentos de campaña (ya restados en las ventas).")

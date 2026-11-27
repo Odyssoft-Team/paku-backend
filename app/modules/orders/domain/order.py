@@ -63,8 +63,10 @@ class PaymentMethod(str, Enum):
     other = "other"
 
 
-# Medios con los que un admin registra un cobro hecho fuera de la app (C-63)
-MANUAL_PAYMENT_METHODS = (PaymentMethod.cash, PaymentMethod.transfer, PaymentMethod.other)
+# Medios con los que un admin registra un cobro hecho fuera de la app (C-63). card / yape = cobrado por Culqi fuera
+# del flujo de la app (link de pago o panel): pagan comisión en el P&L.
+MANUAL_PAYMENT_METHODS = (PaymentMethod.cash, PaymentMethod.transfer, PaymentMethod.other, PaymentMethod.card,
+                          PaymentMethod.yape)
 
 
 # [TECH]

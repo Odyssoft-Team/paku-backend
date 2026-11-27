@@ -291,7 +291,19 @@ def test_domain_helpers():
     assert recipe_on([], lima(2026, 11, 1)) is None
 
 
+def test_fixed_fee_per_charge_is_added():
+    async def scenario(ctx):
+        await _november(ctx)
+        ctx.settings.update(pos_fee_card_fixed=0.75, pos_fee_yape_fixed=None)
+        p = await ctx.use_case(date(2026, 12, 10)).execute(month="2026-11")
+        # A (118) y su ajuste (11.8) con tarjeta: 4 % + S/ 0.75 cada cobro; D (118) con Yape: 3 % sin fijo
+        assert _lines(p)["payment_fees"].amount == pytest.approx(4.72 + 0.75 + 0.47 + 0.75 + 3.54, abs=0.01)
+        assert (p.fee_card_fixed, p.fee_yape_fixed) == (0.75, 0.0)
+    run(scenario)
+
+
 def test_fee_settings_are_percentages():
+    assert validate_value("pos_fee_card_fixed", 0.75) == 0.75
     assert validate_value("pos_fee_card_percent", 3.44) == 3.44
     assert validate_value("pos_fee_yape_percent", "") is None
     with pytest.raises(SettingInvalid):

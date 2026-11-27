@@ -80,6 +80,8 @@ class BuildMonthlyPnl:
         igv = _f(await self.settings("igv_percent"))
         fee_card = await self.settings("pos_fee_card_percent")
         fee_yape = await self.settings("pos_fee_yape_percent")
+        fee_card_fixed = _f(await self.settings("pos_fee_card_fixed"))
+        fee_yape_fixed = _f(await self.settings("pos_fee_yape_fixed"))
 
         services = await self.repo.services_done(start, end)
         adjustments = await self.repo.adjustments_of([o.id for o in services])
@@ -135,6 +137,7 @@ class BuildMonthlyPnl:
             fee_card_percent=float(fee_card) if fee_card is not None else None,
             fee_yape_percent=float(fee_yape) if fee_yape is not None else None,
             sales=sales, costs=costs, movements=movements, groomers=groomers, cancelled_paid=cancelled,
+            fee_card_fixed=fee_card_fixed, fee_yape_fixed=fee_yape_fixed,
             unpaid_adjustments=unpaid_adj)
 
     _versions: dict = field(default_factory=dict, init=False)   # target_id → versiones de su receta

@@ -110,4 +110,5 @@ y movimientos que la forman. Lo que aún no se registra sale «no configurado»,
 ## Preguntas abiertas
 
 - [ ] ¿Los ajustes de entrada (sobrantes en el conteo) restan del costo como diferencia de inventario?
-- [ ] ¿El IGV de la comisión de Culqi es crédito fiscal (no costo)? Confirmar con el contador.
+- [x] IGV de la comisión de Culqi: **inafecta a IGV** (lo dice Culqi, 2026-11-26). Comisión = total × % + monto fijo
+      por cobro (US$ 0.20 en tarjeta, ingresado en soles en Parámetros generales).

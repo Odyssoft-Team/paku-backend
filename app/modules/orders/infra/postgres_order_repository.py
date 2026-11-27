@@ -67,13 +67,15 @@ class PostgresOrderRepository:
         )
 
     async def register_manual_payment(self, *, id: UUID, method: PaymentMethod, note: str, actor_id: UUID) -> Order:
-        """Cobro hecho fuera de la app, registrado por un admin (C-63). Solo desde pending o failed."""
+        """Cobro hecho fuera de la app, registrado por un admin (C-63). Desde pending o failed, o para corregir un
+        cobro que ya se registró a mano (paid con payment_registered_at)."""
         from app.modules.orders.infra.models import OrderModel, utcnow
         await self._ensure_ready()
         model = await self._session.get(OrderModel, id)
         if model is None:
             raise ValueError("order_not_found")
-        if model.payment_status not in (PaymentStatus.pending.value, PaymentStatus.failed.value):
+        manual = model.payment_status == PaymentStatus.paid.value and model.payment_registered_at is not None
+        if model.payment_status not in (PaymentStatus.pending.value, PaymentStatus.failed.value) and not manual:
             raise ValueError("payment_already_processed")
         now = utcnow()
         model.payment_status = PaymentStatus.paid.value

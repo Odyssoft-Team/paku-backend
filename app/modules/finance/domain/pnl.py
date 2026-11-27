@@ -240,20 +240,24 @@ class MonthlyPnl:
     sales_with_igv: float
     entry_adjustments: float          # ajustes de entrada del mes (informativo, no restan)
     fees: dict[UUID, float] = field(default_factory=dict)   # comisión por orden
+    fee_card_fixed: float = 0.0       # S/ por cobro con tarjeta
+    fee_yape_fixed: float = 0.0
 
 
 def _sum(xs: Iterable[float]) -> float:
     return r2(sum(xs))
 
 
-def fee_for(sale: SaleFact, card: Optional[float], yape: Optional[float]) -> tuple[Optional[float], bool]:
-    """(comisión, configurada). Solo lo cobrado con tarjeta o Yape; el efectivo no paga comisión."""
+def fee_for(sale: SaleFact, card: Optional[float], yape: Optional[float], card_fixed: float = 0.0,
+            yape_fixed: float = 0.0) -> tuple[Optional[float], bool]:
+    """(comisión, configurada). Solo lo cobrado con tarjeta o Yape (por Culqi): total × % + monto fijo por cobro. El
+    efectivo, la transferencia y otros no pagan comisión."""
     if not sale.paid or sale.payment_method not in ("card", "yape"):
         return 0.0, True
     pct = card if sale.payment_method == "card" else yape
     if pct is None:
         return None, False
-    return sale.total * pct / 100, True
+    return sale.total * pct / 100 + ((card_fixed if sale.payment_method == "card" else yape_fixed) or 0.0), True
 
 
 def build_pnl(
@@ -263,6 +267,8 @@ def build_pnl(
     fee_card_percent: Optional[float],
     fee_yape_percent: Optional[float],
     sales: list[SaleFact],
+    fee_card_fixed: float = 0.0,
+    fee_yape_fixed: float = 0.0,
     costs: list[ServiceCost],
     movements: list[MovementFact],
     groomers: list[GroomerMonth],
@@ -315,7 +321,7 @@ def build_pnl(
     fees: dict[UUID, float] = {}
     missing_fee = 0
     for s in sales:
-        amount, ok = fee_for(s, fee_card_percent, fee_yape_percent)
+        amount, ok = fee_for(s, fee_card_percent, fee_yape_percent, fee_card_fixed, fee_yape_fixed)
         if not ok:
             missing_fee += 1
         elif amount:
@@ -327,7 +333,8 @@ def build_pnl(
                           count=len(fees)))
     else:
         lines.append(Line("payment_fees", "Comisión de la pasarela", _sum(fees.values()), ESTIMATED, "cost",
-                          note="Total cobrado con tarjeta o Yape × % de Parámetros generales", count=len(fees)))
+                          note="Total cobrado con tarjeta o Yape × % + monto fijo por cobro (Parámetros generales)",
+                          count=len(fees)))
 
     lines.append(Line("groomer_variable", "Variable del groomer", None, NOT_CONFIGURED, "cost",
                       note="Se define en una etapa siguiente (puntos por servicio, adicional y eficiencia)"))
@@ -358,6 +365,7 @@ def build_pnl(
     unpaid = [s for s in sales if not s.paid] + list(unpaid_adjustments)
     return MonthlyPnl(
         period=period, igv_percent=igv_percent, fee_card_percent=fee_card_percent, fee_yape_percent=fee_yape_percent,
+        fee_card_fixed=fee_card_fixed or 0.0, fee_yape_fixed=fee_yape_fixed or 0.0,
         lines=lines, sales=sales, costs=costs, movements=movements, groomers=groomers, labor_comparison=comparison,
         receivable=_sum(s.total for s in unpaid), receivable_orders=[s.order_id for s in unpaid],
         cancelled_paid=cancelled_paid, discounts=_sum(s.discount for s in sales),

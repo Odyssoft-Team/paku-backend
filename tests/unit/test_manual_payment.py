@@ -1,6 +1,7 @@
 """C-63: un admin registra un cobro hecho fuera de la app (efectivo, transferencia u otro)."""
 import asyncio
 from dataclasses import replace
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -23,7 +24,7 @@ class _Repo:
     async def register_manual_payment(self, *, id, method, note, actor_id):
         self.calls.append((method, note, actor_id))
         self.order = replace(self.order, payment_status=PaymentStatus.paid, payment_method=method, payment_note=note,
-                             payment_registered_by=actor_id)
+                             payment_registered_by=actor_id, payment_registered_at=datetime.now(timezone.utc))
         return self.order
 
 
@@ -44,8 +45,8 @@ def test_pending_or_failed_order_becomes_paid_with_note(payment):
     assert repo.calls == [(PaymentMethod.transfer, "Op. 123456 BCP", ADMIN)]
 
 
-@pytest.mark.parametrize("method", ["cash", "other"])
-def test_cash_and_other_are_manual_methods(method):
+@pytest.mark.parametrize("method", ["cash", "other", "card", "yape"])
+def test_manual_methods_include_culqi_outside_the_app(method):
     assert _register(_Repo(_order()), method=method).payment_method == PaymentMethod(method)
 
 
@@ -62,8 +63,6 @@ def test_paid_verifying_or_cancelled_orders_are_rejected(changes, code):
 
 
 @pytest.mark.parametrize("method, note, code", [
-    ("card", "Op. 1", "PAYMENT_METHOD_INVALID"),
-    ("yape", "Op. 1", "PAYMENT_METHOD_INVALID"),
     ("bitcoin", "Op. 1", "PAYMENT_METHOD_INVALID"),
     ("cash", "  ", "PAYMENT_NOTE_REQUIRED"),
 ])
@@ -72,6 +71,18 @@ def test_invalid_method_or_missing_note(method, note, code):
     with pytest.raises(HTTPException) as exc:
         _register(repo, method=method, note=note)
     assert exc.value.status_code == 422 and exc.value.detail["code"] == code
+
+
+def test_a_manual_payment_can_be_corrected_but_not_an_app_payment():
+    repo = _Repo(_order(status=OrderStatus.done))
+    _register(repo, method="transfer", note="Por error")
+    fixed = _register(repo, method="card", note="Link de pago Culqi chr_123")
+    assert (fixed.payment_method, fixed.payment_note) == (PaymentMethod.card, "Link de pago Culqi chr_123")
+
+    paid_in_app = _Repo(_order(payment_status=PaymentStatus.paid, payment_method=PaymentMethod.card))
+    with pytest.raises(HTTPException) as exc:
+        _register(paid_in_app)
+    assert exc.value.detail["code"] == "PAYMENT_NOT_PENDING"
 
 
 def test_unknown_order_is_404():

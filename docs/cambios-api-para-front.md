@@ -959,3 +959,13 @@ dispara no se le notifica.
   `payment_registered_at` (null si se pagó por la app). La comisión de la pasarela del P&L no aplica a estos medios.
 - **Migración `2d3e4f5a6b7c`.** **Apps:** admin (detalle de la orden). Web y app: mostrar «Transferencia» / «Otro» si
   llegan esos medios.
+
+## C-64 · Comisión fija de Culqi y cobro manual por Culqi (2026-11-26)
+
+- **Parámetros generales (Finanzas):** `pos_fee_card_fixed` y `pos_fee_yape_fixed` (tipo nuevo `amount`, S/ por
+  cobro, 0 a 50; vacío = 0). La comisión del P&L es total × % + fijo por cada cobro con tarjeta o Yape (Culqi:
+  3.44 % + US$ 0.20, inafecta a IGV). `GET /admin/finance/pnl` trae `fee_card_fixed` y `fee_yape_fixed`.
+- **Cobro manual (C-63):** `method` admite además `card` y `yape` (cobrado por Culqi fuera del flujo de la app: link de
+  pago o panel; paga comisión). Un cobro ya registrado a mano se puede **corregir** con el mismo endpoint (medio y
+  nota); uno pagado por la app sigue dando 409 `PAYMENT_NOT_PENDING`.
+- **Sin migración.** **Apps:** admin (Parámetros generales, diálogo de cobro manual, P&L).
