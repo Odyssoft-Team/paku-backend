@@ -969,3 +969,19 @@ dispara no se le notifica.
   pago o panel; paga comisión). Un cobro ya registrado a mano se puede **corregir** con el mismo endpoint (medio y
   nota); uno pagado por la app sigue dando 409 `PAYMENT_NOT_PENDING`.
 - **Sin migración.** **Apps:** admin (Parámetros generales, diálogo de cobro manual, P&L).
+
+## C-65 · Gastos operativos, vehículos e impuesto a la renta (feature 0026, 2026-11-26)
+
+- **Nuevo (admin):** `GET /admin/expenses/config` → `{kinds, categories: [{code, label, group}]}`.
+  `GET /admin/expenses?date_from&date_to&category&vehicle_id&include_voided` → `{items, total_in_period,
+  by_category, by_category_amount}`; con período, cada gasto trae `in_period` (lo que aporta, sin IGV).
+  `POST /admin/expenses` y `PATCH /admin/expenses/{id}` con `{kind: one_time | monthly | annual, category,
+  description, start_date, end_date? (solo mensual), total_paid, igv_included, vehicle_id?, supplier?, document?,
+  notes?}` (422 `EXPENSE_INVALID` con `field`; 409 `EXPENSE_VOIDED`). `POST /admin/expenses/{id}/void` con `{reason}`.
+- **Vehículos:** `GET/POST /admin/vehicles`, `PATCH /admin/vehicles/{id}` → `{id, name, plate, brand, model, year,
+  is_active, notes, created_at}` (409 `PLATE_EXISTS`).
+- **Parámetros generales:** sección «Impuestos» con `income_tax_percent` (10 por defecto).
+- **P&L:** `operating_expenses` (real), nueva `pre_tax_result` («Utilidad antes de impuestos»), `taxes` («Impuesto a la
+  renta (10 %)», estimado; 0 con pérdida) y `net_result` («Utilidad neta»). `depreciation` sigue `not_configured`.
+  Nuevos `expenses` (detalle) e `income_tax_percent`.
+- **Migración `3e4f5a6b7c8d`.** **Apps:** admin (Finanzas → Gastos; P&L).

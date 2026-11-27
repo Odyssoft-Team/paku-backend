@@ -14,6 +14,7 @@ from uuid import UUID
 from app.core.timezone import LIMA_TZ, today_lima
 from app.modules.finance.domain.pnl import (
     CancelledPaid,
+    ExpenseFact,
     GroomerMonth,
     MonthlyPnl,
     MovementFact,
@@ -66,6 +67,7 @@ class BuildMonthlyPnl:
     consumption: Any       # inventory OrderConsumption (plan_with: fila del pelaje y tramo de peso)
     settings: Callable     # async (key) -> valor efectivo de Parámetros generales
     today: Callable[[], date] = today_lima
+    expenses_repo: Any = None   # PostgresExpensesRepository (gastos operativos, feature 0026)
 
     async def execute(self, *, month: Optional[str] = None, date_from: Optional[date] = None,
                       date_to: Optional[date] = None) -> MonthlyPnl:
@@ -82,6 +84,7 @@ class BuildMonthlyPnl:
         fee_yape = await self.settings("pos_fee_yape_percent")
         fee_card_fixed = _f(await self.settings("pos_fee_card_fixed"))
         fee_yape_fixed = _f(await self.settings("pos_fee_yape_fixed"))
+        income_tax = await self.settings("income_tax_percent")
 
         services = await self.repo.services_done(start, end)
         adjustments = await self.repo.adjustments_of([o.id for o in services])
@@ -138,9 +141,28 @@ class BuildMonthlyPnl:
             fee_yape_percent=float(fee_yape) if fee_yape is not None else None,
             sales=sales, costs=costs, movements=movements, groomers=groomers, cancelled_paid=cancelled,
             fee_card_fixed=fee_card_fixed, fee_yape_fixed=fee_yape_fixed,
+            expenses=await self._expenses(period),
+            income_tax_percent=float(income_tax) if income_tax is not None else None,
             unpaid_adjustments=unpaid_adj)
 
     _versions: dict = field(default_factory=dict, init=False)   # target_id → versiones de su receta
+
+    async def _expenses(self, period) -> list[ExpenseFact]:
+        """Gastos operativos que aportan al período (hasta el corte), con su parte (feature 0026)."""
+        if self.expenses_repo is None or period.days_elapsed <= 0:
+            return []
+        from app.modules.expenses.domain.expenses import CATEGORIES, allocation
+
+        vehicles = {v.id: v.name for v in await self.expenses_repo.list_vehicles()}
+        out = []
+        for e in await self.expenses_repo.list_expenses(date_from=period.start, date_to=period.cut):
+            part = allocation(e, period.start, period.cut)
+            if part:
+                out.append(ExpenseFact(
+                    expense_id=e.id, kind=e.kind, category=e.category,
+                    category_label=CATEGORIES.get(e.category, (e.category, ""))[0], description=e.description,
+                    start_date=e.start_date, vehicle=vehicles.get(e.vehicle_id), amount=e.amount, in_period=part))
+        return sorted(out, key=lambda x: (x.start_date, x.description))
 
     async def _cost(self, order, day: date, profiles: list, supplies: float) -> ServiceCost:
         rate, source = rates_from_profiles(profiles, day).rate_for(order.groomer_id)
@@ -220,7 +242,10 @@ def build_monthly_pnl(session) -> BuildMonthlyPnl:
     async def setting(key: str):
         return await get_setting(settings_repo, key)
 
+    from app.modules.expenses.infra.postgres_expenses_repository import PostgresExpensesRepository
+
     return BuildMonthlyPnl(
+        expenses_repo=PostgresExpensesRepository(session=session),
         repo=PostgresFinanceReadRepository(session=session),
         inventory_repo=inventory,
         cost_repo=PostgresCostRepository(session=session),

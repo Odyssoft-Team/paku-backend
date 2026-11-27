@@ -23,7 +23,7 @@ class PeriodOut(BaseModel):
 class LineOut(BaseModel):
     key: str = Field(..., description="net_sales, supplies, shrinkage, labor, unabsorbed_labor, payment_fees, "
                                       "groomer_variable, service_cost, gross_margin, operating_expenses, "
-                                      "depreciation, taxes, net_result")
+                                      "depreciation, pre_tax_result, taxes, net_result")
     label: str
     amount: Optional[float] = Field(None, description="S/. null = no configurado (nunca 0 inventado).")
     status: LineStatus
@@ -96,6 +96,18 @@ class LaborComparisonOut(BaseModel):
     variation: float = Field(..., description="Real − receta: positivo = costó más de lo estimado.")
 
 
+class ExpenseLineOut(BaseModel):
+    expense_id: UUID
+    kind: str
+    category: str
+    category_label: str
+    description: str
+    start_date: date
+    vehicle: Optional[str] = None
+    amount: float = Field(..., description="Sin IGV: total (único / anual) o por mes (mensual).")
+    in_period: float = Field(..., description="Lo que aporta al período.")
+
+
 class CancelledPaidOut(BaseModel):
     order_id: UUID
     day: date
@@ -123,3 +135,5 @@ class MonthlyPnlOut(BaseModel):
     costs: list[ServiceCostOut]
     movements: list[MovementOut]
     groomers: list[GroomerOut]
+    expenses: list[ExpenseLineOut] = Field(default_factory=list, description="Gastos operativos del período.")
+    income_tax_percent: Optional[float] = None

@@ -116,6 +116,8 @@ Páginas "Demo" del admin que pasan a tener API. Supuestos de negocio en cada sp
 - [ ] 6.17 Facturación electrónica con Intifact — `specs/features/0023-facturacion-intifact`, C-55, migración
   `0b1c2d3e4f5a`. Backend hecho (boletas, facturas, series, pendientes, anulación, webhook, emisión automática,
   reportes contables, comprobantes en la app). Falta: admin y prueba con una key `fact_test_`
+- [ ] 6.20 Gastos operativos, vehículos e impuesto a la renta — `specs/features/0026-gastos-operativos`, C-65,
+  migración `3e4f5a6b7c8d`
 - [ ] 6.19 No vender un servicio sin insumos — `specs/features/0025-venta-con-insumos`, C-57, sin migración
 - [ ] 6.18 Cierre mensual / P&L con datos reales (etapa 1) — `specs/features/0024-pnl-mensual`, C-56, sin migración.
   Siguen: variable del groomer por puntos, gastos operativos, depreciación, impuestos y foto del cierre

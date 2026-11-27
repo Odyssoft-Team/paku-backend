@@ -34,7 +34,10 @@ from app.modules.orders.infra.models import OrderModel, OrderPetModel
 from app.modules.pets.infra.models import PetModel
 from app.modules.store.domain.pricing import FALLBACK_CATEGORY
 
-TABLES = [BreedModel, OrderModel, OrderPetModel, PetModel, UserModel, InvoiceDocumentModel, SupplyModel, MovementModel,
+from app.modules.expenses.infra.models import ExpenseModel, VehicleModel
+from app.modules.expenses.infra.postgres_expenses_repository import PostgresExpensesRepository
+
+TABLES = [VehicleModel, ExpenseModel, BreedModel, OrderModel, OrderPetModel, PetModel, UserModel, InvoiceDocumentModel, SupplyModel, MovementModel,
           RecipeModel, RecipeCellModel, RecipeLineModel, GroomerCostProfileModel]
 PRODUCT = uuid4()
 ADDON = uuid4()
@@ -63,7 +66,8 @@ class Ctx:
             repo=PostgresFinanceReadRepository(session=self.session), inventory_repo=self.inventory,
             cost_repo=PostgresCostRepository(session=self.session),
             consumption=OrderConsumption(repo=self.inventory, store_repo=None, pets_repo=None),
-            settings=setting, today=lambda: today)
+            settings=setting, today=lambda: today,
+            expenses_repo=PostgresExpensesRepository(session=self.session))
 
     async def order(self, user, *, completed=None, total=118, paid=True, method="card", groomer=None,
                     status="done", parent=None, addon=False, arrival=None, discount=None, updated=None):
@@ -206,8 +210,10 @@ def test_closed_month_lines_sources_and_recipe_by_date():
         assert lines["service_cost"].amount == pytest.approx(cost)
         assert lines["gross_margin"].amount == pytest.approx(260 - cost)
         assert lines["gross_margin"].status == "partial"
-        for key in ("operating_expenses", "depreciation", "taxes"):
+        assert (lines["operating_expenses"].amount, lines["operating_expenses"].status) == (0.0, "real")
+        for key in ("depreciation", "taxes"):   # impuesto sin configurar en este escenario
             assert lines[key].amount is None and lines[key].status == "not_configured"
+        assert lines["pre_tax_result"].amount == lines["gross_margin"].amount
         assert lines["net_result"].status == "partial"
 
         # Tiempo real vs receta: solo A tiene llegada (75 min = S/ 12.50 vs S/ 10)
@@ -271,6 +277,82 @@ def test_date_range_today_and_range_across_months():
         with pytest.raises(ValueError):
             await ctx.use_case(date(2026, 12, 10)).execute(date_from=date(2026, 11, 25))
     run(scenario)
+
+
+def test_operating_expenses_and_income_tax():
+    from app.modules.expenses.app.use_cases import SaveExpense, SaveVehicle
+
+    async def scenario(ctx):
+        await _november(ctx)
+        repo = PostgresExpensesRepository(session=ctx.session)
+        van = await SaveVehicle(repo=repo).execute(None, fields={"name": "Paku 01", "plate": "abc-123"})
+
+        async def igv():
+            return 18
+
+        save = SaveExpense(repo=repo, igv_percent=igv)
+        admin = uuid4()
+        # Combustible único (S/ 118 con IGV → 100), internet mensual (S/ 59 con IGV → 50) e dominio anual (S/ 120)
+        await save.execute(None, fields={"kind": "one_time", "category": "fuel", "description": "Grifo",
+                                         "start_date": date(2026, 11, 12), "total_paid": 118, "igv_included": True,
+                                         "vehicle_id": van.id}, actor_id=admin)
+        await save.execute(None, fields={"kind": "monthly", "category": "internet_phone", "description": "Internet",
+                                         "start_date": date(2026, 10, 1), "total_paid": 59, "igv_included": True},
+                           actor_id=admin)
+        await save.execute(None, fields={"kind": "annual", "category": "domain_software", "description": "Dominio",
+                                         "start_date": date(2026, 11, 1), "total_paid": 120, "igv_included": False},
+                           actor_id=admin)
+        old = await save.execute(None, fields={"kind": "one_time", "category": "other", "description": "Error",
+                                               "start_date": date(2026, 11, 3), "total_paid": 999}, actor_id=admin)
+        from app.modules.expenses.app.use_cases import VoidExpense
+        await VoidExpense(repo=repo).execute(old.id, reason="Duplicado", actor_id=admin)
+
+        ctx.settings["income_tax_percent"] = 10
+        p = await ctx.use_case(date(2026, 12, 10)).execute(month="2026-11")
+        lines = _lines(p)
+        assert lines["operating_expenses"].amount == pytest.approx(100 + 50 + 10)   # dominio: 120 / 12
+        assert {e.category for e in p.expenses} == {"fuel", "internet_phone", "domain_software"}
+        assert next(e for e in p.expenses if e.category == "fuel").vehicle == "Paku 01"
+        pre_tax = lines["gross_margin"].amount - 160
+        assert lines["pre_tax_result"].amount == pytest.approx(pre_tax, abs=0.01)
+        tax = round(max(pre_tax, 0) * 0.10, 2)
+        assert lines["taxes"].amount == pytest.approx(tax) and lines["taxes"].label == "Impuesto a la renta (10 %)"
+        assert lines["net_result"].amount == pytest.approx(pre_tax - tax, abs=0.01)
+    run(scenario)
+
+
+def test_income_tax_on_profit_and_zero_on_loss():
+    from app.modules.finance.domain.pnl import ExpenseFact, SaleFact, build_pnl
+
+    period = month_period("2026-11", date(2026, 12, 10))
+    base = dict(period=period, igv_percent=18, fee_card_percent=None, fee_yape_percent=None, costs=[], movements=[],
+                groomers=[], cancelled_paid=[])
+    s1 = SaleFact(order_id=uuid4(), kind="service", parent_order_id=None, day=date(2026, 11, 5), total=309.33,
+              discount=0, paid=True, payment_method="cash", net=261.53, net_source="document")
+    lines = {ln.key: ln for ln in build_pnl(sales=[s1], income_tax_percent=10, **base).lines}
+    assert lines["taxes"].amount == 26.15 and lines["net_result"].amount == pytest.approx(235.38)   # ejemplo del dueño
+    big = ExpenseFact(uuid4(), "one_time", "rent", "Alquiler", "Local", date(2026, 11, 1), None, 500, 500)
+    lines = {ln.key: ln for ln in build_pnl(sales=[s1], income_tax_percent=10, expenses=[big], **base).lines}
+    assert lines["pre_tax_result"].amount == pytest.approx(-238.47) and lines["taxes"].amount == 0
+
+
+def test_expense_allocation_rules():
+    from app.modules.expenses.domain.expenses import Expense, allocation, annual_end, net_amount
+    from datetime import datetime, timezone
+
+    def exp(kind, start, amount, end=None):
+        return Expense(id=uuid4(), kind=kind, category="other", description="x", start_date=start, end_date=end,
+                       total_paid=amount, igv_included=False, amount=amount, vehicle_id=None, supplier=None,
+                       document=None, notes=None, created_at=datetime.now(timezone.utc))
+    assert net_amount(118, True, 18) == 100.0 and net_amount(118, False, 18) == 118.0
+    assert annual_end(date(2026, 11, 15)) == date(2027, 11, 14)
+    nov = (date(2026, 11, 1), date(2026, 11, 30))
+    assert allocation(exp("one_time", date(2026, 11, 5), 80), *nov) == 80
+    assert allocation(exp("one_time", date(2026, 10, 31), 80), *nov) == 0
+    assert allocation(exp("monthly", date(2026, 11, 16), 60), *nov) == 30          # desde el 16: 15 de 30 días
+    assert allocation(exp("monthly", date(2026, 9, 1), 60, end=date(2026, 10, 31)), *nov) == 0   # dado de baja
+    assert allocation(exp("annual", date(2026, 11, 1), 120), *nov) == 10
+    assert allocation(exp("annual", date(2025, 11, 1), 120), *nov) == 0           # ya cubrió sus 12 meses
 
 
 def test_domain_helpers():

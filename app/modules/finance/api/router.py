@@ -13,6 +13,7 @@ from app.core.db import get_async_session
 from app.core.timezone import today_lima
 from app.modules.finance.api.schemas import (
     CancelledPaidOut,
+    ExpenseLineOut,
     GroomerOut,
     LaborComparisonOut,
     LineOut,
@@ -49,6 +50,7 @@ def pnl_out(p: MonthlyPnl) -> MonthlyPnlOut:
                for c in p.costs],
         movements=[MovementOut(**asdict(m), cost=round(m.cost, 2)) for m in p.movements],
         groomers=[GroomerOut(**asdict(g), unabsorbed=round(g.unabsorbed, 2)) for g in p.groomers],
+        expenses=[ExpenseLineOut(**asdict(e)) for e in p.expenses], income_tax_percent=p.income_tax_percent,
     )
 
 

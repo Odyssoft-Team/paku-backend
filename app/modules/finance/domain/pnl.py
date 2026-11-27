@@ -208,6 +208,20 @@ class Line:
 
 
 @dataclass(frozen=True)
+class ExpenseFact:
+    """Un gasto operativo y lo que aporta al período (feature 0026)."""
+    expense_id: UUID
+    kind: str                         # one_time | monthly | annual
+    category: str
+    category_label: str
+    description: str
+    start_date: date
+    vehicle: Optional[str]
+    amount: float                     # sin IGV: total (único / anual) o por mes (mensual)
+    in_period: float
+
+
+@dataclass(frozen=True)
 class LaborComparison:
     services: int                     # con receta y tiempo real
     recipe_cost: float
@@ -242,6 +256,8 @@ class MonthlyPnl:
     fees: dict[UUID, float] = field(default_factory=dict)   # comisión por orden
     fee_card_fixed: float = 0.0       # S/ por cobro con tarjeta
     fee_yape_fixed: float = 0.0
+    expenses: list[ExpenseFact] = field(default_factory=list)
+    income_tax_percent: Optional[float] = None
 
 
 def _sum(xs: Iterable[float]) -> float:
@@ -274,6 +290,8 @@ def build_pnl(
     groomers: list[GroomerMonth],
     cancelled_paid: list[CancelledPaid],
     unpaid_adjustments: Iterable[SaleFact] = (),
+    expenses: Optional[list[ExpenseFact]] = None,
+    income_tax_percent: Optional[float] = None,
 ) -> MonthlyPnl:
     """`sales`: servicios realizados del mes y sus ajustes pagados. `unpaid_adjustments`: ajustes sin pagar de esos
     servicios (no son venta todavía; van a «por cobrar»)."""
@@ -348,11 +366,34 @@ def build_pnl(
     lines.append(Line("gross_margin", "Margen bruto", gross, PARTIAL if incomplete else ESTIMATED, "margin",
                       note=f"{gross / net_sales * 100:.1f} % de las ventas" if net_sales else None))
 
-    for key, label in (("operating_expenses", "Gastos operativos"), ("depreciation", "Depreciación"),
-                       ("taxes", "Impuestos")):
-        lines.append(Line(key, label, None, NOT_CONFIGURED, "expense", note="No se registra todavía"))
-    lines.append(Line("net_result", "Utilidad", gross, PARTIAL, "result",
-                      note="Parcial: faltan gastos operativos, depreciación e impuestos"))
+    # Gastos operativos (feature 0026): únicos en su fecha; mensuales y anuales repartidos por días
+    expenses = expenses or []
+    opex = _sum(e.in_period for e in expenses)
+    lines.append(Line("operating_expenses", "Gastos operativos", opex, REAL, "expense",
+                      note=("Únicos en su fecha; mensuales y anuales repartidos por días (Finanzas → Gastos)"
+                            if expenses else "Sin gastos registrados en el período (Finanzas → Gastos)"),
+                      count=len(expenses)))
+    lines.append(Line("depreciation", "Depreciación", None, NOT_CONFIGURED, "expense",
+                      note="No se considera por ahora"))
+    pre_tax = r2(gross - opex)
+    lines.append(Line("pre_tax_result", "Utilidad antes de impuestos", pre_tax, PARTIAL if incomplete else ESTIMATED,
+                      "margin"))
+
+    # Impuesto a la renta (Parámetros generales → Impuestos): % sobre la utilidad antes de impuestos; con pérdida, 0
+    if income_tax_percent is None:
+        tax = None
+        lines.append(Line("taxes", "Impuestos", None, NOT_CONFIGURED, "expense",
+                          note="Configura el impuesto a la renta en Parámetros generales → Impuestos"))
+    else:
+        tax = r2(max(pre_tax, 0) * income_tax_percent / 100)
+        lines.append(Line("taxes", f"Impuesto a la renta ({income_tax_percent:g} %)", tax, ESTIMATED, "expense",
+                          note=(f"{income_tax_percent:g} % de la utilidad antes de impuestos" if pre_tax > 0
+                                else "Sin utilidad en el período: no hay impuesto")))
+    result = r2(pre_tax - (tax or 0))
+    missing = [x for x, gap in (("costos del servicio", incomplete), ("impuestos", tax is None)) if gap]
+    lines.append(Line("net_result", "Utilidad neta", result, PARTIAL if missing else ESTIMATED, "result",
+                      note=(f"Parcial: faltan {' y '.join(missing)}. Sin depreciación" if missing
+                            else "Sin depreciación (no se considera por ahora)")))
 
     compared =[c for c in costs if c.labor_cost is not None and c.real_cost is not None]
     comparison = LaborComparison(
@@ -370,4 +411,5 @@ def build_pnl(
         receivable=_sum(s.total for s in unpaid), receivable_orders=[s.order_id for s in unpaid],
         cancelled_paid=cancelled_paid, discounts=_sum(s.discount for s in sales),
         sales_with_igv=_sum(s.total for s in sales), entry_adjustments=_sum(-m.cost for m in entries), fees=fees,
+        expenses=expenses, income_tax_percent=income_tax_percent,
     )

@@ -57,6 +57,7 @@ def _get_metadata():
         InvoicingSeriesModel,
     )
     from app.modules.complaints.infra.models import ComplaintCounterModel, ComplaintModel  # noqa: F401
+    from app.modules.expenses.infra.models import ExpenseModel, VehicleModel  # noqa: F401
 
     return Base.metadata
 

@@ -41,6 +41,7 @@ SECTIONS: dict[str, str] = {
     "booking": "Reservas",
     "inventory": "Inventario",
     "finance": "Finanzas",
+    "taxes": "Impuestos",
 }
 
 FIELDS: tuple[SettingField, ...] = (
@@ -80,6 +81,10 @@ FIELDS: tuple[SettingField, ...] = (
                       "Vacío = 0."),
     SettingField("pos_fee_yape_percent", "finance", "Comisión de Culqi con Yape (%)", "percent", min=0, max=20,
                  help="Como la publica Culqi (inafecta a IGV). Se aplica al total cobrado con Yape. Vacío = no se calcula."),
+    # Impuesto a la renta (feature 0026): % sobre la utilidad antes de impuestos en el P&L. Vacío = no se calcula.
+    SettingField("income_tax_percent", "taxes", "Impuesto a la renta (%)", "percent", default=10, min=0, max=50,
+                 help="Se aplica en el P&L sobre la utilidad antes de impuestos (ventas − costo del servicio − gastos). "
+                      "Régimen MYPE: 10 % (confirmar el tramo con el contador). Con pérdida, 0."),
     SettingField("pos_fee_yape_fixed", "finance", "Comisión fija de Culqi con Yape (S/ por cobro)", "amount",
                  min=0, max=50, help="Monto fijo por transacción en soles, si Culqi lo cobra. Vacío = 0."),
 )
