@@ -923,3 +923,11 @@ dispara no se le notifica.
   verificación sin realizar ni cancelar): es lo que usa la tienda para marcar «no disponible». `pending_orders` sirve
   para detectar órdenes viejas que comprometen insumos y deberían cerrarse o cancelarse.
 - **Sin migración.** **Apps:** admin (Recetas).
+
+## C-60 · No se desactiva un insumo que está en una receta vigente (2026-11-26)
+
+- `PATCH /admin/inventory/supplies/{id}` con `is_active: false` responde **409 `{"code": "SUPPLY_IN_RECIPES",
+  "message", "recipes": [{target_id, name}]}`** si el insumo está en alguna receta vigente. Antes se desactivaba y la
+  receta lo seguía descontando (y la tienda no vendía el servicio por su stock). Quitarlo o reemplazarlo en esas
+  recetas y volver a intentar. Las versiones viejas de una receta no bloquean.
+- **Sin migración.** **Apps:** admin (Insumos muestra el mensaje; Recetas avisa si ya usa un insumo desactivado).

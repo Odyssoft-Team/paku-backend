@@ -138,9 +138,15 @@ class CreateSupply:
 @dataclass
 class UpdateSupply:
     repo: Any
+    # async (recetas) -> {target_id: nombre}, para decir en qué recetas se usa un insumo que no se puede desactivar
+    recipe_names: Any = None
 
     async def execute(self, supply_id: UUID, *, fields: dict) -> SupplyRow:
-        """`fields`: solo las claves enviadas. Cambiar el costo no cambia el de lo ya registrado."""
+        """`fields`: solo las claves enviadas. Cambiar el costo no cambia el de lo ya registrado. No se desactiva un
+        insumo que está en una receta vigente (409 SUPPLY_IN_RECIPES): la receta lo seguiría descontando y la tienda
+        no vendería el servicio por su stock (feature 0025)."""
+        if fields.get("is_active") is False:
+            await self._assert_not_in_recipes(supply_id)
         try:
             supply = await self.repo.update_supply(supply_id, _supply_fields(fields))
         except ValueError as exc:
@@ -149,6 +155,20 @@ class UpdateSupply:
             raise
         stock = (await self.repo.stock_by_supply()).get(supply.id, 0.0)
         return supply_row(supply, stock)
+
+    async def _assert_not_in_recipes(self, supply_id: UUID) -> None:
+        using = [r for r in await self.repo.list_recipes(current_only=True)
+                 if any(line.supply_id == supply_id for cell in r.cells for line in cell.lines)]
+        if not using:
+            return
+        names = await self.recipe_names(using) if self.recipe_names else {}
+        listed = [{"target_id": str(r.target_id), "name": names.get(r.target_id) or "Receta"} for r in using]
+        raise _error(
+            status.HTTP_409_CONFLICT, "SUPPLY_IN_RECIPES",
+            "No se puede desactivar: se usa en " + ", ".join(x["name"] for x in listed)
+            + ". Quítalo de esas recetas (o reemplázalo por otro insumo) y vuelve a intentarlo.",
+            recipes=listed,
+        )
 
 
 # ─── Movimientos ─────────────────────────────────────────────────────────────

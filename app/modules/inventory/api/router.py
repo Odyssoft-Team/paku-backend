@@ -160,14 +160,19 @@ async def update_supply(
     payload: SupplyUpdateIn,
     _: CurrentUser = Depends(require_roles("admin")),
     repo: PostgresInventoryRepository = Depends(get_repo),
+    store_repo: PostgresStoreRepository = Depends(get_store_repo),
 ) -> SupplyOut:
-    """Edita o desactiva (`is_active`) un insumo. Solo cambia lo enviado."""
+    """Edita o desactiva (`is_active`) un insumo. Solo cambia lo enviado. 409 `SUPPLY_IN_RECIPES` (con `recipes`) si
+    se desactiva uno que está en una receta vigente."""
     fields = {k: getattr(payload, k) for k in payload.model_fields_set}
     if fields.get("suppliers") is not None:
         fields["suppliers"] = [x.model_dump() for x in payload.suppliers]
     elif "suppliers" in fields:
         fields["suppliers"] = []
-    return _supply_out(await UpdateSupply(repo=repo).execute(supply_id, fields=fields))
+    async def recipe_names(recipes):
+        return await _target_names(recipes, store_repo)
+
+    return _supply_out(await UpdateSupply(repo=repo, recipe_names=recipe_names).execute(supply_id, fields=fields))
 
 
 # ------------------------------------------------------------------

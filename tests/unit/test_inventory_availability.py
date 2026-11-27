@@ -217,6 +217,37 @@ def test_pay_stock_check_skips_adjustments_and_never_blocks_on_its_own_error():
     asyncio.run(_assert_stock(service, None))
 
 
+def test_supply_in_a_current_recipe_cannot_be_deactivated():
+    from app.modules.inventory.app.use_cases import UpdateSupply
+
+    async def scenario(ctx):
+        old_water = await ctx.supply("Agua de bañado", 78)
+        water = await ctx.supply("Agua bañado", 1000)
+        await ctx.recipe(BATH, "product", old_water, 28)
+
+        async def names(recipes):
+            return {r.target_id: "Fresco y Limpio" for r in recipes}
+
+        update = UpdateSupply(repo=ctx.repo, recipe_names=names)
+        with pytest.raises(HTTPException) as exc:
+            await update.execute(old_water.id, fields={"is_active": False})
+        assert exc.value.status_code == 409 and exc.value.detail["code"] == "SUPPLY_IN_RECIPES"
+        assert "Fresco y Limpio" in exc.value.detail["message"]
+        assert exc.value.detail["recipes"] == [{"target_id": str(BATH), "name": "Fresco y Limpio"}]
+        # Otro insumo sí se desactiva; y editar sin tocar is_active no se bloquea
+        assert (await update.execute(water.id, fields={"is_active": False})).supply.is_active is False
+        await update.execute(old_water.id, fields={"name": "Agua de bañado (vieja)"})
+
+        # Reemplazado en una versión nueva de la receta, el viejo ya se puede desactivar
+        current = (await ctx.repo.current_recipes_for([BATH]))[BATH]
+        cells = [RecipeCell(breed_category=FALLBACK_CATEGORY, weight_min=0, weight_max=100, labor_minutes=30,
+                            lines=[RecipeLine(water.id, 28)])]
+        await ctx.repo.save_recipe_version(target_type="product", target_id=BATH, version=2, cells=cells,
+                                           created_by=None, replaces=current.id)
+        assert (await update.execute(old_water.id, fields={"is_active": False})).supply.is_active is False
+    run(scenario)
+
+
 def test_domain_rules():
     a, b = uuid4(), uuid4()
 
