@@ -146,7 +146,9 @@ class UpdateSupply:
         insumo que está en una receta vigente (409 SUPPLY_IN_RECIPES): la receta lo seguiría descontando y la tienda
         no vendería el servicio por su stock (feature 0025)."""
         if fields.get("is_active") is False:
-            await self._assert_not_in_recipes(supply_id)
+            current = await self.repo.get_supply(supply_id)
+            if current is not None and current.is_active:   # solo al desactivar; editar uno ya inactivo se permite
+                await self._assert_not_in_recipes(supply_id)
         try:
             supply = await self.repo.update_supply(supply_id, _supply_fields(fields))
         except ValueError as exc:

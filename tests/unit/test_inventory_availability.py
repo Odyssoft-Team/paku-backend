@@ -237,6 +237,10 @@ def test_supply_in_a_current_recipe_cannot_be_deactivated():
         # Otro insumo sí se desactiva; y editar sin tocar is_active no se bloquea
         assert (await update.execute(water.id, fields={"is_active": False})).supply.is_active is False
         await update.execute(old_water.id, fields={"name": "Agua de bañado (vieja)"})
+        # Uno que ya estaba inactivo (y sigue en la receta) se puede editar: el formulario reenvía is_active=false
+        await ctx.repo.update_supply(old_water.id, {"is_active": False})
+        assert (await update.execute(old_water.id, fields={"name": "Agua vieja", "is_active": False})).supply.name == "Agua vieja"
+        await ctx.repo.update_supply(old_water.id, {"is_active": True})
 
         # Reemplazado en una versión nueva de la receta, el viejo ya se puede desactivar
         current = (await ctx.repo.current_recipes_for([BATH]))[BATH]
