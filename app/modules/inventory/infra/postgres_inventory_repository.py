@@ -331,6 +331,17 @@ class PostgresInventoryRepository:
         stmt = select(RecipeModel).where(RecipeModel.target_id.in_(target_ids), RecipeModel.is_current.is_(True))
         return {r.target_id: r for r in await self._to_recipes(list((await self._session.execute(stmt)).scalars().all()))}
 
+    async def recipes_for(self, target_ids: list[UUID]) -> dict[UUID, list[Recipe]]:
+        """Todas las versiones de las recetas de cada servicio o adicional, de la más antigua a la más reciente
+        (feature 0024: costear un servicio con la versión que regía el día en que se hizo)."""
+        if not target_ids:
+            return {}
+        stmt = select(RecipeModel).where(RecipeModel.target_id.in_(target_ids)).order_by(RecipeModel.version)
+        out: dict[UUID, list[Recipe]] = {}
+        for r in await self._to_recipes(list((await self._session.execute(stmt)).scalars().all())):
+            out.setdefault(r.target_id, []).append(r)
+        return out
+
     async def get_recipes(self, ids: list[UUID]) -> dict[UUID, Recipe]:
         if not ids:
             return {}

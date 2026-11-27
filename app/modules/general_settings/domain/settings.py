@@ -40,6 +40,7 @@ SECTIONS: dict[str, str] = {
     "operation": "Operación",
     "booking": "Reservas",
     "inventory": "Inventario",
+    "finance": "Finanzas",
 }
 
 FIELDS: tuple[SettingField, ...] = (
@@ -70,6 +71,11 @@ FIELDS: tuple[SettingField, ...] = (
     SettingField("inventory_snapshot_frequency", "inventory", "Captura automática del inventario", "choice",
                  default=DEFAULT_FREQUENCY, options=FREQUENCIES,
                  help="Guarda el estado del inventario al terminar el día de corte (hora de Lima)."),
+    # Comisión de la pasarela (feature 0024): costo del servicio en el P&L. Vacío = no configurada.
+    SettingField("pos_fee_card_percent", "finance", "Comisión de Culqi con tarjeta (%)", "percent", min=0, max=20,
+                 help="Sin IGV, como la publica Culqi. Se aplica al total cobrado con tarjeta. Vacío = no se calcula."),
+    SettingField("pos_fee_yape_percent", "finance", "Comisión de Culqi con Yape (%)", "percent", min=0, max=20,
+                 help="Sin IGV, como la publica Culqi. Se aplica al total cobrado con Yape. Vacío = no se calcula."),
 )
 FIELDS_BY_KEY: dict[str, SettingField] = {f.key: f for f in FIELDS}
 

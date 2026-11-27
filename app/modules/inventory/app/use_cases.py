@@ -537,7 +537,11 @@ class OrderConsumption:
             except ValueError:
                 pass
         recipes = {str(k): v for k, v in (await self.repo.current_recipes_for(ids)).items()}
+        return await self.plan_with(order, recipes)
 
+    async def plan_with(self, order, recipes: dict[str, Recipe]) -> ConsumptionPlan:
+        """Plan con las recetas dadas (por id del servicio o adicional en la orden), p. ej. las de otra fecha."""
+        targets = order_targets(order.items_snapshot)
         # Fila de la tabla: la misma categoría de precio de la mascota (pelaje de la raza o "mestizo")
         category = FALLBACK_CATEGORY
         pet_id = _base_pet_id(order.items_snapshot)

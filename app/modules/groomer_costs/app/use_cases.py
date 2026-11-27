@@ -39,12 +39,16 @@ class GetLaborRates:
     repo: Any
 
     async def execute(self, *, day: Optional[date] = None) -> LaborRates:
-        day = day or today_lima()
-        by_groomer: dict[UUID, list[CostProfile]] = {}
-        for p in await self.repo.list_profiles():
-            by_groomer.setdefault(p.groomer_id, []).append(p)
-        current = {gid: p for gid, ps in by_groomer.items() if (p := profile_on(ps, day)) is not None}
-        return LaborRates(day=day, by_groomer=current, reference=reference_rate(list(current.values())))
+        return rates_from_profiles(await self.repo.list_profiles(), day or today_lima())
+
+
+def rates_from_profiles(profiles: list[CostProfile], day: date) -> LaborRates:
+    """Tarifas vigentes en `day` a partir de todos los registros de costo (sin consultar la BD)."""
+    by_groomer: dict[UUID, list[CostProfile]] = {}
+    for p in profiles:
+        by_groomer.setdefault(p.groomer_id, []).append(p)
+    current = {gid: p for gid, ps in by_groomer.items() if (p := profile_on(ps, day)) is not None}
+    return LaborRates(day=day, by_groomer=current, reference=reference_rate(list(current.values())))
 
 
 @dataclass

@@ -875,3 +875,21 @@ dispara no se le notifica.
 - **Webhook:** `POST /invoicing/webhook` (lo llama Intifact; firma HMAC-SHA256). Registrar en el portal de Intifact.
 - **Migración:** `0b1c2d3e4f5a` y `1c2d3e4f5a6b` (`issue_trigger`). Dependencia nueva: `openpyxl`. **Apps:** admin (sección Facturación electrónica y
   Configuración · Integraciones); app y web de clientes (opcional).
+
+## C-56 · Cierre mensual / P&L con datos reales (feature 0024, 2026-11-26)
+
+- **Nuevo (admin):** `GET /admin/finance/pnl?month=AAAA-MM` (mes en curso por defecto; 422 `MONTH_INVALID`). Solo
+  lectura. Devuelve `{period {month, start, end, cut, is_open, days_in_month, days_elapsed}, igv_percent,
+  fee_card_percent, fee_yape_percent, lines, sales_with_igv, discounts, receivable, receivable_orders,
+  entry_adjustments, labor_comparison, cancelled_paid, sales, costs, movements, groomers}`.
+- `lines`: `{key, label, amount (null = no configurado), status (real | estimated | partial | not_configured),
+  section (sales | cost | margin | expense | result), note, count}`. Claves: `net_sales`, `supplies`, `shrinkage`,
+  `labor`, `unabsorbed_labor`, `payment_fees`, `groomer_variable`, `service_cost`, `gross_margin`,
+  `operating_expenses`, `depreciation`, `taxes`, `net_result`.
+- Detalle para rastrear cada importe: `sales` (una fila por servicio o ajuste pagado: día del servicio, total con IGV,
+  venta sin IGV y si sale del comprobante o es estimada, comprobante, comisión), `costs` (por servicio: insumos,
+  minutos y costo de receta con la versión usada, tarifa, minutos y costo real), `movements` (consumos, mermas y
+  ajustes del mes), `groomers` (costo del mes, asignado y no utilizado).
+- **Parámetros generales:** sección nueva «Finanzas» con `pos_fee_card_percent` y `pos_fee_yape_percent` (sin IGV,
+  0 a 20; vacío = no configurado).
+- **Sin migración.** **Apps:** admin (Cierre mensual / P&L y Parámetros generales).

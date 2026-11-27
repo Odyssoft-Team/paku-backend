@@ -42,6 +42,7 @@ El slug es corto y en kebab-case: `0007-culqi-checkout`.
 | 0021 | `inventario-compras-y-anulacion` | paku-backend, paku-admin | in-progress |
 | 0022 | `libro-de-reclamaciones` | paku-backend, paku-web, paku-admin | in-progress |
 | 0023 | `facturacion-intifact` | paku-backend, paku-admin, paku-web | in-progress |
+| 0024 | `pnl-mensual` | paku-backend, paku-admin | in-progress |
 
 ## Cross-repo
 
