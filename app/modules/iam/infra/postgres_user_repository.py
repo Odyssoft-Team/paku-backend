@@ -4,9 +4,18 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.modules.iam.domain.user import Address, Sex, User, UserRepository, AddressRepository
+from app.modules.iam.domain.user import (
+    Address,
+    AddressRepository,
+    DatosLegales,
+    DniYaRegistrado,
+    Sex,
+    User,
+    UserRepository,
+)
 from app.modules.iam.infra.models import UserModel, UserAddressModel, utcnow
 
 
@@ -41,7 +50,31 @@ def _to_domain(model: UserModel) -> User:
         dni=model.dni,
         address=address,
         profile_photo_url=model.profile_photo_url,
+        datos_legales=_datos_legales(model),
     )
+
+
+def _datos_legales(model: UserModel) -> Optional[DatosLegales]:
+    if model.legal_first_name is None or model.legal_last_name is None or model.legal_data_checked_at is None:
+        return None
+    return DatosLegales(
+        nombres=model.legal_first_name,
+        apellidos=model.legal_last_name,
+        fuente=model.legal_data_source or "desconocida",
+        consultado_en=model.legal_data_checked_at,
+    )
+
+
+def es_choque_de_dni(error: IntegrityError) -> bool:
+    """El error viene del índice único de DNI (migración e8f3a1c7d5b2)."""
+    return "uq_users_dni" in str(getattr(error, "orig", error))
+
+
+def _escribir_datos_legales(model: UserModel, datos: Optional[DatosLegales]) -> None:
+    model.legal_first_name = datos.nombres if datos else None
+    model.legal_last_name = datos.apellidos if datos else None
+    model.legal_data_source = datos.fuente if datos else None
+    model.legal_data_checked_at = datos.consultado_en if datos else None
 
 
 class PostgresUserRepository(UserRepository, AddressRepository):
@@ -57,6 +90,13 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         if model is None:
             return None
         return _to_domain(model)
+
+    async def get_by_dni(self, dni: str) -> Optional[User]:
+        """Cuenta con ese DNI (feature 0027). Si hubiera duplicados heredados, devuelve una."""
+        stmt = select(UserModel).where(UserModel.dni == dni).limit(1)
+        res = await self._session.execute(stmt)
+        model = res.scalar_one_or_none()
+        return None if model is None else _to_domain(model)
 
     async def get_by_id(self, user_id: UUID) -> Optional[User]:
 
@@ -98,8 +138,19 @@ class PostgresUserRepository(UserRepository, AddressRepository):
             created_at=user.created_at,
             updated_at=utcnow(),
         )
+        _escribir_datos_legales(model, user.datos_legales)
         self._session.add(model)
-        await self._session.commit()
+        await self._confirmar()
+
+    async def _confirmar(self) -> None:
+        """Commit que traduce el choque con el índice único de DNI a DniYaRegistrado."""
+        try:
+            await self._session.commit()
+        except IntegrityError as error:
+            await self._session.rollback()
+            if es_choque_de_dni(error):
+                raise DniYaRegistrado() from error
+            raise
 
     async def update(self, user: User) -> None:
 
@@ -115,6 +166,7 @@ class PostgresUserRepository(UserRepository, AddressRepository):
         model.sex = str(user.sex.value if hasattr(user.sex, "value") else user.sex) if user.sex else None
         model.birth_date = user.birth_date
         model.dni = user.dni
+        _escribir_datos_legales(model, user.datos_legales)
         model.profile_photo_url = user.profile_photo_url
         model.profile_completed = bool(user.profile_completed)
 
@@ -131,7 +183,7 @@ class PostgresUserRepository(UserRepository, AddressRepository):
 
         model.updated_at = utcnow()
 
-        await self._session.commit()
+        await self._confirmar()
 
     async def update_password(self, user_id: UUID, new_hash: str) -> None:
         from sqlalchemy import update as sa_update

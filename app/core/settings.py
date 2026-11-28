@@ -13,6 +13,26 @@ class Settings:
     DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
     ROOT_PATH: str = os.getenv("ROOT_PATH", "")
 
+    # Feature 0027 (registro con DNI). Apagada por defecto: las apps actuales envían el DNI como opcional.
+    # Activarla cuando paku-web y la app lo pidan como obligatorio.
+    DNI_OBLIGATORIO: bool = os.getenv("DNI_OBLIGATORIO", "false").lower() == "true"
+    # Consulta de DNI (autocompletar nombres): límites por usuario y caché en memoria.
+    DNI_CONSULTAS_POR_HORA: int = int(os.getenv("DNI_CONSULTAS_POR_HORA", "5"))
+    DNI_DISTINTOS_POR_DIA: int = int(os.getenv("DNI_DISTINTOS_POR_DIA", "3"))
+    DNI_CACHE_HORAS: int = int(os.getenv("DNI_CACHE_HORAS", "24"))
+    # Datos Perú (PAKU-USERS-007): POST {DATOSPERU_URL}/v1/dni/consulta con la clave de cliente de Paku (solo el
+    # servicio dni_simple; nunca el token de administrador). Sin URL o sin clave, la consulta responde 503.
+    DATOSPERU_URL: str = os.getenv("DATOSPERU_URL", "").rstrip("/")
+    DATOSPERU_API_KEY: str = os.getenv("DATOSPERU_API_KEY", "")
+    DATOSPERU_TIMEOUT_SEGUNDOS: float = float(os.getenv("DATOSPERU_TIMEOUT_SEGUNDOS", "5"))
+    # Integración con HCVet (feature 0028, bloque C). Paku Backend es el único que habla con HCVet; la clave (prefijo
+    # hcv_) nunca llega a los frontends. Apagada por defecto: con HCVET_INTEGRACION_ACTIVA=false se registran los
+    # consentimientos y las operaciones pendientes, pero no se envía nada (Paku funciona igual sin HCVet).
+    HCVET_URL: str = os.getenv("HCVET_URL", "").rstrip("/")
+    HCVET_API_KEY: str = os.getenv("HCVET_API_KEY", "")
+    HCVET_TIMEOUT_SEGUNDOS: float = float(os.getenv("HCVET_TIMEOUT_SEGUNDOS", "10"))
+    HCVET_INTEGRACION_ACTIVA: bool = os.getenv("HCVET_INTEGRACION_ACTIVA", "false").lower() == "true"
+
     # Database
     DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
     

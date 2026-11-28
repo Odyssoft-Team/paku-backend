@@ -985,3 +985,61 @@ dispara no se le notifica.
   renta (10 %)», estimado; 0 con pérdida) y `net_result` («Utilidad neta»). `depreciation` sigue `not_configured`.
   Nuevos `expenses` (detalle) e `income_tax_percent`.
 - **Migración `3e4f5a6b7c8d`.** **Apps:** admin (Finanzas → Gastos; P&L).
+
+## C-66 · Registro con DNI (feature 0027, 2026-11-28)
+
+- **DNI validado** en `POST /auth/register`, `PUT /users/me/complete`, `PUT /users/me` y `POST /admin/users`: 8 dígitos
+  (422 si no); vacío o espacios = no enviado. Si otra cuenta ya lo tiene: 409 `{code: DNI_ALREADY_REGISTERED}` (no
+  indica qué cuenta).
+- **DNI obligatorio** para clientes cuando el backend tenga `DNI_OBLIGATORIO=true` (hoy apagado): 422
+  `{code: DNI_REQUIRED}` en registro y completar perfil; reservar u ordenar sin DNI → 403 `PROFILE_INCOMPLETE` con
+  `missing_fields: ["dni"]`. Groomers y admins no lo necesitan.
+- **Nuevo en `UserOut`:** `missing_profile_fields` (p. ej. `["dni"]`) para mostrar la regularización a clientes
+  existentes. El login no cambia.
+- **Nuevo:** `POST /users/me/dni/consulta` `{dni}` → `{dni, nombres, apellidos}` para el botón «Consultar DNI» (solo
+  clientes). Errores: 404 `DNI_NOT_FOUND`, 429 `DNI_LOOKUP_RATE_LIMITED` (con `Retry-After`), 503
+  `DNI_LOOKUP_UNAVAILABLE`. **Hoy siempre responde 503**: Datos Perú aún no tiene consulta para clientes. El front debe
+  permitir escribir los datos a mano. *(Actualizado en C-67.)*
+- **Apps:** web (registro, «Mi perfil») y app (registro, completar perfil): DNI obligatorio y botón de consulta.
+
+## C-67 · Consulta de DNI con Datos Perú y nombres legales (feature 0027, 2026-11-28)
+
+- **`POST /users/me/dni/consulta` ya consulta Datos Perú** cuando el backend tiene `DATOSPERU_URL` y
+  `DATOSPERU_API_KEY`. Mismo contrato que C-66. Si Datos Perú no responde o rechaza la consulta: 503
+  `DNI_LOOKUP_UNAVAILABLE`; el front sigue permitiendo escribir los datos a mano.
+- Funciona igual para todos los métodos de registro, incluido correo y contraseña: la consulta exige sesión, así que se
+  hace en el completado de perfil o en «Mi perfil», después de crear la cuenta.
+- **Nuevo en `UserOut`:** `legal_first_name`, `legal_last_name`, `legal_data_source` y `legal_data_checked_at`
+  (null si no hay). Son los nombres oficiales del DNI y los llena el servidor cuando el usuario guarda un DNI que
+  consultó. `first_name` y `last_name` siguen siendo el nombre visible y no cambian. El front **no** envía los campos
+  `legal_*` (se ignoran).
+- Mostrar los nombres oficiales como "datos del DNI", no como "identidad verificada": no prueban titularidad.
+
+## C-68 · DNI en los frontends, 429 de Datos Perú e índice único (feature 0027, 2026-11-28)
+
+- **429 de Datos Perú:** `POST /users/me/dni/consulta` ahora responde 429 `DNI_LOOKUP_RATE_LIMITED` con el
+  `Retry-After` de Datos Perú (antes 503). `detail.retry_after` trae los mismos segundos. El front espera ese tiempo.
+- **409 también por la base:** con el índice único de DNI, si dos cuentas guardan el mismo DNI a la vez, la segunda
+  recibe 409 `DNI_ALREADY_REGISTERED` (no 500).
+- **Implementado en paku-web y paku-vet-dev:** DNI obligatorio en el registro; «Consultar DNI» con sesión (después de
+  crear la cuenta, en el completado social, en la regularización y en «Mi perfil»); nombres legales mostrados aparte
+  del nombre visible.
+
+## C-69 · Historial clínico en HCVet: consentimientos y estado (feature 0028, 2026-11-28)
+
+- **Endpoints (nuevos):** `GET /users/me/hcvet` y `PUT /users/me/hcvet/consentimientos` (solo clientes; otro rol → 403
+  `HCVET_ONLY_CLIENTS`). Admin: `GET /admin/hcvet/operaciones?estado=` y `POST /admin/hcvet/operaciones/{id}/reintentar`.
+- **Qué cambia:** el cliente decide cinco consentimientos (`integracion_hcvet`, `indexacion_veterinaria`,
+  `historial_compartido`, `registro_eventos`, `uso_comercial`), ninguno marcado por defecto. Cuerpo del PUT:
+  `{"canal": "web" | "app", "decisiones": [{"tipo", "concedido", "version_texto"}]}`; `version_texto` es la que vino en
+  el GET (si cambió: 409 `CONSENT_TEXT_OUTDATED`, volver a cargar). La respuesta trae `integracion.estado`
+  (`sin_autorizar`, `pendiente`, `bloqueado`, `sincronizando`, `vinculado`, `fallido`, `conflicto`, `revocado`),
+  `integracion.motivo` (`DATOS_INCOMPLETOS` con `faltan`, `INTEGRACION_INACTIVA`, `ACCESO_BASICO`, …),
+  `integracion.acceso` (con `vinculado`: `completo`, o `basico` si ya tenía registro en HCVet y lo previo no se comparte
+  sin la autorización del dueño, que puede darla con su sesión en HCVet o en otra veterinaria ya autorizada, sin
+  necesitar cuenta), `operaciones_pendientes` y `textos_aprobados`. Sin verificación de titularidad (HCVet D-105, D-106).
+- **`PUT /users/me`:** con el propietario vinculado en HCVet, cambiar el DNI responde 409 `DNI_LOCKED_BY_HCVET`.
+- **Compatible.** Nada comercial depende de esto.
+- **Qué debe hacer el front:** mostrar los textos con «Acepto / No acepto» sin preselección; mostrar el estado sin
+  presentar lo pendiente como conectado («vinculado» solo con `estado = vinculado`). Hecho en paku-web («Mi perfil») y
+  paku-vet-dev («Historial clínico» en el menú del perfil).

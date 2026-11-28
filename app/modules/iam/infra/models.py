@@ -39,6 +39,11 @@ class UserModel(Base):
     profile_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     dni: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    # Nombres oficiales del DNI (feature 0027), separados del nombre visible. No prueban titularidad.
+    legal_first_name: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    legal_last_name: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    legal_data_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    legal_data_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     address_district_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     address_line: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

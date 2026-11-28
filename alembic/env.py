@@ -58,6 +58,11 @@ def _get_metadata():
     )
     from app.modules.complaints.infra.models import ComplaintCounterModel, ComplaintModel  # noqa: F401
     from app.modules.expenses.infra.models import ExpenseModel, VehicleModel  # noqa: F401
+    from app.modules.hcvet.infra.models import (  # noqa: F401
+        HcvetConsentimientoModel,
+        HcvetOperacionModel,
+        HcvetVinculoModel,
+    )
 
     return Base.metadata
 

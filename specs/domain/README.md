@@ -8,6 +8,7 @@ Es el canon que consumen web, admin y vet-dev.
 | Entidad | Archivo | Módulo backend | Estado del doc |
 |---------|---------|----------------|----------------|
 | Órdenes | `orders.md` | `orders` | ⬜ pendiente |
+| Usuarios (identidad y DNI) | `usuarios.md` | `iam` | 🟡 parcial |
 | Carrito | `cart.md` | `cart` | ⬜ pendiente |
 | Booking / disponibilidad | `booking.md` | `booking` | ⬜ pendiente |
 | Catálogo de servicios | `catalog.md` | `catalog` | ⬜ pendiente |

@@ -45,6 +45,8 @@ El slug es corto y en kebab-case: `0007-culqi-checkout`.
 | 0024 | `pnl-mensual` | paku-backend, paku-admin | in-progress |
 | 0025 | `venta-con-insumos` | paku-backend, paku-web | in-progress |
 | 0026 | `gastos-operativos` | paku-backend, paku-admin | in-progress |
+| 0027 | `registro-con-dni` | paku-backend, paku-web, paku-vet-dev, datosperu-backend | in-progress (implementación completa; pendientes previos a producción B-P1–B-P5) |
+| 0028 | `integracion-propietarios-hcvet` | paku-backend, paku-web, paku-vet-dev | in-progress |
 
 ## Cross-repo
 

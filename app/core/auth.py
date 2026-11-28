@@ -266,6 +266,20 @@ async def profile_complete_in_db(user_id: UUID) -> bool:
     return user is not None and (bool(user.profile_completed) or has_required_profile(user))
 
 
+async def dni_registrado_en_db(user_id: UUID) -> bool:
+    """Feature 0027: el DNI se confirma en la base (el token no lo lleva)."""
+    from app.core.db import AsyncSessionLocal
+    from app.modules.iam.infra.models import UserModel
+
+    try:
+        async with AsyncSessionLocal() as session:
+            user = await session.get(UserModel, user_id)
+    except Exception:
+        logger.exception("No se pudo confirmar el DNI del usuario %s", user_id)
+        return False
+    return user is not None and bool((user.dni or "").strip())
+
+
 def require_profile_complete():
     """Guard que rechaza requests de usuarios sociales con perfil incompleto.
     Usar en endpoints que requieren phone/sex/birth_date (booking, órdenes, etc.).
@@ -278,6 +292,18 @@ def require_profile_complete():
                     "code": "PROFILE_INCOMPLETE",
                     "message": "Completa tu perfil antes de continuar.",
                     "missing_fields": ["phone", "sex", "birth_date"],
+                },
+            )
+        # Feature 0027: con DNI_OBLIGATORIO, un cliente sin DNI regulariza en «Mi perfil» antes de reservar.
+        from app.core.settings import settings
+
+        if settings.DNI_OBLIGATORIO and current.role == "user" and not await dni_registrado_en_db(current.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "PROFILE_INCOMPLETE",
+                    "message": "Ingresa tu DNI en «Mi perfil» antes de continuar.",
+                    "missing_fields": ["dni"],
                 },
             )
         return current

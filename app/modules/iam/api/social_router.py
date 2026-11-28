@@ -13,6 +13,7 @@ from app.modules.iam.api.schemas import (
     UserOut,
 )
 from app.modules.iam.app.use_cases_impl.account_linking import AddPassword, LinkSocialIdentity
+from app.modules.iam.api.router import buscar_datos_oficiales
 from app.modules.iam.app.use_cases_impl.profile import CompleteProfile
 from app.modules.iam.app.use_cases_impl.social_auth import SocialLogin
 from app.modules.iam.domain.user import Sex, UserRepository
@@ -72,7 +73,7 @@ async def complete_profile(
     Recibe phone, sex y birth_date — datos que los proveedores sociales no entregan.
     Devuelve nuevos tokens con profile_completed=true para que el guard no bloquee futuros requests.
     """
-    user = await CompleteProfile(repo=repo).execute(
+    user = await CompleteProfile(repo=repo, buscar_datos_oficiales=buscar_datos_oficiales).execute(
         user_id=current.id,
         phone=payload.phone,
         sex=Sex(payload.sex),

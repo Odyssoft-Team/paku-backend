@@ -187,6 +187,17 @@ def start_scheduler() -> None:
         max_instances=1,
         coalesce=True,
     )
+    # Integración con HCVet (feature 0028): envía la cola de operaciones con reintentos. Sin efecto si está apagada.
+    from app.modules.hcvet.app.servicio import procesar_operaciones_hcvet_job
+
+    scheduler.add_job(
+        procesar_operaciones_hcvet_job,
+        trigger=IntervalTrigger(minutes=1),
+        id="hcvet_operaciones_job",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.start()
     logger.info("APScheduler started")
 

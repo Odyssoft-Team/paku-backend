@@ -1,12 +1,16 @@
 from datetime import date, datetime
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 from uuid import UUID
 
 import re
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, BeforeValidator, EmailStr, field_validator
+
+from app.modules.iam.domain.dni import normalizar_dni
 
 Role = Literal["admin", "user", "groomer"]
 Sex = Literal["male", "female"]
+# DNI de 8 dígitos; vacío = no enviado (feature 0027). 422 si el formato no es válido.
+Dni = Annotated[Optional[str], BeforeValidator(normalizar_dni)]
 
 
 class AddressCreateIn(BaseModel):
@@ -56,7 +60,7 @@ class RegisterIn(BaseModel):
     last_name: str
     sex: Sex
     birth_date: date
-    dni: Optional[str] = None
+    dni: Dni = None
     # role es siempre "user" en registro público — no se acepta del cliente
     # profile_photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
 
@@ -126,6 +130,14 @@ class UserOut(BaseModel):
     birth_date: Optional[date] = None
     dni: Optional[str] = None
     profile_photo_url: Optional[str] = None
+    # Lo que falta para reservar (feature 0027): p. ej. ["dni"] para regularizar a un cliente existente.
+    missing_profile_fields: list[str] = []
+    # Nombres oficiales del DNI (feature 0027), separados del nombre visible (first_name/last_name). Los llena el
+    # servidor con una consulta a Datos Perú; el cliente no puede enviarlos. NO es verificación de titularidad.
+    legal_first_name: Optional[str] = None
+    legal_last_name: Optional[str] = None
+    legal_data_source: Optional[str] = None
+    legal_data_checked_at: Optional[datetime] = None
 
 
 class UpdateProfileIn(BaseModel):
@@ -134,7 +146,7 @@ class UpdateProfileIn(BaseModel):
     last_name: Optional[str] = None
     sex: Optional[Sex] = None
     birth_date: Optional[date] = None
-    dni: Optional[str] = None
+    dni: Dni = None
     # profile_photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
 
 
@@ -147,7 +159,7 @@ class AdminCreateUserIn(BaseModel):
     sex: Sex
     birth_date: date
     role: Role
-    dni: Optional[str] = None
+    dni: Dni = None
     # profile_photo_url se gestiona exclusivamente a través del módulo media (POST /media/confirm-profile-photo)
 
     @field_validator("password")
@@ -199,7 +211,7 @@ class CompleteProfileIn(BaseModel):
     phone: str
     sex: Sex
     birth_date: date
-    dni: Optional[str] = None
+    dni: Dni = None
 
 
 # ------------------------------------------------------------------
@@ -241,3 +253,24 @@ class LinkedIdentityOut(BaseModel):
     id: UUID
     provider: str
     created_at: datetime
+
+
+class DniConsultaIn(BaseModel):
+    """DNI a consultar para autocompletar nombres y apellidos (feature 0027)."""
+
+    dni: Dni
+
+    @field_validator("dni")
+    @classmethod
+    def _obligatorio(cls, v: Optional[str]) -> str:
+        if v is None:
+            raise ValueError("Indique el DNI.")
+        return v
+
+
+class DniConsultaOut(BaseModel):
+    """Solo nombres y apellidos: la consulta no devuelve otros datos de la persona."""
+
+    dni: str
+    nombres: str
+    apellidos: str

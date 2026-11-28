@@ -235,6 +235,7 @@ async def confirm_profile_photo(
             profile_completed=user.profile_completed,
             dni=user.dni,
             address=user.address,
+            datos_legales=user.datos_legales,
             profile_photo_url=payload.object_name,  # único campo que cambia
         )
         await repo.update(updated_user)

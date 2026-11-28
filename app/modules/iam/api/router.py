@@ -4,12 +4,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
-from app.core.auth import CurrentUser, create_access_token, decode_token, normalize_role, require_roles
+from app.core.auth import CurrentUser, create_access_token, decode_token, get_current_user, normalize_role, require_roles
 from app.core.db import engine, get_async_session
 from app.core.rate_limiter import forgot_password_limiter, login_limiter
 from app.modules.geo.infra.repository import PostgresDistrictRepository
 from app.modules.geo.use_cases.geo_service import GeoService
 from app.modules.iam.api.schemas import (
+    DniConsultaIn,
+    DniConsultaOut,
     AddressCreateIn,
     AddressOutExtended,
     AddressUpdateIn,
@@ -27,6 +29,19 @@ from app.modules.iam.api.schemas import (
 from app.modules.iam.app.use_cases import ChangeUserRole, GetMe, LoginUser, RegisterUser, UpdateProfile
 from app.modules.iam.app.use_cases_impl.account_linking import AddPassword
 from app.modules.iam.app.use_cases_impl.password_reset import ForgotPassword, ResetPassword
+from app.modules.iam.app.use_cases_impl.consulta_dni import CacheDni, ConsultarDni, LimiteConsultaDni, LimitesConsultaDni
+from app.modules.iam.domain.dni import (
+    ConsultaDniLimitada,
+    ConsultaDniNoDisponible,
+    ConsultorDni,
+    DatosDni,
+    DniNoEncontrado,
+)
+from app.modules.iam.domain.user import campos_faltantes
+from app.modules.hcvet.api.router import obtener_repositorio_hcvet
+from app.modules.hcvet.app.servicio import ServicioIntegracionHcvet, campos_cambiados_para_hcvet
+from app.modules.iam.infra.consultor_dni import obtener_consultor_dni
+from app.core.settings import settings
 from app.media.gcs import to_signed_read_url_or_none
 from app.modules.iam.domain.user import Sex, User
 from app.modules.iam.domain.user import UserRepository
@@ -74,6 +89,14 @@ def _user_to_out(user: User) -> UserOut:
     """Construye UserOut resolviendo profile_photo_url (object key en BD) a una signed read URL fresca."""
     data = user.__dict__.copy()
     data["profile_photo_url"] = to_signed_read_url_or_none(user.profile_photo_url)
+    # Feature 0027: lo que le falta al perfil (p. ej. DNI de un cliente existente que debe regularizar).
+    data["missing_profile_fields"] = campos_faltantes(user, exigir_dni=settings.DNI_OBLIGATORIO)
+    # Nombres legales (oficiales del DNI), separados del nombre visible. No prueban titularidad.
+    legales = data.pop("datos_legales", None)
+    data["legal_first_name"] = legales.nombres if legales else None
+    data["legal_last_name"] = legales.apellidos if legales else None
+    data["legal_data_source"] = legales.fuente if legales else None
+    data["legal_data_checked_at"] = legales.consultado_en if legales else None
     return UserOut(**data)
 
 
@@ -114,7 +137,7 @@ async def get_current_user_db(
 # [BUSINESS]
 # Crea una cuenta nueva en el sistema y devuelve el perfil creado.
 async def register(payload: RegisterIn, repo: UserRepository = Depends(get_user_repo)) -> UserOut:
-    user = await RegisterUser(repo=repo).execute(
+    user = await RegisterUser(repo=repo, buscar_datos_oficiales=buscar_datos_oficiales).execute(
         email=payload.email,
         password=payload.password,
         phone=payload.phone,
@@ -265,8 +288,20 @@ async def update_me(
     payload: UpdateProfileIn,
     current: CurrentUser = Depends(get_current_user_db),
     repo: UserRepository = Depends(get_user_repo),
+    hcvet_repo=Depends(obtener_repositorio_hcvet),
 ) -> UserOut:
-    user = await UpdateProfile(repo=repo).execute(
+    # Feature 0028: con el propietario vinculado en HCVet el DNI no cambia aquí (identifica al propietario en HCVet).
+    hcvet = ServicioIntegracionHcvet(hcvet_repo, activa=settings.HCVET_INTEGRACION_ACTIVA)
+    antes = await repo.get_by_id(current.id)
+    if payload.dni and antes is not None and payload.dni != antes.dni and await hcvet.dni_bloqueado(current.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "DNI_LOCKED_BY_HCVET",
+                "message": "Tu DNI está vinculado a tu historial en HCVet y no se puede cambiar desde aquí.",
+            },
+        )
+    user = await UpdateProfile(repo=repo, buscar_datos_oficiales=buscar_datos_oficiales).execute(
         user_id=current.id,
         phone=payload.phone,
         first_name=payload.first_name,
@@ -277,6 +312,9 @@ async def update_me(
         address=None,
         profile_photo_url=None,  # managed exclusively via POST /media/confirm-profile-photo
     )
+    # Feature 0028: avisar a HCVet los datos básicos que cambiaron (se encola; no llama a HCVet ni falla por él).
+    if antes is not None:
+        await hcvet.notificar_cambio_perfil(current.id, campos_cambiados_para_hcvet(antes, user))
 
     # Address book is now exclusively in /addresses
     return _user_to_out(user)
@@ -522,7 +560,7 @@ async def admin_create_user(
 ) -> UserOut:
     """Crea un usuario con el rol especificado (user, groomer o admin)."""
     try:
-        user = await RegisterUser(repo=repo).execute(
+        user = await RegisterUser(repo=repo, buscar_datos_oficiales=buscar_datos_oficiales).execute(
             email=payload.email,
             password=payload.password,
             phone=payload.phone,
@@ -538,3 +576,68 @@ async def admin_create_user(
     except HTTPException:
         raise
     return _user_to_out(user)
+
+
+# ---------------------------------------------------------------------------
+# Consulta de DNI para autocompletar (feature 0027). Límites y caché en memoria del proceso.
+# ---------------------------------------------------------------------------
+
+LIMITES_CONSULTA_DNI = LimitesConsultaDni(
+    por_hora=settings.DNI_CONSULTAS_POR_HORA, distintos_por_dia=settings.DNI_DISTINTOS_POR_DIA
+)
+CACHE_DNI = CacheDni(duracion=settings.DNI_CACHE_HORAS * 3600)
+
+
+def buscar_datos_oficiales(dni: str) -> Optional[DatosDni]:
+    """Datos oficiales de un DNI que el servidor ya consultó (caché de la consulta). Fuente de los nombres legales."""
+    return CACHE_DNI.obtener(dni)
+
+
+@router.post("/users/me/dni/consulta", response_model=DniConsultaOut)
+async def consultar_dni(
+    payload: DniConsultaIn,
+    current: CurrentUser = Depends(get_current_user),
+    consultor: ConsultorDni = Depends(obtener_consultor_dni),
+) -> DniConsultaOut:
+    """Nombres y apellidos de un DNI para autocompletar el perfil del propio cliente.
+
+    No es un buscador: requiere sesión de cliente y tiene límites por usuario (429 con Retry-After). Consultar un DNI no
+    prueba titularidad. Mientras Datos Perú no exponga su consulta para clientes, responde 503.
+    """
+    if current.role != "user":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "DNI_LOOKUP_FORBIDDEN", "message": "La consulta de DNI es solo para completar tu perfil."},
+        )
+    try:
+        datos = await ConsultarDni(consultor=consultor, limites=LIMITES_CONSULTA_DNI, cache=CACHE_DNI).execute(
+            current.id, payload.dni
+        )
+    except LimiteConsultaDni as error:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "DNI_LOOKUP_RATE_LIMITED", "message": str(error), "retry_after": error.reintentar_en},
+            headers={"Retry-After": str(error.reintentar_en)},
+        ) from error
+    except ConsultaDniLimitada as error:
+        # Límite de Datos Perú (no del usuario): mismo código y se conserva su Retry-After.
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "DNI_LOOKUP_RATE_LIMITED", "message": str(error), "retry_after": error.reintentar_en},
+            headers={"Retry-After": str(error.reintentar_en)},
+        ) from error
+    except DniNoEncontrado as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "DNI_NOT_FOUND", "message": "No encontramos ese DNI. Puedes escribir tus datos a mano."},
+        ) from error
+    except ConsultaDniNoDisponible as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "DNI_LOOKUP_UNAVAILABLE",
+                "message": "La consulta de DNI no está disponible ahora. Puedes escribir tus datos a mano.",
+            },
+        ) from error
+    return DniConsultaOut(dni=payload.dni, nombres=datos.nombres, apellidos=datos.apellidos)
+

@@ -22,6 +22,24 @@ class Address:
     lng: float
 
 
+class DniYaRegistrado(Exception):
+    """La base rechazó el DNI por el índice único (otra cuenta lo guardó a la vez). Ver PAKU-USERS-009."""
+
+
+@dataclass(frozen=True)
+class DatosLegales:
+    """Nombres oficiales del DNI de la cuenta (feature 0027), separados del nombre visible (first_name/last_name).
+
+    Vienen de una consulta hecha por el servidor (nunca de lo que escribe el cliente). Son datos oficiales del DNI,
+    **no** una verificación de titularidad: no prueban que el usuario sea el titular de ese DNI.
+    """
+
+    nombres: str
+    apellidos: str
+    fuente: str
+    consultado_en: datetime
+
+
 @dataclass(frozen=True)
 class User:
     id: UUID
@@ -40,6 +58,7 @@ class User:
     dni: Optional[str] = None
     address: Optional[Address] = None
     profile_photo_url: Optional[str] = None
+    datos_legales: Optional[DatosLegales] = None
 
     @staticmethod
     def new(
@@ -108,11 +127,29 @@ def has_required_profile(user) -> bool:
         and getattr(user, "birth_date", None) is not None
 
 
+def campos_faltantes(user, *, exigir_dni: bool) -> list[str]:
+    """Datos que le faltan al perfil para reservar (feature 0027). El DNI solo se exige a clientes (rol user)."""
+    faltan: list[str] = []
+    if not (getattr(user, "profile_completed", False) or has_required_profile(user)):
+        if not (getattr(user, "phone", None) or "").strip():
+            faltan.append("phone")
+        if getattr(user, "sex", None) is None:
+            faltan.append("sex")
+        if getattr(user, "birth_date", None) is None:
+            faltan.append("birth_date")
+    if exigir_dni and getattr(user, "role", "user") == "user" and not getattr(user, "dni", None):
+        faltan.append("dni")
+    return faltan
+
+
 class UserRepository(Protocol):
     async def add(self, user: User) -> None:
         ...
 
     async def get_by_email(self, email: str) -> Optional[User]:
+        ...
+
+    async def get_by_dni(self, dni: str) -> Optional[User]:
         ...
 
     async def get_by_id(self, id: UUID) -> Optional[User]:
